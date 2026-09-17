@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet, RefreshControl, Image } from "react-native";
+import { View, Text, ScrollView, Pressable, StyleSheet, RefreshControl } from "react-native";
 import Svg, { Circle as SvgCircle, Path as SvgPath } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
 import { useQuery } from "@tanstack/react-query";
@@ -126,7 +126,7 @@ const mb = StyleSheet.create({
 });
 
 export default function Home() {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -174,12 +174,7 @@ export default function Home() {
   }, [txQ.data, summary?.month_income, summary?.month_expense]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <Image
-        source={require("../../assets/images/trading-bg.png")}
-        style={StyleSheet.absoluteFill}
-        resizeMode="cover"
-      />
+    <View style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#FFFFFF" }}>
     <ScrollView
       testID="home-scroll"
       style={{ flex: 1, backgroundColor: "transparent" }}

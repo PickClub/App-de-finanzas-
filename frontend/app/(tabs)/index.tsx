@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { View, Text, ScrollView, Pressable, StyleSheet, RefreshControl } from "react-native";
 import Svg, { Circle as SvgCircle, Path as SvgPath } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
 import { useQuery } from "@tanstack/react-query";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,6 +12,27 @@ import { useTheme, makeStyles, radius, spacing, type ThemeColors } from "@/src/t
 import { formatCurrency, formatCurrencyInt, formatDate, formatDateLong } from "@/src/format";
 import { IconTile } from "@/src/components/ui";
 import { LockToggle, useLock } from "@/src/lock";
+
+// --- Color helpers (visual-only) for the account cards. Blend a hex color
+// toward white (lighten) or black (darken) to build subtle gradients and the
+// slightly darker arrow button, without touching any data. ---
+function hexToRgb(hex: string) {
+  let h = hex.replace("#", "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  const n = parseInt(h, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function mixToward(hex: string, target: number, amt: number) {
+  try {
+    const { r, g, b } = hexToRgb(hex);
+    const c = (v: number) => Math.max(0, Math.min(255, Math.round(v + (target - v) * amt)));
+    return `rgb(${c(r)},${c(g)},${c(b)})`;
+  } catch {
+    return hex;
+  }
+}
+const lighten = (hex: string, amt: number) => mixToward(hex, 255, amt);
+const darken = (hex: string, amt: number) => mixToward(hex, 0, amt);
 
 function accountTypeLabel(t: string) {
   const m: Record<string, string> = {
@@ -204,11 +226,34 @@ export default function Home() {
                 onPress={guard(() => router.push(`/accounts/new?id=${a.id}`))}
                 style={[styles.walletCard, { backgroundColor: a.color }, isThird && styles.walletCardLast]}
               >
-                <Ionicons name={a.icon as any} size={18} color="#fff" />
-                <Text style={styles.walletName} numberOfLines={1}>{a.name}</Text>
-                <Text style={styles.walletBalance} numberOfLines={1} adjustsFontSizeToFit>
-                  {money(a.current_balance)}
-                </Text>
+                <View style={styles.walletInner}>
+                  <LinearGradient
+                    colors={[lighten(a.color, 0.16), a.color, darken(a.color, 0.06)]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <Ionicons
+                    name={a.icon as any}
+                    size={58}
+                    color="rgba(255,255,255,0.15)"
+                    style={styles.walletWatermark}
+                  />
+                  <View style={styles.walletTopRow}>
+                    <View style={styles.walletIconBox}>
+                      <Ionicons name={a.icon as any} size={14} color="#fff" />
+                    </View>
+                    <View style={[styles.walletArrow, { backgroundColor: darken(a.color, 0.16) }]}>
+                      <Ionicons name="chevron-forward" size={12} color="#fff" />
+                    </View>
+                  </View>
+                  <View style={styles.walletTextWrap}>
+                    <Text style={styles.walletName} numberOfLines={1}>{a.name}</Text>
+                    <Text style={styles.walletBalance} numberOfLines={1} adjustsFontSizeToFit>
+                      {money(a.current_balance)}
+                    </Text>
+                  </View>
+                </View>
               </Pressable>
             );
           })}
@@ -527,19 +572,53 @@ const useStyles = makeStyles((colors) => ({
     marginBottom: 10,
     minHeight: 84,
     borderRadius: radius.md,
+    // Soft, short, diffuse outer shadow only — no heavy floating / 3D look.
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  walletInner: {
+    minHeight: 84,
+    borderRadius: radius.md,
+    overflow: "hidden",
     padding: 10,
     justifyContent: "space-between",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+  },
+  walletWatermark: {
+    position: "absolute",
+    right: -6,
+    bottom: -8,
+  },
+  walletTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  walletIconBox: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  walletArrow: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  walletTextWrap: {
+    marginTop: 6,
   },
   walletCardLast: {
     marginRight: 0,
   },
-  walletName: { color: "#fff", fontSize: 12, fontWeight: "700", marginTop: 4 },
-  walletBalance: { color: "#fff", fontSize: 13, fontWeight: "800", marginTop: 2 },
+  walletName: { color: "#fff", fontSize: 12.5, fontWeight: "600", letterSpacing: 0.1 },
+  walletBalance: { color: "rgba(255,255,255,0.92)", fontSize: 11, fontWeight: "600", marginTop: 1 },
   walletAddCard: {
     flexBasis: "31%",
     flexGrow: 0,

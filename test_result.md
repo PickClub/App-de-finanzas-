@@ -176,6 +176,17 @@ frontend:
         - working: true
           agent: "main"
           comment: "formatCurrency now rounds to integer and uses maximumFractionDigits:0 with en-US thousands separators (same as existing formatCurrencyInt). Display-only; stored numeric values untouched. Verified on web: dashboard Saldo total $17,052, account cards $2,907/$346/$8,000/$1,500/$2,500/$1,800, transactions -$16/-$45/-$5, Cuentas screen whole numbers. Debt cards already used formatCurrencyInt."
+  - task: "Mis cuentas account cards visual redesign (vivid gradient, soft shadow, translucent icon box, arrow button, watermark)"
+    implemented: true
+    working: true
+    file: "app/(tabs)/index.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Visual-only redesign of ONLY the individual account cards inside 'Mis cuentas'. Kept 3-col grid, compact size (minHeight 84, flexBasis 31%), position, logic, data, navigation. Added subtle diagonal LinearGradient (lighten16 -> base -> darken06), reduced shadow to a soft short diffuse one (opacity .06 r5 y2), top-left icon in translucent white box, top-right circular chevron button using darken(color,.16), large very-transparent (white 15%) financial watermark of the account icon in bottom-right (overflow hidden clips it). Name semibold 12.5 > balance 11 (less dominant), no decimals, no bottom type labels. Other sections untouched. Verified on web preview."
 
 metadata:
   created_by: "main_agent"

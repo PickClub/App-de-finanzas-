@@ -68,9 +68,16 @@ function ThemedApp() {
                 screenOptions={{
                   headerShown: false,
                   contentStyle: { backgroundColor: colors.surface },
+                  // Forward (push): slide the new screen in from the right — kept as-is
+                  // but made noticeably faster/snappier. Native-stack automatically plays
+                  // the REVERSE of this on pop (current screen slides out to the right and
+                  // the previous screen is revealed), so back navigation gets its own clean
+                  // reverse transition instead of re-using the forward-entry animation.
                   animation: "slide_from_right",
-                  animationDuration: 200,
-                  animationTypeForReplace: "push",
+                  animationDuration: 160,
+                  // Replaced screens should animate like a pop (return) so we never flash a
+                  // forward-entry on top of an existing screen.
+                  animationTypeForReplace: "pop",
                   gestureEnabled: true,
                 }}
               />

@@ -1,7 +1,9 @@
 export function formatCurrency(amount: number, currency = "USD"): string {
+  // Display whole numbers only (no decimals) with thousands separators.
+  // The stored numeric value is never modified — this is display formatting only.
   const sign = amount < 0 ? "-" : "";
-  const abs = Math.abs(amount);
-  const formatted = abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const abs = Math.abs(Math.round(amount));
+  const formatted = abs.toLocaleString("en-US", { maximumFractionDigits: 0 });
   const symbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "MXN" ? "$" : "$";
   return `${sign}${symbol}${formatted}`;
 }

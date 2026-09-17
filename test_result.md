@@ -154,6 +154,29 @@ frontend:
           agent: "main"
           comment: "Only internal content of Ingresos/Gastos changed; widths unchanged; heights stretch to equal the accounts % card. Added MiniBars + DragDots + daily average."
 
+  - task: "Navigation animations: faster slide_from_right forward + clean reverse on back (no flash/double animation)"
+    implemented: true
+    working: "NA"
+    file: "app/_layout.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Root Stack screenOptions: kept animation 'slide_from_right' (native-stack auto-plays the REVERSE on pop -> current screen exits to the right, previous revealed). Reduced animationDuration 200 -> 160 for a noticeably faster/snappier entry. Changed animationTypeForReplace 'push' -> 'pop' so replace navigations don't flash a forward-entry. Goal: forward fast+smooth, back gets a distinct reverse with no flicker/double-animation/duplicated screen. Needs UI verification of the back-flash fix (cannot be verified via static screenshots)."
+  - task: "Amounts display as whole numbers (no decimals) with thousands separators app-wide"
+    implemented: true
+    working: true
+    file: "src/format.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "formatCurrency now rounds to integer and uses maximumFractionDigits:0 with en-US thousands separators (same as existing formatCurrencyInt). Display-only; stored numeric values untouched. Verified on web: dashboard Saldo total $17,052, account cards $2,907/$346/$8,000/$1,500/$2,500/$1,800, transactions -$16/-$45/-$5, Cuentas screen whole numbers. Debt cards already used formatCurrencyInt."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
@@ -162,10 +185,8 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Global theme system (Claro/Oscuro/Sistema) reactive, persistent, no bundle reload"
-    - "Settings theme selector + Back button after theme change"
-    - "Debts summary flip card (front Yo debo / back Me deben) theme-aware"
-    - "Dashboard Ingresos/Gastos cards (icon, title, amount, mini bars, promedio diario) equal height to accounts card"
+    - "Navigation animations: faster slide_from_right forward + clean reverse on back (no flash/double animation)"
+    - "Amounts display as whole numbers (no decimals) with thousands separators app-wide"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"

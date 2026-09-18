@@ -133,15 +133,21 @@ frontend:
           comment: "Theme buttons now call setMode (context) instead of setThemeMode (which reloaded the bundle). Selecting a theme must NOT reset navigation; Back must still return to the previous screen."
   - task: "Debts summary flip card (front Yo debo / back Me deben) theme-aware"
     implemented: true
-    working: "NA"
+    working: true
     file: "app/debts/index.tsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: "NA"
           agent: "main"
           comment: "Tap flips 3D between i_owe (front) and they_owe (back). Both faces derive colors from the global theme so they follow light/dark."
+        - working: "NA"
+          agent: "main"
+          comment: "BUG FIX (in-place flip + dark edges). User reported: on flip the back face appeared lower / changed layout / added vertical space, and dark/gray borders appeared during/after the flip. Root cause: front face was in normal flow (sized the wrapper) while back was absolute; both faces also carried the card shadow (doubling => dark edges during 3D rotation). Fix (minimal, no redesign): single fixed Pressable wrapper (position:relative). Added an invisible in-flow SIZER (opacity 0) that renders the owe face to lock the wrapper height. Both real faces are now position:absolute (StyleSheet.absoluteFillObject) + backfaceVisibility:hidden, overlapping the exact same box. Verified via DOM geometry on web: wrapper stays top:60 h:305 BEFORE and AFTER flip; all 3 children share identical box top:60 left:16 w:1888 h:305 (sizer opacity 0). 3D animation, content, colors, typography, spacing, data unchanged. Needs UI verification that: (a) tapping the top summary card on /debts does NOT shift the card position or push the chips/list below it up/down, and (b) no dark/gray border/shadow artifacts appear during/after the flip (only the existing subtle card shadow)."
+        - working: true
+          agent: "testing"
+          comment: "✓✓✓ BUG FIX VERIFIED. Tested flip card on /debts with 3 complete flip cycles. [A] IN-PLACE FLIP: ✓ PASS - Flip card wrapper maintained EXACT same bounding box across all states (top:60, left:16, width:1888, height:305, all diffs 0.00px). Filter chips row (top:365) and first debt item (top:60) positions completely stable, no vertical shift or layout changes. [B] NO DARK EDGES: ✓ PASS - Visual inspection of screenshots before/during/after flip shows only subtle soft card shadow, NO dark/gray borders or doubled shadows during or after animation. Card flips cleanly between 'Resumen de deudas' (purple) and 'Resumen de préstamos' (green). Bonus: backface-visibility works correctly on react-native-web, faces swap visually as expected. Fix is working perfectly."
   - task: "Dashboard Ingresos/Gastos cards (icon, title, amount, mini bars, promedio diario) equal height to accounts card"
     implemented: true
     working: "NA"
@@ -196,8 +202,10 @@ metadata:
 
 test_plan:
   current_focus:
+    - "Global theme system (Claro/Oscuro/Sistema) reactive, persistent, no bundle reload"
+    - "Settings theme selector + Back button after theme change"
+    - "Dashboard Ingresos/Gastos cards (icon, title, amount, mini bars, promedio diario) equal height to accounts card"
     - "Navigation animations: faster slide_from_right forward + clean reverse on back (no flash/double animation)"
-    - "Amounts display as whole numbers (no decimals) with thousands separators app-wide"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -205,12 +213,39 @@ test_plan:
 agent_communication:
     - agent: "main"
       message: |
-        Please test on the WEB preview. Key scenarios:
-        THEME (main reported bug):
-          1. Go to Más -> Ajustes. Tap "Oscuro": the ENTIRE app must turn dark (dashboard, cards, headers, tabs, debts flip card BOTH faces, modals). Tap "Claro": entire app light. Tap "Sistema": follows device.
-          2. Sequence Claro -> Oscuro -> Claro must never leave any component stuck on the previous theme (check the Debts top flip card especially, and both of its faces).
-          3. After selecting ANY theme on the Ajustes screen, the Back button (top-left chevron) MUST still navigate back (it must NOT reset the stack / block navigation). Selecting a theme should NOT reload the app.
-          4. Persistence: reload the page after choosing Oscuro -> app should reopen in dark.
-        FLIP CARD (Debts): open "Deudas y préstamos"; tap the top summary card -> it flips between "Resumen de deudas" (Yo debo) and "Resumen de préstamos" (Me deben). Front totals: 2 debts, Pendiente 10,200, Total 14,500, Pagado 4,300. Back: 1 cuenta, Pendiente 700, Total 1,000, Recibido 300.
-        DASHBOARD: Inicio -> the Ingresos and Gastos cards each show icon + "Este mes" + drag dots + title + amount + mini bar chart + "Promedio diario"; the two cards are the same height as the percentages card to their right and aligned top & bottom.
-        Note: there is no auth. Data is seeded. Ignore CORS console noise if loading via a non-canonical domain.
+        Please test on the WEB preview. FOCUS: the Debts top summary FLIP CARD in-place fix.
+        Steps:
+          1. Navigate to the Debts screen (URL path /debts, header "Deudas y préstamos"). The top card shows "Resumen de préstamos / Resumen de deudas" summary.
+          2. Record the on-screen position of the summary card AND the position of the filter chips row ("Todos / Activos / Pagados / Yo debo / Me deben") and the debt list item directly below it.
+          3. Tap the summary card once (testID="debt-summary-flip") to flip it. Tap again to flip back. Repeat a couple of times.
+        PASS CRITERIA (this is the reported bug):
+          A. IN-PLACE: The card must flip in the exact same X/Y position, same width & height. It must NOT move lower/higher, and it must NOT push the chips row or the list below it up or down (no extra vertical space appears). The card's top position and height must be identical before, during (as much as observable) and after the flip.
+          B. NO DARK EDGES: No dark/gray borders, outlines or heavy shadows should appear around the card during or after the flip. Only the existing subtle card border/shadow may remain.
+          C. Nothing else changed: content, colors, typography, spacing, buttons, filters, navigation and debt data must be unchanged.
+        Note: there is no auth. Data is seeded. Ignore CORS console noise. On react-native-web the 3D backface may not visually swap the two faces the same way it does on native — that is a pre-existing web-only rendering quirk and is NOT the bug under test; focus strictly on layout stability (A) and absence of dark edges (B).
+    - agent: "testing"
+      message: |
+        ✓✓✓ FLIP CARD BUG FIX VERIFIED SUCCESSFULLY
+        
+        Executed comprehensive flip card testing on /debts with 3 complete flip cycles and precise bounding box measurements:
+        
+        [A] IN-PLACE FLIP: ✓✓✓ PASS
+        - Flip card wrapper (data-testid="debt-summary-flip") maintained EXACT same dimensions across all 3 flips:
+          • top: 60.00px (0.00px diff)
+          • left: 16.00px (0.00px diff)
+          • width: 1888.00px (0.00px diff)
+          • height: 305.00px (0.00px diff)
+        - Filter chips row position: 365.00px (0.00px diff across all states)
+        - First debt item position: 60.00px (0.00px diff across all states)
+        - NO vertical shift, NO layout changes, NO extra space introduced
+        
+        [B] NO DARK EDGES: ✓✓✓ PASS
+        - Visual inspection of 8 screenshots (before/during/after each flip) confirms:
+          • Only subtle soft card shadow present (as designed)
+          • NO dark/gray borders during animation
+          • NO doubled shadows during or after flip
+          • Clean rendering throughout entire flip cycle
+        
+        BONUS: backface-visibility works correctly on react-native-web. Card visually flips between "Resumen de deudas" (purple, Yo debo) and "Resumen de préstamos" (green, Me deben) as expected.
+        
+        The fix (invisible sizer + absolute positioned faces) is working perfectly. Bug is RESOLVED.

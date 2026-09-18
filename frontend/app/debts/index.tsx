@@ -426,11 +426,16 @@ function DebtSummaryFlip({ owe, lent }: { owe: FaceStat; lent: FaceStat }) {
   const backRotate = flip.interpolate({ inputRange: [0, 1], outputRange: ["180deg", "360deg"] });
 
   return (
-    <Pressable onPress={toggle} accessibilityRole="button" testID="debt-summary-flip">
-      <Animated.View style={[fs.face, { transform: [{ perspective: 1200 }, { rotateY: frontRotate }] }]}>
+    <Pressable onPress={toggle} accessibilityRole="button" testID="debt-summary-flip" style={fs.flipWrap}>
+      {/* Invisible in-flow sizer locks the wrapper dimensions so the flip
+          happens IN PLACE (both faces overlap this exact box). */}
+      <View pointerEvents="none" style={fs.sizer}>
+        <SummaryFace v="owe" s={owe} />
+      </View>
+      <Animated.View style={[fs.faceAbs, { transform: [{ perspective: 1200 }, { rotateY: frontRotate }] }]}>
         <SummaryFace v="owe" s={owe} />
       </Animated.View>
-      <Animated.View style={[fs.face, fs.faceBack, { transform: [{ perspective: 1200 }, { rotateY: backRotate }] }]}>
+      <Animated.View style={[fs.faceAbs, { transform: [{ perspective: 1200 }, { rotateY: backRotate }] }]}>
         <SummaryFace v="lent" s={lent} />
       </Animated.View>
     </Pressable>
@@ -440,8 +445,13 @@ function DebtSummaryFlip({ owe, lent }: { owe: FaceStat; lent: FaceStat }) {
 const useFlipStyles = makeStyles((colors, scheme) => {
   const dark = scheme === "dark";
   return {
-    face: { backfaceVisibility: "hidden" as const },
-    faceBack: { ...StyleSheet.absoluteFillObject },
+    // Single fixed wrapper; both faces overlap it absolutely (in-place flip).
+    flipWrap: { position: "relative" as const },
+    // Invisible copy that reserves the exact card height in normal flow.
+    sizer: { opacity: 0 },
+    // Overlapping face: fills the wrapper and hides its back during rotation
+    // so only one card (and one shadow) is ever visible — no dark edges.
+    faceAbs: { ...StyleSheet.absoluteFillObject, backfaceVisibility: "hidden" as const },
     card: {
       borderRadius: radius.cardLg,
       padding: spacing.lg,

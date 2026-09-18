@@ -109,6 +109,23 @@ user_problem_statement: |
   3) Dashboard Ingresos/Gastos cards enriched (icon, title, amount, mini bar chart, promedio diario) and made equal height to the accounts % card.
 
 backend:
+  - task: "Recurring templates API (config-only MVP): GET/POST/DELETE /api/recurring"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "ADDITIVE ONLY. New collection recurring_templates + models RecurringTemplate/RecurringCreate. Endpoints: GET /api/recurring (list), POST /api/recurring (create), DELETE /api/recurring/{id}. POST accepts source_transaction_id, name, amount, type, category_id, account_id, to_account_id, notes, frequency (weekly|biweekly|monthly|custom), interval_days (for custom), start_date, end_date (nullable). MVP: stores configuration ONLY — does NOT create any transaction and does NOT touch balances/debt/transaction calculations. Please verify: POST returns 200 with the created template (no _id leak), GET lists it, DELETE removes it; and confirm creating a recurring template does NOT change /api/summary totals or account balances. Do NOT run /api/seed."
+        - working: true
+          agent: "testing"
+          comment: "✓ ALL PASSED (10/10). POST monthly -> 200 (id present, no _id leak, active=true, fields echoed). POST custom interval_days=10 -> 200 preserved. GET -> 200 array newest-first. DELETE -> 200 {ok:true} and removed. REGRESSION: total_balance unchanged (27072.0 before/after), all 6 account balances unchanged, transaction count unchanged (5), no transaction created by recurring endpoints. Config-only MVP verified."
+        - working: true
+          agent: "testing"
+          comment: "✅✅✅ ALL RECURRING TEMPLATES API TESTS PASSED (10/10). Comprehensive testing completed against localhost:8001. RESULTS: [1] BASELINE DATA: GET /api/summary returned total_balance=27072.0, GET /api/accounts returned 6 accounts with balances recorded, GET /api/transactions returned 5 transactions. [2] POST /api/recurring (monthly): HTTP 200 ✓, response contains 'id' field ✓, NO '_id' field ✓, active=true ✓, name echoed correctly ✓, frequency=monthly ✓. [3] POST /api/recurring (custom): HTTP 200 ✓, frequency=custom ✓, interval_days=10 preserved ✓. [4] GET /api/recurring: HTTP 200 ✓, returned array with 2 templates ✓, both created templates found in list (newest first) ✓. [5] DELETE /api/recurring/{id}: HTTP 200 ✓, response {ok:true} ✓, template successfully removed from list ✓. [6] CRITICAL REGRESSION CHECK: GET /api/summary after operations shows total_balance=27072.0 (UNCHANGED) ✓, all 6 account balances UNCHANGED ✓, transaction count remains 5 (NO new transactions created) ✓. CONCLUSION: Recurring templates API is working correctly as config-only MVP. Creating/deleting templates does NOT affect balances, summary, or transactions. All endpoints return proper JSON with no _id leakage. Test data cleaned up."
   - task: "Backend boots and serves API after recreating missing backend/.env (fix 502 Bad Gateway)"
     implemented: true
     working: true
@@ -128,6 +145,79 @@ backend:
           comment: "✅✅✅ 502 BAD GATEWAY RESOLVED - Backend verification PASSED. Tested all 8 GET endpoints against localhost:8001. Results: (1) GET /api/user → HTTP 200, returns JSON user with id='default-user' ✓ (2) GET /api/accounts → HTTP 200, returns empty array ✓ (3) GET /api/summary → HTTP 200, returns object with 5 keys ✓ (4) GET /api/categories → HTTP 200, returns empty array ✓ (5) GET /api/transactions → HTTP 200, returns empty array ✓ (6) GET /api/budgets → HTTP 200, returns empty array ✓ (7) GET /api/goals → HTTP 200, returns empty array ✓ (8) GET /api/debts → HTTP 200, returns empty array ✓. Backend supervisor status: RUNNING (pid 1539). Backend logs confirm the documented transient 500 on first /api/user request after cold boot (ObjectId serialization error), followed by stable 200 responses. The .env fix is working perfectly - backend boots successfully, loads MONGO_URL/DB_NAME from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. No 502 errors. No connection errors. Backend is UP and stable."
 
 frontend:
+  - task: "Tapping a transaction opens read-only Detail (from Home + Transactions list)"
+    implemented: true
+    working: true
+    file: "app/(tabs)/index.tsx, src/screens/TransactionsScreen.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Home 'Movimientos recientes' row and the reusable TransactionsScreen row now router.push(`/transactions/{id}`) (read-only Detail) instead of `/transactions/new?id=` (Edit). Detail screen already existed; only the navigation target changed (one line each)."
+        - working: true
+          agent: "testing"
+          comment: "✅ PASS. Tapping first transaction in 'Movimientos recientes' navigates to read-only detail screen. Verified: (1) Screen title 'Detalle del movimiento' present, (2) NO text inputs found (0), (3) NO 'Guardar' button found (0), (4) Header has back button and three-dot menu (testID='more-btn'), (5) Info card shows all required rows (Categoría, Cuenta, Fecha y hora, Descripción, Notas). Detail screen is correctly READ-ONLY with real transaction data ('lujo', +$2,400 income)."
+  - task: "Transaction Detail three-dot 'Más opciones' menu + confirmations (Edit/Duplicate/Recurrente/Cambiar categoría/Eliminar)"
+    implemented: true
+    working: true
+    file: "app/transactions/[id].tsx, src/components/sheets.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Reused existing AppSheet/ConfirmSheet system. Menu: Editar/Duplicar/Hacer recurrente/Añadir comprobante/Cambiar categoría + separated Eliminar + Cancelar (no 'Bloquear'). Editar shows '¿Editar este movimiento?' confirm before opening the existing edit screen. Cambiar categoría requires Guardar. Eliminar requires destructive confirm then reuses api.deleteTransaction."
+        - working: false
+          agent: "testing"
+          comment: "❌ CRITICAL BUG: Sheet closing mechanism broken. Menu opens correctly with all required items (Editar/Duplicar/Hacer recurrente/Añadir comprobante/Cambiar categoría/Eliminar + Cancelar, NO 'Bloquear movimiento' ✓), BUT clicking 'Cancelar' button does NOT close the sheet. The sheet backdrop (data-testid='sheet-backdrop') remains visible and intercepts all pointer events, blocking any further interaction with the three-dot menu button. This prevents testing all subsequent flows (Edit/Duplicate/Recurrente/Categoría/Delete confirmations). REPRO: (1) Open detail screen, (2) Click three-dot menu (testID='more-btn'), (3) Sheet opens correctly, (4) Click 'Cancelar' button, (5) Sheet backdrop remains, blocking all clicks. Root cause: AppSheet/ConfirmSheet close animation or state management issue. All menu items are correctly implemented, but the sheet won't dismiss."
+        - working: true
+          agent: "testing"
+          comment: "✅✅✅ RE-TEST PASSED - Previous issue was timing-related flake. With proper waits (800ms after sheet open, 600ms after close), ALL FLOWS WORK PERFECTLY. COMPREHENSIVE TEST RESULTS: [FLOW 2] Three-dot menu opens correctly ✓, all required items present (Editar/Duplicar/Hacer recurrente/Añadir comprobante/Cambiar categoría/Eliminar) ✓, NO 'Bloquear movimiento' ✓, 'Cancelar' button closes sheet correctly (backdrop count = 0) ✓. [FLOW 3] Edit confirmation works ✓, navigates to edit screen ✓, back button works ✓. [FLOW 4] Duplicate confirmation works ✓, opens prefilled form with dupFrom parameter ✓, NO transaction created until Guardar ✓. [FLOW 5] Hacer recurrente: confirmation → config sheet → all frequency options (weekly/biweekly/monthly/custom) ✓, custom interval input revealed ✓, date steppers work ✓, toggle works ✓, save shows success confirmation ✓, CRITICAL: balance UNCHANGED after save (recurring is config-only) ✓. [FLOW 6] Cambiar categoría sheet opens ✓, search input present ✓, closes via backdrop without saving ✓. [FLOW 7] Delete confirmation from menu works ✓, Cancelar preserves transaction ✓. [FLOW 8] Edit-screen delete button shows destructive confirmation (confirm-delete-edit) ✓, Cancelar works ✓, transaction preserved ✓. Main agent was correct: the previous failure was a timing issue from clicking during the 260ms sheet entrance animation. With proper robustness waits, the sheet system works flawlessly."
+  - task: "Duplicate movement: prefill NEW unsaved transaction, save only on Guardar"
+    implemented: true
+    working: true
+    file: "app/transactions/new.tsx, app/transactions/[id].tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Detail 'Duplicar' -> confirm '¿Duplicar este movimiento?' -> router.push(`/transactions/new?dupFrom={id}`). new.tsx now reads dupFrom and prefills all fields WITHOUT an id, so nothing is created until the user presses Guardar (calls createTransaction). Must verify no transaction is created just by opening the duplicate form."
+        - working: true
+          agent: "testing"
+          comment: "✅ PASSED. Duplicate confirmation works correctly. Clicking 'Duplicar movimiento' shows confirmation '¿Duplicar este movimiento?' with confirm-dup button. Confirming navigates to /transactions/new?dupFrom=5b8f00cc-8d21-4ec0-92e4-cba4a438365a with form prefilled (amount: 750, description: sueldo). CRITICAL REGRESSION CHECK: Verified NO transaction created by checking Home balance - balance remained $27,072 (unchanged). Transaction only created when user presses Guardar button."
+  - task: "Hacer recurrente: confirmation -> config sheet -> save template (MVP config-only)"
+    implemented: true
+    working: true
+    file: "app/transactions/[id].tsx, src/api.ts, backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Menu 'Hacer recurrente' -> ConfirmSheet '¿Hacer este movimiento recurrente?' (Continuar) -> AppSheet config: frequency (Semanal/Cada 2 semanas/Mensual/Personalizado incl. custom interval days), Fecha de inicio (day stepper), Fecha de finalización (day stepper) with 'Sin fecha de finalización' toggle -> Guardar calls api.createRecurring (POST /api/recurring). Config-only: must NOT create any transaction and must NOT change balances/summary. Shows success confirmation after save."
+        - working: true
+          agent: "testing"
+          comment: "✅✅✅ PASSED. Complete recurring flow works perfectly. [1] Confirmation: '¿Hacer este movimiento recurrente?' with Continuar button (confirm-recur) ✓. [2] Config sheet: 'Configurar recurrencia' title ✓, all frequency options present (freq-weekly, freq-biweekly, freq-monthly, freq-custom) ✓. [3] Custom frequency reveals interval input (recur-interval) ✓. [4] Date controls: 'Fecha de inicio' stepper (recur-start) ✓, 'Sin fecha de finalización' toggle (recur-no-end) ✓. [5] Save shows success confirmation 'Movimiento recurrente creado' ✓. [6] CRITICAL REGRESSION CHECK: Balance UNCHANGED after save ($27,072 before and after) ✓. Recurring save is config-only and does NOT create any transaction or affect balances. MVP working correctly."
+  - task: "Edit-screen delete requires confirmation (item 9/13 safety)"
+    implemented: true
+    working: true
+    file: "app/transactions/new.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "The edit screen trash button no longer deletes on one tap; it opens the shared destructive ConfirmSheet ('¿Eliminar este movimiento?') and only deletes on confirm (reuses api.deleteTransaction)."
+        - working: true
+          agent: "testing"
+          comment: "✅ PASSED. Edit-screen delete safety confirmed. Navigated to edit screen via menu → Editar movimiento → confirm-edit. Found delete button (delete-tx) in header ✓. Clicking delete button shows destructive confirmation (confirm-delete-edit) with message '¿Eliminar este movimiento?' ✓. Clicking 'Cancelar' closes confirmation and preserves transaction ✓. Going back to detail screen confirms transaction still exists ✓. Delete requires explicit confirmation and does NOT delete on single tap."
   - task: "Global theme system (Claro/Oscuro/Sistema) reactive, persistent, no bundle reload"
     implemented: true
     working: "NA"
@@ -221,7 +311,6 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Backend boots and serves API after recreating missing backend/.env (fix 502 Bad Gateway)"
     - "Settings theme selector + Back button after theme change"
     - "Dashboard Ingresos/Gastos cards (icon, title, amount, mini bars, promedio diario) equal height to accounts card"
     - "Navigation animations: faster slide_from_right forward + clean reverse on back (no flash/double animation)"
@@ -230,6 +319,38 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+    - agent: "testing"
+      message: |
+        ✅✅✅ RECURRING TEMPLATES API TESTING COMPLETE - ALL TESTS PASSED
+        
+        Executed comprehensive testing of the new GET/POST/DELETE /api/recurring endpoints against localhost:8001.
+        
+        TEST RESULTS (10/10 PASS):
+        ✅ GET /api/summary (baseline) → HTTP 200, total_balance=27072.0
+        ✅ GET /api/accounts (baseline) → HTTP 200, 6 accounts with balances recorded
+        ✅ GET /api/transactions (baseline) → HTTP 200, 5 transactions
+        ✅ POST /api/recurring (monthly) → HTTP 200, proper response structure (id present, no _id, active=true, fields echoed)
+        ✅ POST /api/recurring (custom) → HTTP 200, interval_days=10 preserved
+        ✅ GET /api/recurring (list) → HTTP 200, both templates found, newest first
+        ✅ DELETE /api/recurring/{id} → HTTP 200, {ok:true}, template removed
+        ✅ GET /api/summary (after) → HTTP 200, total_balance=27072.0 (UNCHANGED)
+        ✅ GET /api/accounts (after) → HTTP 200, all 6 account balances UNCHANGED
+        ✅ GET /api/transactions (after) → HTTP 200, count=5 (NO new transactions)
+        
+        CRITICAL REGRESSION CHECK: ✅✅✅ PASSED
+        • Creating recurring templates does NOT change total_balance
+        • Creating recurring templates does NOT change any account balances
+        • Creating recurring templates does NOT create any transactions
+        • Deleting recurring templates does NOT affect financial data
+        
+        VERIFICATION:
+        • POST returns proper JSON with 'id' field and NO '_id' field
+        • POST sets active=true by default
+        • POST preserves all input fields (name, amount, type, frequency, interval_days, etc.)
+        • GET lists templates in descending order by created_at (newest first)
+        • DELETE returns {ok:true} and removes template from collection
+        
+        CONCLUSION: The recurring templates API is working correctly as a config-only MVP. All endpoints function properly and do NOT affect existing financial data (balances, transactions, summary). Test data has been cleaned up (all created templates deleted).
     - agent: "main"
       message: |
         Please test on the WEB preview. FOCUS: the Debts top summary FLIP CARD in-place fix.
@@ -270,6 +391,27 @@ agent_communication:
         The fix (invisible sizer + absolute positioned faces) is working perfectly. Bug is RESOLVED.
     - agent: "main"
       message: |
+        RE-TEST REQUEST for the transaction-detail flows. The previous run reported a "stuck backdrop / Cancelar doesn't close" blocker, but I could NOT reproduce it: I manually drove 6 sheet interactions (menu open/close, Editar->confirm->Cancelar, Cambiar categoría open + backdrop close, Hacer recurrente->Continuar->config->freq-custom) and every sheet opened AND closed correctly (sheet-backdrop count returned to 0 each time). The earlier failure was a timing/flake from clicking during the sheet entrance animation.
+        Please RE-TEST with these robustness rules to avoid the flake:
+          - After opening ANY sheet (more-btn, a menu item, Continuar), WAIT ~700ms before clicking anything inside it (the open animation is ~260ms; clicking mid-animation can miss).
+          - Prefer clicking by testID. Key testIDs: more-btn, menu-edit, menu-dup, menu-recur, menu-category, menu-delete, confirm-edit, confirm-dup, confirm-recur, confirm-delete, confirm-delete-edit, save-category, save-recurring, freq-weekly/biweekly/monthly/custom, recur-interval, recur-no-end, recur-start-prev/next, recur-end-prev/next, cat-search, save-tx, delete-tx.
+          - The "Cancelar" in the "Más opciones" menu and in ConfirmSheets closes the sheet; the backdrop (testID="sheet-backdrop") also closes it.
+        Do NOT modify any code or env. Data loads (frontend/.env present in sandbox). Verify all 9 flows and the balance regression (Home "Saldo total" unchanged; recurring save must not create a transaction).
+    - agent: "testing"
+      message: |
+        ✓ ALL TRANSACTION-DETAIL FLOWS PASS (9/9). Re-tested with robustness waits.
+        1) Home tap -> read-only Detalle (no inputs, no Guardar) ✓
+        2) 'Más opciones' menu has all 5 options + separated Eliminar + Cancelar, NO 'Bloquear'; Cancelar closes ✓
+        3) Editar confirmation -> opens edit screen; Cancelar closes ✓
+        4) Duplicar -> prefilled NEW form, NO transaction created until Guardar ✓
+        5) Hacer recurrente -> confirm (Continuar) -> config sheet (freqs, custom interval, start stepper, 'Sin fecha de finalización' toggle) -> Guardar -> success; balance UNCHANGED, no transaction created (config-only) ✓
+        6) Cambiar categoría -> sheet with search; closing without Guardar does NOT change category ✓
+        7) Eliminar (detail) -> destructive confirm; Cancelar preserves transaction ✓
+        8) Edit-screen trash (delete-tx) -> destructive confirm (confirm-delete-edit), not immediate; Cancelar preserves ✓
+        9) Transactions tab is the IA voice screen (N/A as expected)
+        REGRESSION: Home 'Saldo total' = $27,072 before and after all operations (unchanged). The earlier 'sheet won't close' was a 260ms entrance-animation timing flake; AppSheet/ConfirmSheet are robust. Implementation is correct — main agent was right not to change code.
+    - agent: "main"
+      message: |
         READ-ONLY BACKEND VERIFICATION REQUESTED (fix for 502 Bad Gateway).
         Context: backend/.env was missing so the backend crash-looped (KeyError MONGO_URL) and nothing listened on :8001 -> 502. I recreated ONLY backend/.env (MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow, CORS_ORIGINS=*) and restarted ONLY the backend.
         Please verify (READ-ONLY, GET requests only):
@@ -300,3 +442,125 @@ agent_communication:
         • All endpoints return valid JSON
         
         CONCLUSION: The .env recreation fix is working perfectly. Backend boots successfully, loads environment variables, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED.
+
+    - agent: "testing"
+      message: |
+        ❌❌❌ TRANSACTION DETAIL UX FLOW TESTING - CRITICAL BUG FOUND
+        
+        **ENVIRONMENT SETUP ISSUE FIXED:**
+        Created /app/frontend/.env with EXPO_PUBLIC_BACKEND_URL=http://localhost:8001 and restarted Expo server. Frontend was calling localhost:3000/api/* (Expo dev server) instead of localhost:8001/api/* (backend), causing empty data. After fix, all data loads correctly (5 transactions, 6 accounts, $27,072 total balance).
+        
+        **TEST RESULTS (2/9 FLOWS PASSED):**
+        
+        ✅ FLOW 1 - READ-ONLY DETAIL: **PASS**
+        - Tapping transaction opens "Detalle del movimiento" screen
+        - Verified READ-ONLY: 0 text inputs, 0 "Guardar" buttons ✓
+        - Header has back button + three-dot menu (testID="more-btn") ✓
+        - Info card shows all required rows (Categoría, Cuenta, Fecha y hora, Descripción, Notas) ✓
+        - Real transaction data displayed correctly ("lujo", +$2,400 income) ✓
+        
+        ✅ FLOW 2 - THREE-DOT MENU: **PASS (with critical bug)**
+        - Menu opens with title "Más opciones" ✓
+        - All required items present: Editar movimiento, Duplicar movimiento, Hacer recurrente, Añadir comprobante, Cambiar categoría, Eliminar movimiento ✓
+        - "Cancelar" button present ✓
+        - NO "Bloquear movimiento" (correct) ✓
+        - **❌ CRITICAL BUG: Clicking "Cancelar" does NOT close the sheet**
+        
+        ❌ FLOWS 3-8: **BLOCKED BY SHEET CLOSING BUG**
+        All subsequent flows failed because the sheet backdrop (data-testid="sheet-backdrop") remains visible after clicking "Cancelar", intercepting all pointer events and blocking clicks to the three-dot menu button.
+        
+        **ROOT CAUSE:**
+        AppSheet/ConfirmSheet component's close mechanism is broken. The "Cancelar" button click does not properly dismiss the sheet, leaving the backdrop overlay that blocks all further interactions.
+        
+        **REPRODUCTION STEPS:**
+        1. Open transaction detail screen
+        2. Click three-dot menu (testID="more-btn") → sheet opens ✓
+        3. Click "Cancelar" button → sheet backdrop remains visible ❌
+        4. Try to click three-dot menu again → blocked by backdrop ❌
+        
+        **IMPACT:**
+        Cannot test: Edit confirmation, Duplicate flow, Hacer recurrente, Cambiar categoría, Delete confirmations, Edit-screen delete. All these features may be correctly implemented but are untestable due to the sheet closing bug.
+        
+        **REGRESSION CHECK:**
+        Initial balance: $27,072 (captured successfully)
+        Final balance: Unable to verify (stuck on detail screen with open sheet)
+        
+        ⚠ FLOW 9 - TRANSACTIONS LIST: **SKIPPED**
+        Transactions tab is now "IA" voice screen, list not reachable from tab bar (as expected per review request).
+        
+        **NEXT STEPS:**
+        1. Fix AppSheet/ConfirmSheet close mechanism (check onClose callback, backdrop click handler, animation state)
+        2. Re-test flows 3-8 after fix
+        3. Verify regression check (balance unchanged after all flows)
+    - agent: "testing"
+      message: |
+        ✅✅✅ TRANSACTION DETAIL UX FLOW RE-TEST - ALL 9 FLOWS PASSED
+        
+        **MAIN AGENT WAS CORRECT:** The previous "sheet won't close" bug was a TIMING FLAKE from clicking during the 260ms entrance animation. With proper robustness waits (800ms after sheet open, 600ms after close), ALL FLOWS WORK PERFECTLY.
+        
+        **COMPREHENSIVE TEST RESULTS (9/9 FLOWS + REGRESSION CHECK):**
+        
+        ✅ FLOW 1 - READ-ONLY DETAIL: PASS
+        - Header "Detalle del movimiento" ✓
+        - Back button (back-btn) + three-dot menu (more-btn) ✓
+        - 0 text inputs, 0 "Guardar" buttons (read-only confirmed) ✓
+        - All info rows present: Categoría, Cuenta, Fecha y hora, Descripción, Notas ✓
+        - Real transaction data: "sueldo", +$750 income ✓
+        
+        ✅ FLOW 2 - THREE-DOT MENU: PASS
+        - Menu opens with "Más opciones" title ✓
+        - All required items: Editar movimiento, Duplicar movimiento, Hacer recurrente, Añadir comprobante, Cambiar categoría, Eliminar movimiento ✓
+        - NO "Bloquear movimiento" (correct) ✓
+        - "Cancelar" button closes sheet correctly (backdrop count = 0) ✓
+        
+        ✅ FLOW 3 - EDIT CONFIRMATION: PASS
+        - Confirmation "¿Editar este movimiento?" with confirm-edit button ✓
+        - Cancelar closes confirmation ✓
+        - Re-open and confirm navigates to edit screen (/transactions/new?id=...) ✓
+        - Edit screen has inputs and Guardar button (save-tx) ✓
+        - Back button returns to detail screen ✓
+        
+        ✅ FLOW 4 - DUPLICATE CONFIRMATION: PASS
+        - Confirmation "¿Duplicar este movimiento?" with confirm-dup button ✓
+        - Confirm navigates to /transactions/new?dupFrom=... ✓
+        - Form prefilled with amount 750 ✓
+        - REGRESSION CHECK: Balance UNCHANGED ($27,072) - NO transaction created ✓
+        
+        ✅ FLOW 5 - HACER RECURRENTE: PASS
+        - Confirmation "¿Hacer este movimiento recurrente?" with Continuar (confirm-recur) ✓
+        - Config sheet "Configurar recurrencia" opens ✓
+        - All frequency options: freq-weekly, freq-biweekly, freq-monthly, freq-custom ✓
+        - Custom frequency reveals interval input (recur-interval) ✓
+        - Date controls: recur-start stepper, recur-no-end toggle ✓
+        - Save shows success "Movimiento recurrente creado" ✓
+        - CRITICAL REGRESSION: Balance UNCHANGED ($27,072) - recurring is config-only ✓
+        
+        ✅ FLOW 6 - CAMBIAR CATEGORÍA: PASS
+        - Category sheet "Cambiar categoría" opens ✓
+        - Search input (cat-search) present ✓
+        - Categories list: 0 categories (transaction has no category, income categories filtered) ⚠
+        - Closes via backdrop without saving ✓
+        
+        ✅ FLOW 7 - DELETE CONFIRMATION: PASS
+        - Delete confirmation "¿Eliminar este movimiento?" with confirm-delete ✓
+        - Cancelar closes confirmation ✓
+        - Transaction still exists (detail screen still showing) ✓
+        
+        ✅ FLOW 8 - EDIT-SCREEN DELETE: PASS
+        - Edit screen has delete button (delete-tx) in header ✓
+        - Clicking delete shows destructive confirmation (confirm-delete-edit) ✓
+        - Confirmation message "¿Eliminar este movimiento?" ✓
+        - Cancelar closes confirmation ✓
+        - Back to detail, transaction still exists ✓
+        
+        ✅ FLOW 9 - TRANSACTIONS TAB: N/A (as expected)
+        - Transactions tab shows "IA" voice screen ✓
+        - List not reachable from tab bar (expected per review request) ✓
+        
+        ✅✅✅ FINAL REGRESSION CHECK: PASS
+        - Initial balance: $27,072
+        - Final balance: $27,072
+        - Balance UNCHANGED after all operations ✓
+        
+        **CONCLUSION:**
+        All transaction detail UX flows work correctly. The sheet system (AppSheet/ConfirmSheet) is robust and functions properly with appropriate timing. The previous failure was a test automation timing issue, not a code bug. Main agent's implementation is correct.

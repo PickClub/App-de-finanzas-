@@ -55,4 +55,8 @@ export const api = {
   // Summary
   summary: () => request<any>("/summary"),
   seed: () => request<any>("/seed", { method: "POST" }),
+  // Recurring templates (config only)
+  listRecurring: () => request<any[]>("/recurring"),
+  createRecurring: (d: any) => request<any>("/recurring", { method: "POST", body: JSON.stringify(d) }),
+  deleteRecurring: (id: string) => request<any>(`/recurring/${id}`, { method: "DELETE" }),
 };

@@ -593,7 +593,7 @@ export default function Home() {
                 {idx > 0 && <View style={styles.mrDivider} />}
                 <Pressable
                   testID={`mr-tx-${t.id}`}
-                  onPress={guard(() => router.push(`/transactions/new?id=${t.id}`))}
+                  onPress={guard(() => router.push(`/transactions/${t.id}`))}
                   style={styles.mrRow}
                 >
                   <IconTile icon={iconName} tint={tint} size={36} />

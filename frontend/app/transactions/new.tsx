@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
+import { ConfirmSheet } from "@/src/components/sheets";
 
 const TYPE_LABEL: Record<string, string> = {
   income: "Ingreso",
@@ -18,7 +19,7 @@ const TYPE_LABEL: Record<string, string> = {
 export default function NewTransaction() {
   const { colors } = useTheme();
   const styles = useStyles();
-  const params = useLocalSearchParams<{ id?: string; type?: string }>();
+  const params = useLocalSearchParams<{ id?: string; type?: string; dupFrom?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
@@ -30,6 +31,7 @@ export default function NewTransaction() {
   const [accountId, setAccountId] = useState<string | undefined>();
   const [toAccountId, setToAccountId] = useState<string | undefined>();
   const [notes, setNotes] = useState("");
+  const [confirmDel, setConfirmDel] = useState(false);
 
   const catQ = useQuery({ queryKey: ["categories"], queryFn: api.listCategories });
   const accQ = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
@@ -51,6 +53,26 @@ export default function NewTransaction() {
       });
     }
   }, [params.id]);
+
+  // Duplicate: prefill from the source transaction but WITHOUT an id, so this
+  // opens as a NEW unsaved movement. Nothing is created until the user taps
+  // "Guardar" (which runs createTransaction because params.id is undefined).
+  useEffect(() => {
+    if (params.dupFrom && !params.id) {
+      api.listTransactions().then((all) => {
+        const t = all.find((x: any) => x.id === params.dupFrom);
+        if (t) {
+          setType(t.type);
+          setAmount(String(t.amount));
+          setName(t.name);
+          setCategoryId(t.category_id);
+          setAccountId(t.account_id);
+          setToAccountId(t.to_account_id);
+          setNotes(t.notes || "");
+        }
+      });
+    }
+  }, [params.dupFrom, params.id]);
 
   const save = async () => {
     const amt = parseFloat(amount);
@@ -82,6 +104,7 @@ export default function NewTransaction() {
     if (!params.id) return;
     await api.deleteTransaction(params.id as string);
     qc.invalidateQueries();
+    setConfirmDel(false);
     router.back();
   };
 
@@ -96,7 +119,7 @@ export default function NewTransaction() {
         </Pressable>
         <Text style={styles.title}>{params.id ? "Editar" : "Nuevo"} movimiento</Text>
         {params.id && (
-          <Pressable testID="delete-tx" onPress={remove} style={styles.backBtn}>
+          <Pressable testID="delete-tx" onPress={() => setConfirmDel(true)} style={styles.backBtn}>
             <Ionicons name="trash-outline" size={22} color={colors.expenseRed} />
           </Pressable>
         )}
@@ -204,6 +227,19 @@ export default function NewTransaction() {
           <Text style={styles.saveText}>Guardar</Text>
         </Pressable>
       </ScrollView>
+
+      <ConfirmSheet
+        visible={confirmDel}
+        onClose={() => setConfirmDel(false)}
+        icon="trash-outline"
+        accent={colors.expenseRed}
+        destructive
+        title="¿Eliminar este movimiento?"
+        description="Esta acción eliminará permanentemente este movimiento y puede afectar tus saldos y estadísticas."
+        confirmLabel="Eliminar"
+        confirmTestID="confirm-delete-edit"
+        onConfirm={remove}
+      />
     </KeyboardAvoidingView>
   );
 }

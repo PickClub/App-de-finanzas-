@@ -103,6 +103,40 @@ class TransactionCreate(BaseModel):
     notes: Optional[str] = None
 
 
+class RecurringTemplate(BaseModel):
+    id: str = Field(default_factory=new_id)
+    user_id: str = DEFAULT_USER_ID
+    source_transaction_id: Optional[str] = None
+    name: str
+    amount: float
+    type: str
+    category_id: Optional[str] = None
+    account_id: Optional[str] = None
+    to_account_id: Optional[str] = None
+    notes: Optional[str] = None
+    frequency: Literal["weekly", "biweekly", "monthly", "custom"] = "monthly"
+    interval_days: Optional[int] = None
+    start_date: str = Field(default_factory=now_iso)
+    end_date: Optional[str] = None
+    active: bool = True
+    created_at: str = Field(default_factory=now_iso)
+
+
+class RecurringCreate(BaseModel):
+    source_transaction_id: Optional[str] = None
+    name: str
+    amount: float
+    type: str
+    category_id: Optional[str] = None
+    account_id: Optional[str] = None
+    to_account_id: Optional[str] = None
+    notes: Optional[str] = None
+    frequency: str = "monthly"
+    interval_days: Optional[int] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
 class Budget(BaseModel):
     id: str = Field(default_factory=new_id)
     user_id: str = DEFAULT_USER_ID
@@ -373,6 +407,29 @@ async def delete_transaction(tid: str):
         for aid in {old.get("account_id"), old.get("to_account_id")}:
             if aid:
                 await recompute_account_balance(aid)
+    return {"ok": True}
+
+
+# Recurring templates (MVP: stores configuration only; does NOT auto-create
+# future transactions and does NOT touch balances or transaction calculations)
+@api.get("/recurring")
+async def list_recurring():
+    return await db.recurring_templates.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("created_at", -1).to_list(500)
+
+
+@api.post("/recurring")
+async def create_recurring(data: RecurringCreate):
+    payload = data.model_dump()
+    if not payload.get("start_date"):
+        payload.pop("start_date", None)
+    rt = RecurringTemplate(user_id=DEFAULT_USER_ID, **payload).model_dump()
+    await db.recurring_templates.insert_one(rt)
+    return {k: v for k, v in rt.items() if k != "_id"}
+
+
+@api.delete("/recurring/{rid}")
+async def delete_recurring(rid: str):
+    await db.recurring_templates.delete_many({"id": rid, "user_id": DEFAULT_USER_ID})
     return {"ok": True}
 
 

@@ -196,7 +196,7 @@ export default function Transactions() {
           return (
             <Pressable
               testID={`tx-${item.id}`}
-              onPress={guard(() => router.push(`/transactions/new?id=${item.id}`))}
+              onPress={guard(() => router.push(`/transactions/${item.id}`))}
               style={styles.row}
             >
               <IconTile icon={iconName} tint={tint} size={44} />

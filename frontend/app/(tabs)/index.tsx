@@ -506,13 +506,13 @@ export default function Home() {
         {/* Section header */}
         <View style={styles.mrHeader}>
           <View style={styles.mrIconTile}>
-            <Ionicons name="layers" size={22} color={colors.brandPrimary} />
+            <Ionicons name="layers" size={18} color={colors.brandPrimary} />
           </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.mrTitle}>
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <Text style={styles.mrTitle} numberOfLines={1} ellipsizeMode="clip">
               Movimientos <Text style={styles.mrTitleAccent}>recientes</Text>
             </Text>
-            <Text style={styles.mrSubtitle} numberOfLines={2}>
+            <Text style={styles.mrSubtitle} numberOfLines={1}>
               Aquí tienes tus últimos movimientos, en un vistazo.
             </Text>
           </View>
@@ -520,7 +520,7 @@ export default function Home() {
             <LockToggle testID="lock-home" compact />
             <Pressable testID="see-all-tx" onPress={() => router.push("/(tabs)/transactions")} style={styles.seeAllBtn}>
               <Text style={styles.seeAllText}>Ver todo</Text>
-              <Ionicons name="chevron-forward" size={15} color={colors.brandPrimary} />
+              <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
             </Pressable>
           </View>
         </View>
@@ -535,7 +535,7 @@ export default function Home() {
             const active = txFilter === f.id;
             const content = (
               <>
-                <Ionicons name={f.icon as any} size={15} color={active ? "#fff" : f.color} />
+                <Ionicons name={f.icon as any} size={13} color={active ? "#fff" : f.color} />
                 <Text style={[styles.mrPillText, active && styles.mrPillTextActive]}>{f.label}</Text>
               </>
             );
@@ -566,7 +566,7 @@ export default function Home() {
             onPress={() => setMonthOnly((m) => !m)}
             style={[styles.mrIconPill, monthOnly && styles.mrIconPillActive]}
           >
-            <Ionicons name="calendar-outline" size={17} color={monthOnly ? colors.brandPrimary : colors.muted} />
+            <Ionicons name="calendar-outline" size={15} color={monthOnly ? colors.brandPrimary : colors.muted} />
           </Pressable>
         </ScrollView>
 
@@ -596,11 +596,11 @@ export default function Home() {
                   onPress={guard(() => router.push(`/transactions/new?id=${t.id}`))}
                   style={styles.mrRow}
                 >
-                  <IconTile icon={iconName} tint={tint} size={44} />
-                  <View style={{ flex: 1, marginLeft: 12 }}>
+                  <IconTile icon={iconName} tint={tint} size={36} />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
                     <Text style={styles.mrName} numberOfLines={1}>{t.name}</Text>
                     <View style={styles.mrTimeRow}>
-                      <Ionicons name="time-outline" size={13} color={colors.muted} />
+                      <Ionicons name="time-outline" size={12} color={colors.muted} />
                       <Text style={styles.mrTime} numberOfLines={1}>{formatDateTime(t.date)}</Text>
                     </View>
                   </View>
@@ -608,7 +608,7 @@ export default function Home() {
                     <Text style={[styles.mrBadgeText, { color: badgeColor }]} numberOfLines={1}>{badgeLabel}</Text>
                   </View>
                   <Text style={[styles.mrAmount, { color }]}>{sign}{formatCurrency(t.amount)}</Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.muted} style={{ marginLeft: 4 }} />
+                  <Ionicons name="chevron-forward" size={15} color={colors.muted} style={{ marginLeft: 4 }} />
                 </Pressable>
               </View>
             );
@@ -616,7 +616,7 @@ export default function Home() {
         </View>
 
         {/* AI banner — taps through to the IA tab (same route as the mic in the bottom nav) */}
-        <Pressable testID="ai-banner" onPress={() => router.push("/(tabs)/transactions")} style={{ marginTop: spacing.md }}>
+        <Pressable testID="ai-banner" onPress={() => router.push("/(tabs)/transactions")} style={{ marginTop: 8 }}>
           <LinearGradient
             colors={[colors.brandPrimary + "1F", colors.statsPurple + "1F"]}
             start={{ x: 0, y: 0 }}
@@ -624,14 +624,14 @@ export default function Home() {
             style={styles.aiBanner}
           >
             <View style={styles.aiIcon}>
-              <Ionicons name="sparkles" size={20} color={colors.brandPrimary} />
+              <Ionicons name="sparkles" size={17} color={colors.brandPrimary} />
             </View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
+            <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={styles.aiTitle} numberOfLines={1}>Registra un gasto más rápido</Text>
               <Text style={styles.aiSub} numberOfLines={1}>Usa el botón de IA o prueba con tu voz.</Text>
             </View>
             <View style={styles.aiChevron}>
-              <Ionicons name="chevron-forward" size={18} color={colors.brandPrimary} />
+              <Ionicons name="chevron-forward" size={16} color={colors.brandPrimary} />
             </View>
           </LinearGradient>
         </Pressable>
@@ -917,36 +917,36 @@ const useStyles = makeStyles((colors) => ({
   txSub: { color: colors.muted, fontSize: 12, marginTop: 2 },
 
   /* --- Movimientos recientes (redesigned section) --- */
-  mrHeader: { flexDirection: "row", alignItems: "center", marginBottom: spacing.md },
+  mrHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
   mrIconTile: {
-    width: 46, height: 46, borderRadius: 16,
+    width: 38, height: 38, borderRadius: 13,
     backgroundColor: colors.brandPrimary + "1A",
     alignItems: "center", justifyContent: "center",
   },
-  mrTitle: { fontSize: 22, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.4 },
+  mrTitle: { fontSize: 18, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.4 },
   mrTitleAccent: { color: colors.brandPrimary, fontWeight: "800" },
-  mrSubtitle: { fontSize: 12.5, color: colors.muted, marginTop: 2 },
+  mrSubtitle: { fontSize: 11.5, color: colors.muted, marginTop: 1 },
   seeAllBtn: {
     flexDirection: "row", alignItems: "center", gap: 2,
-    paddingHorizontal: 12, paddingVertical: 8,
+    paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: radius.pill,
     backgroundColor: colors.brandPrimary + "14",
   },
-  seeAllText: { color: colors.brandPrimary, fontWeight: "800", fontSize: 13 },
-  mrFilterRow: { flexDirection: "row", gap: 8, paddingVertical: 2, paddingRight: 4, marginBottom: spacing.md },
+  seeAllText: { color: colors.brandPrimary, fontWeight: "800", fontSize: 12 },
+  mrFilterRow: { flexDirection: "row", gap: 6, paddingVertical: 2, paddingRight: 4, marginBottom: 10 },
   mrPill: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    height: 40, paddingHorizontal: 16, borderRadius: radius.pill,
+    flexDirection: "row", alignItems: "center", gap: 5,
+    height: 32, paddingHorizontal: 12, borderRadius: radius.pill,
     flexShrink: 0,
   },
   mrPillIdle: {
     backgroundColor: colors.surfaceSecondary,
     borderWidth: 1, borderColor: colors.border,
   },
-  mrPillText: { fontSize: 13.5, fontWeight: "700", color: colors.onSurface },
+  mrPillText: { fontSize: 12, fontWeight: "700", color: colors.onSurface },
   mrPillTextActive: { color: "#fff" },
   mrIconPill: {
-    width: 40, height: 40, borderRadius: radius.pill,
+    width: 32, height: 32, borderRadius: radius.pill,
     alignItems: "center", justifyContent: "center",
     backgroundColor: colors.surfaceSecondary,
     borderWidth: 1, borderColor: colors.border,
@@ -959,41 +959,41 @@ const useStyles = makeStyles((colors) => ({
   mrCard: {
     backgroundColor: colors.surfaceSecondary,
     borderRadius: radius.cardLg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderWidth: 1,
     borderColor: colors.border,
     shadowColor: "#000",
     shadowOpacity: 0.05,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
     elevation: 3,
   },
-  mrRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 4 },
-  mrDivider: { height: 1, backgroundColor: colors.divider, marginLeft: 60, marginRight: 4 },
-  mrName: { color: colors.onSurface, fontWeight: "800", fontSize: 14.5, letterSpacing: -0.2 },
-  mrTimeRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
-  mrTime: { color: colors.muted, fontSize: 12 },
+  mrRow: { flexDirection: "row", alignItems: "center", paddingVertical: 9, paddingHorizontal: 4 },
+  mrDivider: { height: 1, backgroundColor: colors.divider, marginLeft: 50, marginRight: 4 },
+  mrName: { color: colors.onSurface, fontWeight: "800", fontSize: 13.5, letterSpacing: -0.2 },
+  mrTimeRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  mrTime: { color: colors.muted, fontSize: 11 },
   mrBadge: {
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: radius.pill, marginHorizontal: 8, flexShrink: 1,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: radius.pill, marginHorizontal: 6, flexShrink: 1,
   },
-  mrBadgeText: { fontSize: 11.5, fontWeight: "700" },
-  mrAmount: { fontWeight: "800", fontSize: 15.5, letterSpacing: -0.3 },
+  mrBadgeText: { fontSize: 11, fontWeight: "700" },
+  mrAmount: { fontWeight: "800", fontSize: 14, letterSpacing: -0.3 },
   aiBanner: {
     flexDirection: "row", alignItems: "center",
-    padding: 14, borderRadius: radius.cardLg,
+    padding: 10, borderRadius: radius.cardLg,
     borderWidth: 1, borderColor: colors.brandPrimary + "3D",
   },
   aiIcon: {
-    width: 44, height: 44, borderRadius: 22,
+    width: 36, height: 36, borderRadius: 18,
     backgroundColor: colors.brandPrimary + "26",
     alignItems: "center", justifyContent: "center",
   },
-  aiTitle: { fontSize: 15, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.2 },
-  aiSub: { fontSize: 12.5, color: colors.muted, marginTop: 2 },
+  aiTitle: { fontSize: 13.5, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.2 },
+  aiSub: { fontSize: 11.5, color: colors.muted, marginTop: 1 },
   aiChevron: {
-    width: 38, height: 38, borderRadius: 19,
+    width: 32, height: 32, borderRadius: 16,
     backgroundColor: colors.brandPrimary + "1F",
     alignItems: "center", justifyContent: "center", marginLeft: 8,
   },

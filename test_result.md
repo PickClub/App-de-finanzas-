@@ -108,6 +108,25 @@ user_problem_statement: |
   2) GLOBAL THEME SYSTEM refactor (reported bug): switching Claro/Oscuro/Sistema must instantly re-theme the WHOLE app (all screens/cards/flip card both faces) with a single source of truth, persist the preference, follow the device in "system", and the Back button must keep working after selecting a theme (previously it reloaded the JS bundle and reset the nav stack).
   3) Dashboard Ingresos/Gastos cards enriched (icon, title, amount, mini bar chart, promedio diario) and made equal height to the accounts % card.
 
+backend:
+  - task: "Backend boots and serves API after recreating missing backend/.env (fix 502 Bad Gateway)"
+    implemented: true
+    working: true
+    file: "backend/.env, backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "ROOT CAUSE of 502 Bad Gateway: /app/backend/.env was missing entirely (gitignored, never committed, not recoverable from any backup/config). server.py does os.environ['MONGO_URL'] / ['DB_NAME'] at import time, so uvicorn crash-looped on KeyError and nothing listened on :8001 -> ingress returned 502. FIX (minimal): recreated ONLY /app/backend/.env with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow, CORS_ORIGINS=*. Restarted ONLY the backend service. No source code, frontend, deps, git, or DB data changed. NOTE: the FIRST request after boot returns HTTP 500 (known transient: FastAPI tries to serialize the auto-created default-user Mongo doc whose _id is an ObjectId -> \"'ObjectId' object is not iterable\"); every subsequent request is stable HTTP 200. Per instruction this transient is NOT to be code-fixed in this task. Please VERIFY read-only: GET /api/user returns 200 (after the first call), and other GET endpoints (/api/accounts, /api/summary, /api/categories, /api/transactions, /api/budgets, /api/goals, /api/debts) return 200. DO NOT POST /api/seed and DO NOT create/modify/delete any data."
+        - working: true
+          agent: "testing"
+          comment: "✓ VERIFIED (read-only, GET only). 8/8 endpoints HTTP 200: /api/user (id=default-user), /api/accounts, /api/summary, /api/categories, /api/transactions, /api/budgets, /api/goals, /api/debts. backend RUNNING (pid 1539); backend/.env present with MONGO_URL/DB_NAME/CORS_ORIGINS; connects to MongoDB. Documented transient 500 on the first /api/user after cold boot (ObjectId serialization), then stable 200 — as expected. NO 502, NO connection errors. Did NOT run seed or any write. 502 Bad Gateway is RESOLVED."
+        - working: true
+          agent: "testing"
+          comment: "✅✅✅ 502 BAD GATEWAY RESOLVED - Backend verification PASSED. Tested all 8 GET endpoints against localhost:8001. Results: (1) GET /api/user → HTTP 200, returns JSON user with id='default-user' ✓ (2) GET /api/accounts → HTTP 200, returns empty array ✓ (3) GET /api/summary → HTTP 200, returns object with 5 keys ✓ (4) GET /api/categories → HTTP 200, returns empty array ✓ (5) GET /api/transactions → HTTP 200, returns empty array ✓ (6) GET /api/budgets → HTTP 200, returns empty array ✓ (7) GET /api/goals → HTTP 200, returns empty array ✓ (8) GET /api/debts → HTTP 200, returns empty array ✓. Backend supervisor status: RUNNING (pid 1539). Backend logs confirm the documented transient 500 on first /api/user request after cold boot (ObjectId serialization error), followed by stable 200 responses. The .env fix is working perfectly - backend boots successfully, loads MONGO_URL/DB_NAME from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. No 502 errors. No connection errors. Backend is UP and stable."
+
 frontend:
   - task: "Global theme system (Claro/Oscuro/Sistema) reactive, persistent, no bundle reload"
     implemented: true
@@ -202,7 +221,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Global theme system (Claro/Oscuro/Sistema) reactive, persistent, no bundle reload"
+    - "Backend boots and serves API after recreating missing backend/.env (fix 502 Bad Gateway)"
     - "Settings theme selector + Back button after theme change"
     - "Dashboard Ingresos/Gastos cards (icon, title, amount, mini bars, promedio diario) equal height to accounts card"
     - "Navigation animations: faster slide_from_right forward + clean reverse on back (no flash/double animation)"
@@ -249,3 +268,35 @@ agent_communication:
         BONUS: backface-visibility works correctly on react-native-web. Card visually flips between "Resumen de deudas" (purple, Yo debo) and "Resumen de préstamos" (green, Me deben) as expected.
         
         The fix (invisible sizer + absolute positioned faces) is working perfectly. Bug is RESOLVED.
+    - agent: "main"
+      message: |
+        READ-ONLY BACKEND VERIFICATION REQUESTED (fix for 502 Bad Gateway).
+        Context: backend/.env was missing so the backend crash-looped (KeyError MONGO_URL) and nothing listened on :8001 -> 502. I recreated ONLY backend/.env (MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow, CORS_ORIGINS=*) and restarted ONLY the backend.
+        Please verify (READ-ONLY, GET requests only):
+          1. GET /api/user returns HTTP 200 with a JSON user (id "default-user"). The VERY FIRST request after a cold boot may return 500 due to a known transient ObjectId serialization on default-user auto-create; a retry must be 200 and stable.
+          2. GET /api/accounts, /api/summary, /api/categories, /api/transactions, /api/budgets, /api/goals, /api/debts each return HTTP 200.
+        STRICT CONSTRAINTS: DO NOT call POST /api/seed. DO NOT POST/PUT/DELETE anything. DO NOT create, modify, or delete any database data. This is only to confirm the 502 is resolved and the API is up. Do not test the frontend.
+    - agent: "testing"
+      message: |
+        ✅✅✅ BACKEND 502 BAD GATEWAY FIX VERIFIED - ALL ENDPOINTS PASSING
+        
+        Executed READ-ONLY verification of all 8 GET endpoints against localhost:8001. Created /app/backend_test.py for systematic testing.
+        
+        TEST RESULTS (8/8 PASS):
+        ✅ GET /api/user → HTTP 200 (returns user with id="default-user" ✓)
+        ✅ GET /api/accounts → HTTP 200 (empty array)
+        ✅ GET /api/summary → HTTP 200 (object with 5 keys)
+        ✅ GET /api/categories → HTTP 200 (empty array)
+        ✅ GET /api/transactions → HTTP 200 (empty array)
+        ✅ GET /api/budgets → HTTP 200 (empty array)
+        ✅ GET /api/goals → HTTP 200 (empty array)
+        ✅ GET /api/debts → HTTP 200 (empty array)
+        
+        VERIFICATION:
+        • Backend supervisor status: RUNNING (pid 1539, uptime 0:01:50)
+        • Backend logs confirm documented transient 500 on FIRST /api/user after cold boot (ObjectId serialization), then stable 200s
+        • /app/backend/.env exists with correct MONGO_URL, DB_NAME, CORS_ORIGINS
+        • No 502 errors, no connection errors, no timeouts
+        • All endpoints return valid JSON
+        
+        CONCLUSION: The .env recreation fix is working perfectly. Backend boots successfully, loads environment variables, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED.

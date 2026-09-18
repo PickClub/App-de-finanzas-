@@ -99,8 +99,8 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="transactions"
           options={{
-            title: "Movimientos",
-            tabBarIcon: ({ color, size }) => <Ionicons name="list" size={size} color={color} />,
+            title: "IA",
+            tabBarIcon: ({ color, size }) => <Ionicons name="mic" size={size} color={color} />,
           }}
         />
         <Tabs.Screen

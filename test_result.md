@@ -189,7 +189,7 @@ frontend:
           comment: "Detail 'Duplicar' -> confirm '¿Duplicar este movimiento?' -> router.push(`/transactions/new?dupFrom={id}`). new.tsx now reads dupFrom and prefills all fields WITHOUT an id, so nothing is created until the user presses Guardar (calls createTransaction). Must verify no transaction is created just by opening the duplicate form."
         - working: true
           agent: "testing"
-          comment: "✅ PASSED. Duplicate confirmation works correctly. Clicking 'Duplicar movimiento' shows confirmation '¿Duplicar este movimiento?' with confirm-dup button. Confirming navigates to /transactions/new?dupFrom=5b8f00cc-8d21-4ec0-92e4-cba4a438365a with form prefilled (amount: 750, description: sueldo). CRITICAL REGRESSION CHECK: Verified NO transaction created by checking Home balance - balance remained $27,072 (unchanged). Transaction only created when user presses Guardar button."
+          comment: "✅ PASSED. Duplicate confirmation works correctly. Clicking 'Duplicar movimiento' shows confirmation '¿Duplicar este movimiento?' with confirm-dup button. Confirming navigates to /transactions/new?dupFrom=branch-sync-audit with form prefilled (amount: 750, description: sueldo). CRITICAL REGRESSION CHECK: Verified NO transaction created by checking Home balance - balance remained $27,072 (unchanged). Transaction only created when user presses Guardar button."
   - task: "Hacer recurrente: confirmation -> config sheet -> save template (MVP config-only)"
     implemented: true
     working: true

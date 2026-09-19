@@ -80,8 +80,8 @@ export default function More() {
           <View style={styles.bannerIcon}>
             <Ionicons name="ribbon" size={22} color={colors.brandPrimary} />
           </View>
-          <View style={{ flex: 1, marginHorizontal: 10 }}>
-            <Text style={styles.bannerTitle} numberOfLines={1}>Saca más provecho de MoneyFlow</Text>
+          <View style={{ flex: 1, marginHorizontal: 9 }}>
+            <Text style={styles.bannerTitle} numberOfLines={2}>Saca más provecho de MoneyFlow</Text>
             <Text style={styles.bannerSub} numberOfLines={2}>
               Descubre funciones premium para alcanzar tus metas más rápido.
             </Text>
@@ -165,13 +165,13 @@ export default function More() {
 }
 
 const useStyles = makeStyles((colors, scheme) => ({
-  container: { flex: 1, paddingHorizontal: 16, paddingBottom: 10 },
+  container: { flex: 1, paddingHorizontal: 16, paddingBottom: 8 },
   pressed: { opacity: 0.6 },
 
   // Header
-  header: { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
-  title: { fontSize: 28, fontWeight: "800", color: colors.onSurface, marginBottom: 2 },
-  subtitle: { fontSize: 12.5, color: colors.muted, lineHeight: 17 },
+  header: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
+  title: { fontSize: 26, fontWeight: "800", color: colors.onSurface, marginBottom: 0 },
+  subtitle: { fontSize: 12.5, color: colors.muted, lineHeight: 16 },
   profilePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -199,51 +199,51 @@ const useStyles = makeStyles((colors, scheme) => ({
     alignItems: "center",
     backgroundColor: colors.brandTertiary,
     borderRadius: 20,
-    padding: 10,
-    marginBottom: 12,
+    padding: 9,
+    marginBottom: 10,
   },
   bannerIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 13,
     backgroundColor: colors.brandPrimary + "2E",
     alignItems: "center",
     justifyContent: "center",
   },
-  bannerTitle: { fontSize: 13.5, fontWeight: "800", color: colors.onSurface },
+  bannerTitle: { fontSize: 13.5, fontWeight: "800", color: colors.onSurface, lineHeight: 17 },
   bannerSub: { fontSize: 11, color: scheme === "dark" ? colors.muted : colors.onSurfaceTertiary, lineHeight: 14, marginTop: 1, opacity: scheme === "dark" ? 1 : 0.75 },
-  bannerBtn: { backgroundColor: colors.brandPrimary, borderRadius: radius.pill, paddingVertical: 9, paddingHorizontal: 13 },
-  bannerBtnText: { color: colors.onBrandPrimary, fontSize: 12, fontWeight: "700" },
+  bannerBtn: { backgroundColor: colors.brandPrimary, borderRadius: radius.pill, paddingVertical: 8, paddingHorizontal: 11 },
+  bannerBtnText: { color: colors.onBrandPrimary, fontSize: 11.5, fontWeight: "700" },
 
   // Section headers
-  sectionHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 },
+  sectionHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 5 },
   sectionTitle: { fontSize: 17, fontWeight: "800", color: colors.onSurface },
   sectionHint: { fontSize: 11.5, color: colors.muted },
 
   // Grid (Tu dinero) — flexes to fill remaining height so nothing scrolls
-  grid: { flex: 3.6, gap: 10, marginBottom: 12 },
-  gridRow: { flex: 1, flexDirection: "row", gap: 10 },
-  tile: { flex: 1, borderRadius: 18, paddingVertical: 8, paddingHorizontal: 12, justifyContent: "center", overflow: "hidden" },
-  tileTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4, flexShrink: 0 },
-  tileIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  grid: { flex: 3.7, gap: 9, marginBottom: 10 },
+  gridRow: { flex: 1, flexDirection: "row", gap: 9 },
+  tile: { flex: 1, borderRadius: 18, paddingVertical: 8, paddingHorizontal: 12, justifyContent: "flex-start", overflow: "hidden" },
+  tileTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 3, flexShrink: 0 },
+  tileIcon: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   tileLabel: { fontSize: 13.5, fontWeight: "800", color: colors.onSurface, flexShrink: 0 },
-  tileSub: { fontSize: 11, color: colors.muted, lineHeight: 13.5, marginTop: 2, flexShrink: 0 },
+  tileSub: { fontSize: 11, color: colors.muted, lineHeight: 13, marginTop: 2, flexShrink: 0 },
 
   // App list — also flexes to fill
   appCard: {
-    flex: 2.7,
+    flex: 2.9,
     backgroundColor: colors.surfaceSecondary,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: 14,
-    marginBottom: 12,
+    marginBottom: 10,
     overflow: "hidden",
   },
   appRow: { flex: 1, flexDirection: "row", alignItems: "center" },
   appIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   appLabel: { fontSize: 14, fontWeight: "700", color: colors.onSurface, flexShrink: 0 },
-  appSub: { fontSize: 11.5, color: colors.muted, marginTop: 1, flexShrink: 0 },
+  appSub: { fontSize: 11.5, color: colors.muted, marginTop: 3, flexShrink: 0 },
   appDivider: { position: "absolute", left: 44, right: 0, bottom: 0, height: 1, backgroundColor: colors.divider },
 
   // Suggestion
@@ -252,12 +252,12 @@ const useStyles = makeStyles((colors, scheme) => ({
     alignItems: "center",
     backgroundColor: colors.success + (scheme === "dark" ? "1F" : "14"),
     borderRadius: 18,
-    padding: 11,
+    padding: 10,
   },
   suggIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: colors.success + "26",
     alignItems: "center",
     justifyContent: "center",

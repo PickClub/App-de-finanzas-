@@ -134,6 +134,12 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ VERIFIED (recurrence re-fix). 8/8 GET endpoints HTTP 200 against localhost:8001: /api/user (id=default-user), /api/accounts, /api/summary, /api/categories, /api/transactions, /api/budgets, /api/goals, /api/debts. backend RUNNING (pid 1261); /app/backend/.env present with MONGO_URL/DB_NAME/CORS_ORIGINS; MongoDB connection working. Documented transient 500 on first /api/user after cold boot (ObjectId serialization), then stable 200 as expected. No 502, no connection errors. 502 Bad Gateway RESOLVED and STABLE."
+        - working: "NA"
+          agent: "main"
+          comment: "RECURRENCE (2nd time). 502 Bad Gateway again because /app/backend/.env was missing (it is gitignored, so a fresh import/preview restart loses it). Backend crash-looped on KeyError('MONGO_URL') at server.py line 14; nothing listened on :8001 -> ingress 502. FIX (minimal): recreated ONLY /app/backend/.env with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow, CORS_ORIGINS=*. Restarted ONLY backend (frontend/expo untouched). Verified manually: worker up, uvicorn listening on 0.0.0.0:8001; first /api/user after cold boot = HTTP 500 (known transient ObjectId serialization on default-user auto-create), all subsequent = HTTP 200 both direct (localhost:8001) and via preview proxy. Per instruction the transient first-call 500 is NOT to be code-fixed. Please VERIFY read-only GET only: /api/user stable 200 after first call, and /api/accounts, /api/summary, /api/categories, /api/transactions, /api/budgets, /api/goals, /api/debts all 200. DO NOT run /api/seed, DO NOT write any data."
         - working: "NA"
           agent: "main"
           comment: "ROOT CAUSE of 502 Bad Gateway: /app/backend/.env was missing entirely (gitignored, never committed, not recoverable from any backup/config). server.py does os.environ['MONGO_URL'] / ['DB_NAME'] at import time, so uvicorn crash-looped on KeyError and nothing listened on :8001 -> ingress returned 502. FIX (minimal): recreated ONLY /app/backend/.env with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow, CORS_ORIGINS=*. Restarted ONLY the backend service. No source code, frontend, deps, git, or DB data changed. NOTE: the FIRST request after boot returns HTTP 500 (known transient: FastAPI tries to serialize the auto-created default-user Mongo doc whose _id is an ObjectId -> \"'ObjectId' object is not iterable\"); every subsequent request is stable HTTP 200. Per instruction this transient is NOT to be code-fixed in this task. Please VERIFY read-only: GET /api/user returns 200 (after the first call), and other GET endpoints (/api/accounts, /api/summary, /api/categories, /api/transactions, /api/budgets, /api/goals, /api/debts) return 200. DO NOT POST /api/seed and DO NOT create/modify/delete any data."
@@ -143,6 +149,9 @@ backend:
         - working: true
           agent: "testing"
           comment: "✅✅✅ 502 BAD GATEWAY RESOLVED - Backend verification PASSED. Tested all 8 GET endpoints against localhost:8001. Results: (1) GET /api/user → HTTP 200, returns JSON user with id='default-user' ✓ (2) GET /api/accounts → HTTP 200, returns empty array ✓ (3) GET /api/summary → HTTP 200, returns object with 5 keys ✓ (4) GET /api/categories → HTTP 200, returns empty array ✓ (5) GET /api/transactions → HTTP 200, returns empty array ✓ (6) GET /api/budgets → HTTP 200, returns empty array ✓ (7) GET /api/goals → HTTP 200, returns empty array ✓ (8) GET /api/debts → HTTP 200, returns empty array ✓. Backend supervisor status: RUNNING (pid 1539). Backend logs confirm the documented transient 500 on first /api/user request after cold boot (ObjectId serialization error), followed by stable 200 responses. The .env fix is working perfectly - backend boots successfully, loads MONGO_URL/DB_NAME from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. No 502 errors. No connection errors. Backend is UP and stable."
+        - working: true
+          agent: "testing"
+          comment: "✅✅✅ RE-VERIFIED after .env recreation (3rd verification). READ-ONLY testing complete. Backend supervisor: RUNNING (pid 1261, uptime 0:01:28). /app/backend/.env exists with correct MONGO_URL, DB_NAME, CORS_ORIGINS. All 8 GET endpoints return HTTP 200: (1) /api/user → id='default-user' ✓ (2) /api/accounts → empty array ✓ (3) /api/summary → object with 5 keys ✓ (4) /api/categories → empty array ✓ (5) /api/transactions → empty array ✓ (6) /api/budgets → empty array ✓ (7) /api/goals → empty array ✓ (8) /api/debts → empty array ✓. Backend logs show documented transient 500 on first /api/user after cold boot (ObjectId serialization), followed by stable 200s. No 502 errors, no connection errors. Backend boots correctly, loads environment variables, connects to MongoDB, serves all API endpoints. 502 Bad Gateway is RESOLVED and STABLE."
 
 frontend:
   - task: "Tapping a transaction opens read-only Detail (from Home + Transactions list)"
@@ -311,14 +320,40 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Settings theme selector + Back button after theme change"
-    - "Dashboard Ingresos/Gastos cards (icon, title, amount, mini bars, promedio diario) equal height to accounts card"
-    - "Navigation animations: faster slide_from_right forward + clean reverse on back (no flash/double animation)"
+    - "Backend boots and serves API after recreating missing backend/.env (fix 502 Bad Gateway)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+    - agent: "testing"
+      message: |
+        ✅✅✅ BACKEND 502 FIX RE-VERIFIED (3rd verification after .env recreation)
+        
+        READ-ONLY verification complete. All 8 GET endpoints return HTTP 200.
+        
+        ENVIRONMENT STATUS:
+        • Backend supervisor: RUNNING (pid 1261, uptime 0:01:28)
+        • /app/backend/.env: EXISTS with MONGO_URL, DB_NAME, CORS_ORIGINS ✓
+        • MongoDB connection: WORKING ✓
+        
+        TEST RESULTS (8/8 PASS):
+        ✅ GET /api/user → HTTP 200, id='default-user'
+        ✅ GET /api/accounts → HTTP 200, empty array
+        ✅ GET /api/summary → HTTP 200, object with 5 keys
+        ✅ GET /api/categories → HTTP 200, empty array
+        ✅ GET /api/transactions → HTTP 200, empty array
+        ✅ GET /api/budgets → HTTP 200, empty array
+        ✅ GET /api/goals → HTTP 200, empty array
+        ✅ GET /api/debts → HTTP 200, empty array
+        
+        BACKEND LOGS ANALYSIS:
+        • Documented transient 500 on first /api/user after cold boot (ObjectId serialization) ✓
+        • All subsequent requests stable HTTP 200 ✓
+        • No 502 errors ✓
+        • No connection errors ✓
+        
+        CONCLUSION: 502 Bad Gateway is RESOLVED and STABLE. Backend boots correctly, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly.
     - agent: "testing"
       message: |
         ✅✅✅ RECURRING TEMPLATES API TESTING COMPLETE - ALL TESTS PASSED

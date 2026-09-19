@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Tabs, useRouter } from "expo-router";
-import { Pressable, StyleSheet, View, Text, Modal, TouchableOpacity } from "react-native";
+import { Pressable, StyleSheet, View, Text, Modal, TouchableOpacity, Easing } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -78,6 +78,13 @@ export default function TabsLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
+          // Bottom-tab switching stays near-instant: only a very subtle
+          // cross-fade (~140ms). No horizontal screen slide between tabs.
+          animation: "fade",
+          transitionSpec: {
+            animation: "timing",
+            config: { duration: 140, easing: Easing.out(Easing.ease) },
+          },
           tabBarActiveTintColor: colors.brandPrimary,
           tabBarInactiveTintColor: colors.muted,
           tabBarStyle: {

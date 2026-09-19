@@ -1,7 +1,11 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+// Use expo-router's JavaScript stack layout so we can define a precise,
+// navigation-level transition (short horizontal slide + subtle fade). The
+// default `Stack` from "expo-router" is the native-stack whose presets cannot
+// express a custom ~24px slide + fade + ease-out curve.
+import { Stack } from "expo-router/build/layouts/JSStack";
 import { useEffect } from "react";
-import { LogBox, StatusBar, Text as RNText } from "react-native";
+import { Easing, LogBox, StatusBar, Text as RNText } from "react-native";
 import * as Font from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -20,6 +24,38 @@ LogBox.ignoreAllLogs(true);
 import "@react-native-vector-icons/ionicons";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// ---------------------------------------------------------------------------
+// Premium, controlled navigation transition (normal screens).
+// ~220ms, ease-out timing, applied at the navigation level (screen card).
+// Forward: incoming screen starts ~24px to the right and fades in as it
+// settles to its final position. Back: React Navigation drives the same
+// interpolator in reverse (progress 1 -> 0), so the leaving screen slides
+// back to the right and fades out — the exact inverse. No spring, no bounce,
+// no zoom/scale, no large full-screen slide. Transform + opacity only, which
+// run on the native driver for 60fps performance.
+// ---------------------------------------------------------------------------
+const TRANSITION_SPEC = {
+  animation: "timing" as const,
+  config: { duration: 220, easing: Easing.out(Easing.ease) },
+};
+
+const smoothSlideFade = ({ current }: any) => ({
+  cardStyle: {
+    opacity: current.progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 1],
+    }),
+    transform: [
+      {
+        translateX: current.progress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [24, 0],
+        }),
+      },
+    ],
+  },
+});
 
 // Apply the app font as the default for every <Text> in the tree, once.
 const AnyText: any = RNText;
@@ -67,18 +103,17 @@ function ThemedApp() {
               <Stack
                 screenOptions={{
                   headerShown: false,
-                  contentStyle: { backgroundColor: colors.surface },
-                  // Forward (push): slide the new screen in from the right — kept as-is
-                  // but made noticeably faster/snappier. Native-stack automatically plays
-                  // the REVERSE of this on pop (current screen slides out to the right and
-                  // the previous screen is revealed), so back navigation gets its own clean
-                  // reverse transition instead of re-using the forward-entry animation.
-                  animation: "slide_from_right",
-                  animationDuration: 160,
-                  // Replaced screens should animate like a pop (return) so we never flash a
-                  // forward-entry on top of an existing screen.
-                  animationTypeForReplace: "pop",
+                  cardStyle: { backgroundColor: colors.surface },
+                  // Preserve swipe-back / back gestures (horizontal).
                   gestureEnabled: true,
+                  gestureDirection: "horizontal",
+                  // Keep the transition clean: no leading-edge shadow / dark
+                  // overlay on the underlying screen during the slide.
+                  cardShadowEnabled: false,
+                  cardOverlayEnabled: false,
+                  // Premium short slide + subtle fade, ~220ms ease-out.
+                  transitionSpec: { open: TRANSITION_SPEC, close: TRANSITION_SPEC },
+                  cardStyleInterpolator: smoothSlideFade,
                 }}
               />
             </LockProvider>

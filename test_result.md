@@ -295,6 +295,17 @@ frontend:
         - working: true
           agent: "testing"
           comment: "✅ NAVIGATION TRANSITIONS VERIFIED (3/4 checks passed, 1 partially verified). [CHECK 1] APP LOADS: ✓ PASS - Home screen renders correctly with all expected elements ('Hola, Usuario', 'Mis cuentas', 'Movimientos recientes', Ingresos/Gastos cards with mini bar charts, Deudas card). No red-box errors, no blank screen, no 'Unable to resolve module' text. Data shows $0 (empty state, expected). [CHECK 2] STACK PUSH + BACK: ⚠ PARTIALLY VERIFIED - Could not fully test via UI automation (elements not clickable due to empty data state), BUT code review confirms correct implementation: Stack uses JSStack with cardStyleInterpolator (24px translateX + opacity fade), 220ms ease-out timing, gestureEnabled=true for swipe-back, cardShadowEnabled=false. Implementation matches specification. [CHECK 3] BOTTOM TAB SWITCHING: ✓ PASS - Successfully switched between all tabs (Inicio → IA → Informes → Más → Inicio). URLs changed correctly (/transactions, /reports, /more, /). Tab switching is quick with fade animation (140ms), NO horizontal screen slide observed. Tab bar stays fixed. FAB (+) button opens 'Añadir rápido' quick menu correctly. [CHECK 4] NO REGRESSIONS: ✓ PASS - No console fatal errors (only deprecation warnings: 'shadow* props deprecated, use boxShadow' and 'props.pointerEvents deprecated'). App responsive during navigation. No navigation stuck, no crashes. ENVIRONMENT NOTE: App occasionally shows loading spinner indefinitely due to EXPO_PUBLIC_BACKEND_URL not being set (API calls to empty BASE url fail). However, when app loads successfully (as observed in test screenshots), all navigation transitions work correctly. CONCLUSION: Navigation transitions implementation is correct and functional. Tab switching verified working. Stack navigation code is correctly implemented per specification."
+  - task: "Redesign 'Más' tab to match reference image; fit ENTIRE content on one phone screen with NO vertical scroll; support light+dark"
+    implemented: true
+    working: true
+    file: "app/(tabs)/more.tsx"
+    stuck_count: 0
+    priority: "high"
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Rewrote ONLY app/(tabs)/more.tsx to match the attached reference. Replaced the old ScrollView list with a NON-scrolling flex column so everything fits one screen. Sections: compact 'Más' header + 2-line subtitle + top-right profile pill (-> /settings); pastel premium banner (ribbon + 'Conocer más'); 'Tu dinero' 2x3 pastel grid (Cuentas->/accounts, Categorías->/categories, Presupuestos->/budgets, Metas de ahorro->/goals, Deudas y préstamos->/debts, Pagos recurrentes = VISUAL-ONLY new item, no route); 'Aplicación' list card (Ajustes->/settings, + 4 VISUAL-ONLY new items: Privacidad y seguridad, Centro de ayuda, Califica la app, Acerca de MoneyFlow); compact suggestion card. NO-SCROLL technique: grid (flex 3.6) and app list (flex 2.7) absorb remaining height; verified scrollY=0 / scrollHeight==innerHeight at 390x844. Fixed a react-native-web flex-shrink bug where bold titles collapsed to height:0 by adding flexShrink:0 to tile/app text. All colors via useTheme/makeStyles (scheme-aware pastel fills) — verified LIGHT and DARK both render correctly and fit one screen. Existing navigation preserved (tapped Cuentas -> /accounts, back -> /more). Did NOT touch Home/IA/Informes/FAB/tab bar, backend, or transitions."
+
   - task: "Amounts display as whole numbers (no decimals) with thousands separators app-wide"
     implemented: true
     working: true
@@ -326,9 +337,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Global theme system (Claro/Oscuro/Sistema) reactive, persistent, no bundle reload"
-    - "Settings theme selector + Back button after theme change"
-    - "Dashboard Ingresos/Gastos cards (icon, title, amount, mini bars, promedio diario) equal height to accounts card"
+    - "Redesign 'Más' tab to match reference image; fit ENTIRE content on one phone screen with NO vertical scroll; support light+dark"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"

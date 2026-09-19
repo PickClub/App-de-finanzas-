@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, ScrollView } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -50,12 +50,19 @@ export default function More() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[
+          styles.container,
+          { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 132 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header */}
         <View style={styles.header}>
-          <View style={{ flex: 1, paddingRight: 10 }}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
             <Text style={styles.title}>Más</Text>
-            <Text style={styles.subtitle} numberOfLines={2}>
+            <Text style={styles.subtitle}>
               Todo lo que necesitas para personalizar tu experiencia en MoneyFlow.
             </Text>
           </View>
@@ -65,24 +72,24 @@ export default function More() {
             style={({ pressed }) => [styles.profilePill, pressed && styles.pressed]}
           >
             <View style={styles.avatar}>
-              <Ionicons name="person" size={15} color={colors.brandPrimary} />
+              <Ionicons name="person" size={16} color={colors.brandPrimary} />
             </View>
-            <View style={{ marginHorizontal: 7 }}>
+            <View style={{ marginHorizontal: 8 }}>
               <Text style={styles.profileHi}>Hola,</Text>
               <Text style={styles.profileName}>Usuario</Text>
             </View>
-            <Ionicons name="chevron-forward" size={15} color={colors.muted} />
+            <Ionicons name="chevron-forward" size={16} color={colors.muted} />
           </Pressable>
         </View>
 
         {/* Premium banner */}
         <Pressable testID="more-premium" style={({ pressed }) => [styles.banner, pressed && styles.pressed]}>
           <View style={styles.bannerIcon}>
-            <Ionicons name="ribbon" size={22} color={colors.brandPrimary} />
+            <Ionicons name="ribbon" size={26} color={colors.brandPrimary} />
           </View>
-          <View style={{ flex: 1, marginHorizontal: 9 }}>
-            <Text style={styles.bannerTitle} numberOfLines={2}>Saca más provecho de MoneyFlow</Text>
-            <Text style={styles.bannerSub} numberOfLines={2}>
+          <View style={{ flex: 1, marginHorizontal: 14 }}>
+            <Text style={styles.bannerTitle}>Saca más provecho de MoneyFlow</Text>
+            <Text style={styles.bannerSub}>
               Descubre funciones premium para alcanzar tus metas más rápido.
             </Text>
           </View>
@@ -108,9 +115,9 @@ export default function More() {
                 >
                   <View style={styles.tileTop}>
                     <View style={[styles.tileIcon, { backgroundColor: it.color + "2E" }]}>
-                      <Ionicons name={it.icon as any} size={18} color={it.color} />
+                      <Ionicons name={it.icon as any} size={20} color={it.color} />
                     </View>
-                    <Ionicons name="chevron-forward" size={15} color={colors.muted} />
+                    <Ionicons name="chevron-forward" size={16} color={colors.muted} />
                   </View>
                   <Text style={styles.tileLabel} numberOfLines={1}>{it.label}</Text>
                   <Text style={styles.tileSub} numberOfLines={2}>{it.subtitle}</Text>
@@ -131,17 +138,16 @@ export default function More() {
               key={it.label}
               testID={`more-${it.label}`}
               onPress={() => go(it.route)}
-              style={({ pressed }) => [styles.appRow, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.appRow, i < APP.length - 1 && styles.appRowBorder, pressed && styles.pressed]}
             >
               <View style={[styles.appIcon, { backgroundColor: it.color + "24" }]}>
-                <Ionicons name={it.icon as any} size={17} color={it.color} />
+                <Ionicons name={it.icon as any} size={19} color={it.color} />
               </View>
-              <View style={{ flex: 1, marginLeft: 10 }}>
+              <View style={{ flex: 1, marginLeft: 14 }}>
                 <Text style={styles.appLabel} numberOfLines={1}>{it.label}</Text>
                 <Text style={styles.appSub} numberOfLines={1}>{it.subtitle}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-              {i < APP.length - 1 && <View style={styles.appDivider} />}
+              <Ionicons name="chevron-forward" size={19} color={colors.muted} />
             </Pressable>
           ))}
         </View>
@@ -149,29 +155,29 @@ export default function More() {
         {/* Suggestion */}
         <Pressable testID="more-suggestion" style={({ pressed }) => [styles.suggestion, pressed && styles.pressed]}>
           <View style={styles.suggIcon}>
-            <Ionicons name="bulb-outline" size={20} color={colors.success} />
+            <Ionicons name="bulb-outline" size={22} color={colors.success} />
           </View>
-          <View style={{ flex: 1, marginHorizontal: 10 }}>
-            <Text style={styles.suggTitle} numberOfLines={1}>¿Tienes alguna sugerencia?</Text>
-            <Text style={styles.suggSub} numberOfLines={1}>Nos encantaría escucharla.</Text>
+          <View style={{ flex: 1, marginHorizontal: 14 }}>
+            <Text style={styles.suggTitle} numberOfLines={2}>¿Tienes alguna sugerencia?</Text>
+            <Text style={styles.suggSub} numberOfLines={2}>Nos encantaría escucharla.</Text>
           </View>
           <View style={styles.suggBtn}>
             <Text style={styles.suggBtnText}>Enviar</Text>
           </View>
         </Pressable>
-      </View>
+      </ScrollView>
     </View>
   );
 }
 
 const useStyles = makeStyles((colors, scheme) => ({
-  container: { flex: 1, paddingHorizontal: 16, paddingBottom: 8 },
-  pressed: { opacity: 0.6 },
+  container: { paddingHorizontal: 20 },
+  pressed: { opacity: 0.65 },
 
   // Header
-  header: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
-  title: { fontSize: 26, fontWeight: "800", color: colors.onSurface, marginBottom: 0 },
-  subtitle: { fontSize: 12.5, color: colors.muted, lineHeight: 16 },
+  header: { flexDirection: "row", alignItems: "flex-start", marginBottom: 22 },
+  title: { fontSize: 30, fontWeight: "800", color: colors.onSurface, marginBottom: 5 },
+  subtitle: { fontSize: 13.5, color: colors.muted, lineHeight: 19 },
   profilePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -179,91 +185,90 @@ const useStyles = makeStyles((colors, scheme) => ({
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: 6,
-    paddingHorizontal: 9,
+    paddingVertical: 8,
+    paddingHorizontal: 11,
   },
   avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.brandTertiary,
     alignItems: "center",
     justifyContent: "center",
   },
-  profileHi: { fontSize: 10, color: colors.muted, lineHeight: 12 },
-  profileName: { fontSize: 12.5, fontWeight: "700", color: colors.onSurface, lineHeight: 15 },
+  profileHi: { fontSize: 11, color: colors.muted, lineHeight: 14 },
+  profileName: { fontSize: 13.5, fontWeight: "700", color: colors.onSurface, lineHeight: 17 },
 
   // Banner
   banner: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.brandTertiary,
-    borderRadius: 20,
-    padding: 9,
-    marginBottom: 10,
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 28,
   },
   bannerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 13,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     backgroundColor: colors.brandPrimary + "2E",
     alignItems: "center",
     justifyContent: "center",
   },
-  bannerTitle: { fontSize: 13.5, fontWeight: "800", color: colors.onSurface, lineHeight: 17 },
-  bannerSub: { fontSize: 11, color: scheme === "dark" ? colors.muted : colors.onSurfaceTertiary, lineHeight: 14, marginTop: 1, opacity: scheme === "dark" ? 1 : 0.75 },
-  bannerBtn: { backgroundColor: colors.brandPrimary, borderRadius: radius.pill, paddingVertical: 8, paddingHorizontal: 11 },
-  bannerBtnText: { color: colors.onBrandPrimary, fontSize: 11.5, fontWeight: "700" },
+  bannerTitle: { fontSize: 15, fontWeight: "800", color: colors.onSurface, lineHeight: 20 },
+  bannerSub: { fontSize: 12.5, color: scheme === "dark" ? colors.muted : colors.onSurfaceTertiary, lineHeight: 17, marginTop: 4, opacity: scheme === "dark" ? 1 : 0.8 },
+  bannerBtn: { backgroundColor: colors.brandPrimary, borderRadius: radius.pill, paddingVertical: 11, paddingHorizontal: 16 },
+  bannerBtnText: { color: colors.onBrandPrimary, fontSize: 13, fontWeight: "700" },
 
   // Section headers
-  sectionHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 5 },
-  sectionTitle: { fontSize: 17, fontWeight: "800", color: colors.onSurface },
-  sectionHint: { fontSize: 11.5, color: colors.muted },
+  sectionHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 },
+  sectionTitle: { fontSize: 18, fontWeight: "800", color: colors.onSurface },
+  sectionHint: { fontSize: 12, color: colors.muted },
 
-  // Grid (Tu dinero) — flexes to fill remaining height so nothing scrolls
-  grid: { flex: 3.7, gap: 9, marginBottom: 10 },
-  gridRow: { flex: 1, flexDirection: "row", gap: 9 },
-  tile: { flex: 1, borderRadius: 18, paddingVertical: 8, paddingHorizontal: 12, justifyContent: "flex-start", overflow: "hidden" },
-  tileTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 3, flexShrink: 0 },
-  tileIcon: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" },
-  tileLabel: { fontSize: 13.5, fontWeight: "800", color: colors.onSurface, flexShrink: 0 },
-  tileSub: { fontSize: 11, color: colors.muted, lineHeight: 13, marginTop: 2, flexShrink: 0 },
+  // Grid (Tu dinero) — natural, consistent card heights
+  grid: { gap: 12, marginBottom: 28 },
+  gridRow: { flexDirection: "row", gap: 12 },
+  tile: { flex: 1, minHeight: 128, borderRadius: 20, padding: 14, justifyContent: "flex-start" },
+  tileTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  tileIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  tileLabel: { fontSize: 13.5, fontWeight: "800", color: colors.onSurface, marginBottom: 4 },
+  tileSub: { fontSize: 12, color: colors.muted, lineHeight: 16 },
 
-  // App list — also flexes to fill
+  // App list
   appCard: {
-    flex: 2.9,
     backgroundColor: colors.surfaceSecondary,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 14,
-    marginBottom: 10,
+    paddingHorizontal: 16,
+    marginBottom: 28,
     overflow: "hidden",
   },
-  appRow: { flex: 1, flexDirection: "row", alignItems: "center" },
-  appIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  appLabel: { fontSize: 14, fontWeight: "700", color: colors.onSurface, flexShrink: 0 },
-  appSub: { fontSize: 11.5, color: colors.muted, marginTop: 3, flexShrink: 0 },
-  appDivider: { position: "absolute", left: 44, right: 0, bottom: 0, height: 1, backgroundColor: colors.divider },
+  appRow: { flexDirection: "row", alignItems: "center", paddingVertical: 15 },
+  appRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.divider },
+  appIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  appLabel: { fontSize: 15, fontWeight: "700", color: colors.onSurface, marginBottom: 3 },
+  appSub: { fontSize: 12.5, color: colors.muted, lineHeight: 16 },
 
   // Suggestion
   suggestion: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.success + (scheme === "dark" ? "1F" : "14"),
-    borderRadius: 18,
-    padding: 10,
+    borderRadius: 20,
+    padding: 16,
   },
   suggIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.success + "26",
     alignItems: "center",
     justifyContent: "center",
   },
-  suggTitle: { fontSize: 13.5, fontWeight: "800", color: colors.onSurface },
-  suggSub: { fontSize: 11.5, color: colors.muted, marginTop: 1 },
-  suggBtn: { backgroundColor: colors.success + (scheme === "dark" ? "2E" : "1F"), borderRadius: radius.pill, paddingVertical: 8, paddingHorizontal: 13 },
-  suggBtnText: { color: colors.success, fontSize: 12, fontWeight: "700" },
+  suggTitle: { fontSize: 14.5, fontWeight: "800", color: colors.onSurface, marginBottom: 3, lineHeight: 19 },
+  suggSub: { fontSize: 12.5, color: colors.muted, lineHeight: 16 },
+  suggBtn: { backgroundColor: colors.success + (scheme === "dark" ? "2E" : "1F"), borderRadius: radius.pill, paddingVertical: 11, paddingHorizontal: 16 },
+  suggBtnText: { color: colors.success, fontSize: 13, fontWeight: "700" },
 }));

@@ -132,7 +132,7 @@ export default function Reports() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.surface }}
-      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 140 }}
+      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 120 }}
     >
       <Text style={styles.title}>Informes</Text>
       <Text style={styles.subtitle}>Analiza tus finanzas y toma mejores decisiones</Text>
@@ -151,15 +151,15 @@ export default function Reports() {
         <View style={{ alignItems: "center", marginTop: 12 }}>
           <BarChart
             data={barData}
-            barWidth={54}
-            spacing={40}
+            barWidth={44}
+            spacing={28}
             hideRules
             xAxisColor={colors.border}
             yAxisColor={colors.border}
             yAxisTextStyle={{ color: colors.muted, fontSize: 10 }}
             xAxisLabelTextStyle={{ color: colors.onSurface, fontSize: 12 }}
             noOfSections={4}
-            height={180}
+            height={128}
           />
         </View>
         <View style={styles.ivgFooter}>
@@ -191,11 +191,11 @@ export default function Reports() {
             const cc = good ? colors.incomeGreen : colors.expenseRed;
             return (
               <View key={m.key} style={styles.metricCard} testID={`metric-${m.key}`}>
-                <CircleIcon icon={m.icon} color={m.color} size={40} />
-                <View style={{ flex: 1, marginLeft: 10 }}>
+                <CircleIcon icon={m.icon} color={m.color} size={34} />
+                <View style={{ flex: 1, marginLeft: 9 }}>
                   <Text style={styles.metricLabel} numberOfLines={1}>{m.label}</Text>
                   <View style={styles.metricValueRow}>
-                    <Text style={styles.metricValue} numberOfLines={1}>{m.value}</Text>
+                    <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{m.value}</Text>
                     {m.pct !== null && (
                       <View style={styles.compareInline}>
                         <Ionicons name={up ? "arrow-up" : "arrow-down"} size={10} color={cc} />
@@ -226,11 +226,11 @@ export default function Reports() {
           testID="balance-row"
         >
           <View style={[styles.balanceIcon, { backgroundColor: colors.brandPrimary + "1F" }]}>
-            <Ionicons name="scale-outline" size={24} color={colors.brandPrimary} />
+            <Ionicons name="scale-outline" size={20} color={colors.brandPrimary} />
           </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
+          <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={styles.balanceLabel}>Balance del período</Text>
-            <Text style={[styles.balanceValue, { color: balance >= 0 ? colors.incomeGreen : colors.expenseRed }]}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.balanceValue, { color: balance >= 0 ? colors.incomeGreen : colors.expenseRed }]}>
               {balance < 0 ? "-" : ""}{formatCurrency(Math.abs(balance))}
             </Text>
           </View>
@@ -271,7 +271,7 @@ export default function Reports() {
               const barPct = maxCat > 0 ? (x.amount / maxCat) * 100 : 0;
               return (
                 <View key={x.id} style={styles.catRow} testID={`cat-row-${x.id}`}>
-                  <CircleIcon icon={x.cat.icon} color={x.cat.color} size={42} />
+                  <CircleIcon icon={x.cat.icon} color={x.cat.color} size={36} />
                   <View style={styles.catMiddle}>
                     <Text style={styles.catName} numberOfLines={1}>{x.cat.name}</Text>
                     <View style={styles.barTrack}>
@@ -301,71 +301,71 @@ export default function Reports() {
 }
 
 const useStyles = makeStyles((colors) => ({
-  title: { fontSize: 24, fontWeight: "800", color: colors.onSurface, paddingHorizontal: spacing.lg },
-  subtitle: { fontSize: 13.5, color: colors.muted, paddingHorizontal: spacing.lg, marginTop: 2 },
-  chipRow: { paddingHorizontal: spacing.lg, gap: 8, marginTop: 12, height: 56, alignItems: "center" },
+  title: { fontSize: 22, fontWeight: "800", color: colors.onSurface, paddingHorizontal: spacing.lg },
+  subtitle: { fontSize: 13, color: colors.muted, paddingHorizontal: spacing.lg, marginTop: 1 },
+  chipRow: { paddingHorizontal: spacing.lg, gap: 8, marginTop: 10, height: 46, alignItems: "center" },
   card: {
     marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
+    marginTop: 10,
     backgroundColor: colors.surfaceSecondary,
-    borderRadius: radius.cardLg,
-    padding: spacing.lg,
+    borderRadius: radius.lg,
+    padding: 13,
     borderWidth: 1,
     borderColor: colors.border,
     shadowColor: "#000",
     shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
   cardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  cardTitle: { fontSize: 16, fontWeight: "800", color: colors.onSurface },
-  cardHeaderMeta: { fontSize: 12, color: colors.muted, fontWeight: "600" },
+  cardTitle: { fontSize: 15, fontWeight: "800", color: colors.onSurface },
+  cardHeaderMeta: { fontSize: 11.5, color: colors.muted, fontWeight: "600" },
 
   // Ingresos vs Gastos footer
-  ivgFooter: { flexDirection: "row", justifyContent: "space-around", marginTop: 12 },
-  ivgLabel: { color: colors.muted, fontSize: 12 },
-  ivgValue: { fontSize: 18, fontWeight: "800", marginTop: 2 },
+  ivgFooter: { flexDirection: "row", justifyContent: "space-around", marginTop: 6 },
+  ivgLabel: { color: colors.muted, fontSize: 11.5 },
+  ivgValue: { fontSize: 16, fontWeight: "800", marginTop: 1 },
 
   // Resumen — metric grid
-  metricsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 14 },
+  metricsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   metricCard: {
     flexDirection: "row",
     alignItems: "center",
     flexGrow: 1,
     flexBasis: "46%",
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
   },
-  metricLabel: { fontSize: 12, color: colors.muted, fontWeight: "600" },
-  metricValueRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
-  metricValue: { fontSize: 17, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.3 },
+  metricLabel: { fontSize: 11.5, color: colors.muted, fontWeight: "600" },
+  metricValueRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 1 },
+  metricValue: { fontSize: 15.5, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.3, flexShrink: 1 },
   compareInline: { flexDirection: "row", alignItems: "center", gap: 1 },
-  comparePct: { fontSize: 11.5, fontWeight: "800" },
-  metricPrev: { fontSize: 10.5, color: colors.muted, marginTop: 3 },
+  comparePct: { fontSize: 11, fontWeight: "800" },
+  metricPrev: { fontSize: 10, color: colors.muted, marginTop: 1 },
 
-  // Balance del período — prominent
+  // Balance del período — prominent but compact
   balanceRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 12,
-    borderRadius: radius.lg,
+    marginTop: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
-    padding: 14,
+    padding: 10,
   },
-  balanceIcon: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
-  balanceLabel: { fontSize: 13, color: colors.muted, fontWeight: "600" },
-  balanceValue: { fontSize: 26, fontWeight: "800", letterSpacing: -0.5, marginTop: 2 },
-  balanceBadge: { borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 7, alignItems: "center", maxWidth: 130 },
+  balanceIcon: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+  balanceLabel: { fontSize: 12, color: colors.muted, fontWeight: "600" },
+  balanceValue: { fontSize: 21, fontWeight: "800", letterSpacing: -0.5, marginTop: 1 },
+  balanceBadge: { borderRadius: radius.sm, paddingHorizontal: 9, paddingVertical: 6, alignItems: "center", maxWidth: 120 },
   balanceBadgeTop: { flexDirection: "row", alignItems: "center", gap: 3 },
-  balanceBadgePct: { fontSize: 13, fontWeight: "800" },
-  balanceBadgeMeta: { fontSize: 10, color: colors.muted, marginTop: 1, textAlign: "center" },
-  balancePrevNeutral: { fontSize: 11, color: colors.muted, textAlign: "right", fontWeight: "600" },
+  balanceBadgePct: { fontSize: 12.5, fontWeight: "800" },
+  balanceBadgeMeta: { fontSize: 9.5, color: colors.muted, marginTop: 1, textAlign: "center" },
+  balancePrevNeutral: { fontSize: 10.5, color: colors.muted, textAlign: "right", fontWeight: "600" },
 
   // Gastos por categoría
   topBadge: {
@@ -376,30 +376,30 @@ const useStyles = makeStyles((colors) => ({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  topBadgeText: { fontSize: 12.5, fontWeight: "700", color: colors.onSurface },
-  catRow: { flexDirection: "row", alignItems: "center", paddingVertical: 9 },
-  catMiddle: { flex: 1, marginLeft: 12, marginRight: 10 },
-  catName: { fontSize: 14.5, fontWeight: "700", color: colors.onSurface },
-  barTrack: { height: 7, borderRadius: 4, backgroundColor: colors.surfaceTertiary, marginTop: 7, overflow: "hidden" },
-  barFill: { height: 7, borderRadius: 4 },
-  catRight: { alignItems: "flex-end", minWidth: 74 },
-  catAmount: { fontSize: 14.5, fontWeight: "800", color: colors.onSurface },
-  catPct: { fontSize: 12, color: colors.muted, fontWeight: "600", marginTop: 3 },
+  topBadgeText: { fontSize: 12, fontWeight: "700", color: colors.onSurface },
+  catRow: { flexDirection: "row", alignItems: "center", paddingVertical: 6 },
+  catMiddle: { flex: 1, marginLeft: 10, marginRight: 10 },
+  catName: { fontSize: 14, fontWeight: "700", color: colors.onSurface },
+  barTrack: { height: 6, borderRadius: 3, backgroundColor: colors.surfaceTertiary, marginTop: 5, overflow: "hidden" },
+  barFill: { height: 6, borderRadius: 3 },
+  catRight: { alignItems: "flex-end", minWidth: 70 },
+  catAmount: { fontSize: 14, fontWeight: "800", color: colors.onSurface },
+  catPct: { fontSize: 11.5, color: colors.muted, fontWeight: "600", marginTop: 2 },
   verTodas: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    marginTop: 12,
-    paddingVertical: 14,
+    marginTop: 10,
+    paddingVertical: 11,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  verTodasText: { fontSize: 14, fontWeight: "800", color: colors.onSurface },
-  emptyText: { color: colors.muted, textAlign: "center", padding: 20 },
+  verTodasText: { fontSize: 13.5, fontWeight: "800", color: colors.onSurface },
+  emptyText: { color: colors.muted, textAlign: "center", padding: 16 },
 }));

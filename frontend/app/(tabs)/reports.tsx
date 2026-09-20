@@ -8,6 +8,7 @@ import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatCurrency } from "@/src/format";
 import { Chip } from "@/src/components/ui";
+import { premiumizeColor } from "@/src/color";
 
 const RANGES = [
   { id: "7d", label: "7d", days: 7, periodLabel: "Últimos 7 días" },
@@ -37,7 +38,7 @@ function CircleIcon({ icon, color, size = 42 }: { icon: string; color: string; s
 }
 
 export default function Reports() {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [range, setRange] = useState("30d");
@@ -271,11 +272,11 @@ export default function Reports() {
               const barPct = maxCat > 0 ? (x.amount / maxCat) * 100 : 0;
               return (
                 <View key={x.id} style={styles.catRow} testID={`cat-row-${x.id}`}>
-                  <CircleIcon icon={x.cat.icon} color={x.cat.color} size={36} />
+                  <CircleIcon icon={x.cat.icon} color={premiumizeColor(x.cat.color, scheme)} size={36} />
                   <View style={styles.catMiddle}>
                     <Text style={styles.catName} numberOfLines={1}>{x.cat.name}</Text>
                     <View style={styles.barTrack}>
-                      <View style={[styles.barFill, { width: `${barPct}%`, backgroundColor: x.cat.color }]} />
+                      <View style={[styles.barFill, { width: `${barPct}%`, backgroundColor: premiumizeColor(x.cat.color, scheme) }]} />
                     </View>
                   </View>
                   <View style={styles.catRight}>

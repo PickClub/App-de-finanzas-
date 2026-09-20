@@ -20,95 +20,105 @@ export type ColorScheme = "light" | "dark";
 export type ThemeMode = "light" | "dark" | "system";
 
 const light = {
-  // Surfaces
-  surface: "#FFF8F2",
-  onSurface: "#27221F",
+  // Surfaces — soft pale green / near-white botanical canvas
+  surface: "#EDF4EC",
+  onSurface: "#1B2A20",
   surfaceSecondary: "#FFFFFF",
-  onSurfaceSecondary: "#27221F",
-  surfaceTertiary: "#F2EBE5",
-  onSurfaceTertiary: "#27221F",
-  surfaceInverse: "#27221F",
-  onSurfaceInverse: "#FFF8F2",
-  muted: "#8E8883",
+  onSurfaceSecondary: "#1B2A20",
+  surfaceTertiary: "#E1ECDD",
+  onSurfaceTertiary: "#1B2A20",
+  surfaceInverse: "#14311F",
+  onSurfaceInverse: "#F1F7EF",
+  muted: "#77857A",
 
-  // Brand
-  brand: "#FF654A",
+  // Brand — deep forest green
+  brand: "#1F5A3D",
   onBrand: "#FFFFFF",
-  brandPrimary: "#FF654A",
+  brandPrimary: "#1F5A3D",
   onBrandPrimary: "#FFFFFF",
-  brandSecondary: "#FF8A3D",
+  brandSecondary: "#2E7D52",
   onBrandSecondary: "#FFFFFF",
-  brandTertiary: "#FFD3C9",
-  onBrandTertiary: "#FF654A",
+  brandTertiary: "#CFE3D5",
+  onBrandTertiary: "#1F5A3D",
 
-  // Status
-  success: "#2FA47C",
+  // Status — deepened & harmonized with the forest palette
+  success: "#2E7D52",
   onSuccess: "#FFFFFF",
-  warning: "#F5B83B",
+  warning: "#A9761E",
   onWarning: "#FFFFFF",
-  error: "#D95345",
+  error: "#B24A31",
   onError: "#FFFFFF",
-  info: "#4C83EA",
+  info: "#2C6E7F",
   onInfo: "#FFFFFF",
 
   // Lines
-  border: "#E8DFD8",
-  borderStrong: "#D1C6BE",
-  divider: "#E8DFD8",
+  border: "#D6E2D2",
+  borderStrong: "#BCCDB6",
+  divider: "#D6E2D2",
 
-  // Module accents
-  accountsBlue: "#4C83EA",
-  statsPurple: "#8F5BE8",
-  savingsTurquoise: "#29C4A9",
-  loansYellow: "#F5B83B",
-  incomeGreen: "#2FA47C",
-  expenseRed: "#D95345",
+  // Module accents — deep, slightly muted jewel tones (same family)
+  accountsBlue: "#2C6E7F",
+  statsPurple: "#5E4B6E",
+  savingsTurquoise: "#1F7A6B",
+  loansYellow: "#A9761E",
+  incomeGreen: "#2E7D52",
+  expenseRed: "#B24A31",
+
+  // Bottom navigation bar (solid dark forest green with light icons)
+  navBar: "#153D29",
+  onNavBar: "#FFFFFF",
+  navBarMuted: "rgba(255,255,255,0.6)",
 };
 
 const dark: typeof light = {
-  // Surfaces — warm near-black background, slightly lighter cards
-  surface: "#141210",
-  onSurface: "#F5F1EC",
-  surfaceSecondary: "#1E1B18",
-  onSurfaceSecondary: "#F5F1EC",
-  surfaceTertiary: "#2A2622",
-  onSurfaceTertiary: "#F5F1EC",
-  surfaceInverse: "#F5F1EC",
-  onSurfaceInverse: "#141210",
-  muted: "#9E9791",
+  // Surfaces — deep forest-tinted near-black, slightly lighter cards
+  surface: "#0F1A14",
+  onSurface: "#EAF2EC",
+  surfaceSecondary: "#16241C",
+  onSurfaceSecondary: "#EAF2EC",
+  surfaceTertiary: "#1F3227",
+  onSurfaceTertiary: "#EAF2EC",
+  surfaceInverse: "#EAF2EC",
+  onSurfaceInverse: "#0F1A14",
+  muted: "#8FA096",
 
-  // Brand — slightly brighter coral for contrast on dark
-  brand: "#FF7A63",
-  onBrand: "#1A1512",
-  brandPrimary: "#FF7A63",
-  onBrandPrimary: "#1A1512",
-  brandSecondary: "#FF9C5A",
-  onBrandSecondary: "#1A1512",
-  brandTertiary: "#3E2620",
-  onBrandTertiary: "#FF9E8A",
+  // Brand — brighter forest green for contrast on dark
+  brand: "#4FA97A",
+  onBrand: "#08120C",
+  brandPrimary: "#4FA97A",
+  onBrandPrimary: "#08120C",
+  brandSecondary: "#6BC392",
+  onBrandSecondary: "#08120C",
+  brandTertiary: "#1E3A2A",
+  onBrandTertiary: "#8FE3B4",
 
   // Status — same hues, brightened for dark bg
-  success: "#37C08D",
-  onSuccess: "#0F1613",
-  warning: "#F5B83B",
-  onWarning: "#1A1512",
-  error: "#EB6D5F",
-  onError: "#1A1512",
-  info: "#6D9BFF",
-  onInfo: "#0E1424",
+  success: "#4FBF88",
+  onSuccess: "#08120C",
+  warning: "#D9A441",
+  onWarning: "#0F1A14",
+  error: "#DE7256",
+  onError: "#0F1A14",
+  info: "#5FAFC2",
+  onInfo: "#06171B",
 
   // Lines
-  border: "#2C2723",
-  borderStrong: "#3B3630",
-  divider: "#2A2622",
+  border: "#26372D",
+  borderStrong: "#37493D",
+  divider: "#1F3227",
 
   // Module accents — same hues, adjusted for legibility on dark
-  accountsBlue: "#6D9BFF",
-  statsPurple: "#A57DFF",
-  savingsTurquoise: "#3ED4B9",
-  loansYellow: "#F5C556",
-  incomeGreen: "#37C08D",
-  expenseRed: "#EB6D5F",
+  accountsBlue: "#5FAFC2",
+  statsPurple: "#9C86B0",
+  savingsTurquoise: "#43BFA9",
+  loansYellow: "#D9A441",
+  incomeGreen: "#4FBF88",
+  expenseRed: "#DE7256",
+
+  // Bottom navigation bar
+  navBar: "#0C2418",
+  onNavBar: "#FFFFFF",
+  navBarMuted: "rgba(255,255,255,0.55)",
 };
 
 export type ThemeColors = typeof light;

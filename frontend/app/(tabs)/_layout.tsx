@@ -11,7 +11,7 @@ function FabButton({ onPress }: { onPress: () => void }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   return (
-    <View pointerEvents="box-none" style={[styles.fabWrap, { bottom: 20 + insets.bottom }]}>
+    <View pointerEvents="box-none" style={[styles.fabWrap, { bottom: 26 + insets.bottom }]}>
       <Pressable
         testID="fab-add-btn"
         onPress={() => {
@@ -20,7 +20,7 @@ function FabButton({ onPress }: { onPress: () => void }) {
         }}
         style={({ pressed }) => [styles.fab, pressed && { transform: [{ scale: 0.95 }] }]}
       >
-        <Ionicons name="add" size={34} color={colors.onBrandPrimary} />
+        <Ionicons name="add" size={34} color={colors.navBar} />
       </Pressable>
     </View>
   );
@@ -85,12 +85,21 @@ export default function TabsLayout() {
             animation: "timing",
             config: { duration: 140, easing: Easing.out(Easing.ease) },
           },
-          tabBarActiveTintColor: colors.brandPrimary,
-          tabBarInactiveTintColor: colors.muted,
+          tabBarActiveTintColor: colors.onNavBar,
+          tabBarInactiveTintColor: colors.navBarMuted,
           tabBarStyle: {
-            backgroundColor: colors.surfaceSecondary,
-            borderTopColor: colors.border,
-            borderTopWidth: 1,
+            backgroundColor: colors.navBar,
+            borderTopWidth: 0,
+            borderTopLeftRadius: 22,
+            borderTopRightRadius: 22,
+            height: 68,
+            paddingTop: 8,
+            paddingBottom: 10,
+            shadowColor: "#000",
+            shadowOpacity: 0.18,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: -3 },
+            elevation: 12,
           },
           tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
           tabBarItemStyle: { alignSelf: "center" },
@@ -142,17 +151,19 @@ export default function TabsLayout() {
 const useStyles = makeStyles((colors) => ({
   fabWrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
   fab: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: colors.brandPrimary,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: colors.brandPrimary,
-    shadowOpacity: 0.35,
+    borderWidth: 4,
+    borderColor: colors.navBar,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
     shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 10,
   },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" },
   sheet: {

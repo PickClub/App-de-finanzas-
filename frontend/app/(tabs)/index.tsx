@@ -12,11 +12,19 @@ import { useTheme, makeStyles, radius, spacing, type ThemeColors } from "@/src/t
 import { formatCurrency, formatCurrencyInt, formatDateLong } from "@/src/format";
 import { IconTile } from "@/src/components/ui";
 import { LockToggle, useLock } from "@/src/lock";
+import { BotanicalBackground } from "@/src/components/botanical-bg";
 
 // --- Color helpers (visual-only) for the account cards. Blend a hex color
 // toward white (lighten) or black (darken) to build subtle gradients and the
 // slightly darker arrow button, without touching any data. ---
 function hexToRgb(hex: string) {
+  // Accept both "#rrggbb"/"#rgb" and "rgb(r,g,b)" inputs so the lighten/darken
+  // helpers also work on premium-recolored (rgb) values.
+  const rgbMatch = hex.match(/rgba?\(([^)]+)\)/i);
+  if (rgbMatch) {
+    const [r, g, b] = rgbMatch[1].split(",").map((v) => parseInt(v.trim(), 10));
+    return { r: r || 0, g: g || 0, b: b || 0 };
+  }
   let h = hex.replace("#", "");
   if (h.length === 3) h = h.split("").map((c) => c + c).join("");
   const n = parseInt(h, 16);
@@ -34,6 +42,57 @@ function mixToward(hex: string, target: number, amt: number) {
 const lighten = (hex: string, amt: number) => mixToward(hex, 255, amt);
 const darken = (hex: string, amt: number) => mixToward(hex, 0, amt);
 
+// --- Premium recolor (visual-only). Takes any stored account color and returns
+// a deeper, slightly desaturated "premium" tone in the SAME hue family, so the
+// account cards keep their individual differences but all belong to one
+// elegant, muted palette (forest green / petrol blue / dark ochre / deep teal…).
+// Pure display transform — the stored `a.color` value is never modified. ---
+function rgbToHsl(r: number, g: number, b: number) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0;
+  const l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (d !== 0) {
+    switch (max) {
+      case r: h = ((g - b) / d) % 6; break;
+      case g: h = (b - r) / d + 2; break;
+      default: h = (r - g) / d + 4; break;
+    }
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return { h, s, l };
+}
+function hslToRgbString(h: number, s: number, l: number) {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; }
+  else if (h < 120) { r = x; g = c; }
+  else if (h < 180) { g = c; b = x; }
+  else if (h < 240) { g = x; b = c; }
+  else if (h < 300) { r = x; b = c; }
+  else { r = c; b = x; }
+  const to = (v: number) => Math.round((v + m) * 255);
+  return `rgb(${to(r)},${to(g)},${to(b)})`;
+}
+function premiumize(hex: string, scheme: "light" | "dark") {
+  try {
+    const { r, g, b } = hexToRgb(hex);
+    const { h, s } = rgbToHsl(r, g, b);
+    // Desaturate a touch (keep it colorful but refined) and set a deep,
+    // consistent lightness so every card reads as a rich premium tone.
+    const ns = Math.max(0.3, Math.min(0.55, s * 0.72));
+    const nl = scheme === "dark" ? 0.44 : 0.34;
+    return hslToRgbString(h, ns, nl);
+  } catch {
+    return hex;
+  }
+}
+
 function accountTypeLabel(t: string) {
   const m: Record<string, string> = {
     cash: "Efectivo", checking: "Corriente", savings: "Ahorro",
@@ -42,7 +101,7 @@ function accountTypeLabel(t: string) {
   return m[t] || t;
 }
 
-function accountBars(accounts: any[], total: number, colors: ThemeColors) {
+function accountBars(accounts: any[], total: number, colors: ThemeColors, scheme: "light" | "dark") {
   const positives = accounts.filter((a) => a.current_balance > 0);
   const base = total > 0 ? total : positives.reduce((s, a) => s + a.current_balance, 0);
   const sorted = [...positives].sort((a, b) => b.current_balance - a.current_balance);
@@ -51,13 +110,14 @@ function accountBars(accounts: any[], total: number, colors: ThemeColors) {
   }
   return sorted.map((a) => {
     const pct = base > 0 ? Math.round((a.current_balance / base) * 100) : 0;
+    const pc = premiumize(a.color, scheme);
     return (
       <View key={a.id}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <Text style={{ flexShrink: 1, fontSize: 9, fontWeight: "600", color: colors.onSurface }}>
             {a.name}
           </Text>
-          <Text style={{ fontSize: 9, fontWeight: "700", color: a.color, marginLeft: 4 }}>{pct}%</Text>
+          <Text style={{ fontSize: 9, fontWeight: "700", color: pc, marginLeft: 4 }}>{pct}%</Text>
         </View>
         <View
           style={{
@@ -68,7 +128,7 @@ function accountBars(accounts: any[], total: number, colors: ThemeColors) {
             overflow: "hidden",
           }}
         >
-          <View style={{ width: `${Math.max(4, pct)}%`, height: "100%", backgroundColor: a.color }} />
+          <View style={{ width: `${Math.max(4, pct)}%`, height: "100%", backgroundColor: pc }} />
         </View>
       </View>
     );
@@ -210,7 +270,8 @@ export default function Home() {
   ] as const;
 
   return (
-    <View style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#FFFFFF" }}>
+    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+    <BotanicalBackground />
     <ScrollView
       testID="home-scroll"
       style={{ flex: 1, backgroundColor: "transparent" }}
@@ -256,16 +317,17 @@ export default function Home() {
         <View style={styles.walletGrid}>
           {accounts.map((a, idx) => {
             const isThird = (idx + 1) % 3 === 0;
+            const pc = premiumize(a.color, scheme);
             return (
               <Pressable
                 key={a.id}
                 testID={`wallet-${a.id}`}
                 onPress={guard(() => router.push(`/accounts/new?id=${a.id}`))}
-                style={[styles.walletCard, { backgroundColor: a.color }, isThird && styles.walletCardLast]}
+                style={[styles.walletCard, { backgroundColor: pc }, isThird && styles.walletCardLast]}
               >
                 <View style={styles.walletInner}>
                   <LinearGradient
-                    colors={[lighten(a.color, 0.16), a.color, darken(a.color, 0.06)]}
+                    colors={[lighten(pc, 0.06), pc, darken(pc, 0.1)]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={StyleSheet.absoluteFill}
@@ -280,7 +342,7 @@ export default function Home() {
                     <View style={styles.walletIconBox}>
                       <Ionicons name={a.icon as any} size={14} color="#fff" />
                     </View>
-                    <View style={[styles.walletArrow, { backgroundColor: darken(a.color, 0.16) }]}>
+                    <View style={[styles.walletArrow, { backgroundColor: darken(pc, 0.16) }]}>
                       <Ionicons name="chevron-forward" size={12} color="#fff" />
                     </View>
                   </View>
@@ -366,7 +428,7 @@ export default function Home() {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ gap: 6 }}
           >
-            {accountBars(accounts, summary?.total_balance || 0, colors)}
+            {accountBars(accounts, summary?.total_balance || 0, colors, scheme)}
           </ScrollView>
         </View>
       </View>
@@ -585,9 +647,9 @@ export default function Home() {
             const sign = isTransfer ? "" : isIncome ? "+" : "-";
             const iconName =
               cat?.icon || (isTransfer ? "swap-horizontal-outline" : isIncome ? "trending-up-outline" : "trending-down-outline");
-            const tint = cat?.color || color;
+            const tint = cat?.color ? premiumize(cat.color, scheme) : color;
             const badgeLabel = cat?.name || (isTransfer ? "Transferencia" : isIncome ? "Ingreso" : "Gasto");
-            const badgeColor = cat?.color || color;
+            const badgeColor = cat?.color ? premiumize(cat.color, scheme) : color;
             return (
               <View key={t.id}>
                 {idx > 0 && <View style={styles.mrDivider} />}

@@ -26,6 +26,7 @@ export const api = {
   deleteAccount: (id: string) => request<any>(`/accounts/${id}`, { method: "DELETE" }),
   // Categories
   listCategories: () => request<any[]>("/categories"),
+  initDefaultCategories: () => request<any>("/categories/init-defaults", { method: "POST" }),
   createCategory: (d: any) => request<any>("/categories", { method: "POST", body: JSON.stringify(d) }),
   updateCategory: (id: string, d: any) => request<any>(`/categories/${id}`, { method: "PUT", body: JSON.stringify(d) }),
   deleteCategory: (id: string) => request<any>(`/categories/${id}`, { method: "DELETE" }),

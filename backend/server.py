@@ -364,6 +364,76 @@ async def delete_category(cid: str):
     return {"ok": True}
 
 
+# Default category catalog (name, icon, soft color). Additive only — this does
+# NOT touch transactions, accounts, balances or any calculation logic.
+DEFAULT_EXPENSE_CATEGORIES = [
+    ("Food", "fast-food-outline", "#FF7A59"),
+    ("Groceries", "cart-outline", "#F5A623"),
+    ("Restaurants", "restaurant-outline", "#FF5E7E"),
+    ("Housing", "home-outline", "#7C6CF0"),
+    ("Rent", "business-outline", "#5B8DEF"),
+    ("Utilities", "bulb-outline", "#F2B84B"),
+    ("Transportation", "bus-outline", "#4C9AFF"),
+    ("Fuel", "flame-outline", "#E8603C"),
+    ("Car", "car-sport-outline", "#6C8AE4"),
+    ("Shopping", "bag-handle-outline", "#FF8ACC"),
+    ("Clothing", "shirt-outline", "#C86BFA"),
+    ("Entertainment", "film-outline", "#9B6BFA"),
+    ("Subscriptions", "repeat-outline", "#7B61FF"),
+    ("Health", "medkit-outline", "#FF6B6B"),
+    ("Pharmacy", "medical-outline", "#34C6A8"),
+    ("Fitness", "barbell-outline", "#2FB67C"),
+    ("Education", "school-outline", "#4C83EA"),
+    ("Travel", "airplane-outline", "#22B8CF"),
+    ("Pets", "paw-outline", "#C08457"),
+    ("Family", "people-outline", "#FF9F68"),
+    ("Gifts", "gift-outline", "#F06595"),
+    ("Personal Care", "sparkles-outline", "#EC5F94"),
+    ("Technology", "hardware-chip-outline", "#5C7CFA"),
+    ("Insurance", "shield-checkmark-outline", "#51B7B0"),
+    ("Taxes", "document-text-outline", "#B0A08F"),
+    ("Loans", "cash-outline", "#E0A64B"),
+    ("Credit Cards", "card-outline", "#8E7CC3"),
+    ("Other", "ellipsis-horizontal-outline", "#9AA0A6"),
+]
+
+DEFAULT_INCOME_CATEGORIES = [
+    ("Salary", "wallet-outline", "#2FB67C"),
+    ("Freelance", "laptop-outline", "#3BC9B0"),
+    ("Business", "briefcase-outline", "#5B8DEF"),
+    ("Tips", "cash-outline", "#F2B84B"),
+    ("Investments", "trending-up-outline", "#7C6CF0"),
+    ("Interest", "stats-chart-outline", "#22B8CF"),
+    ("Refunds", "arrow-undo-outline", "#63C77A"),
+    ("Gifts", "gift-outline", "#F06595"),
+    ("Sales", "pricetags-outline", "#FF9F43"),
+    ("Other Income", "ellipsis-horizontal-outline", "#9AA0A6"),
+]
+
+
+@api.post("/categories/init-defaults")
+async def init_default_categories():
+    """Idempotently ensure the default Expense/Income category catalog exists.
+    Only inserts categories missing by (name, type). Never deletes and never
+    touches transactions, accounts, balances or any calculations."""
+    await ensure_user()
+    existing = await db.categories.find({"user_id": DEFAULT_USER_ID}, PROJ).to_list(1000)
+    have = {(c.get("name"), c.get("type")) for c in existing}
+    created = 0
+    for name, icon, color in DEFAULT_EXPENSE_CATEGORIES:
+        if (name, "expense") not in have:
+            c = Category(user_id=DEFAULT_USER_ID, name=name, type="expense", icon=icon, color=color).model_dump()
+            await db.categories.insert_one(c)
+            created += 1
+    for name, icon, color in DEFAULT_INCOME_CATEGORIES:
+        if (name, "income") not in have:
+            c = Category(user_id=DEFAULT_USER_ID, name=name, type="income", icon=icon, color=color).model_dump()
+            await db.categories.insert_one(c)
+            created += 1
+    total = await db.categories.count_documents({"user_id": DEFAULT_USER_ID})
+    return {"ok": True, "created": created, "total": total}
+
+
 # Transactions
 @api.get("/transactions")
 async def list_transactions(limit: int = 500):

@@ -160,18 +160,6 @@ backend:
           comment: "✅✅✅ 4TH VERIFICATION COMPLETE (after latest .env recreation). READ-ONLY testing against localhost:8001. Backend supervisor: RUNNING (pid 2419, uptime 0:01:28). /app/backend/.env exists with MONGO_URL and DB_NAME (no CORS_ORIGINS in this version). All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, id='default-user' ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, object with 5 keys ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs confirm documented transient 500 on first /api/user after cold boot (ObjectId serialization error: 'ObjectId' object is not iterable), followed by stable 200 responses. NO 502 errors. NO connection errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED. Port 8001 is listening. MongoDB connection working."
 
 frontend:
-  - task: "Global visual redesign — forest-green premium palette, botanical background, solid account cards, dark green bottom nav (VISUAL ONLY)"
-    implemented: true
-    working: "NA"
-    file: "src/theme.ts, src/components/botanical-bg.tsx, src/color.ts, app/(tabs)/index.tsx, app/(tabs)/_layout.tsx, app/(tabs)/reports.tsx"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-        - working: "NA"
-          agent: "main"
-          comment: "VISUAL-ONLY theme overhaul per user reference image. NO structure/positions/sizes/text/data/navigation/logic changes. (1) theme.ts: replaced coral brand + warm surfaces with a deep forest-green premium palette (light+dark) — brand=#1F5A3D, pale-green surfaces, deepened harmonized module accents (petrol #2C6E7F, teal #1F7A6B, ochre #A9761E, terracotta #B24A31, plum #5E4B6E); added navBar/onNavBar/navBarMuted keys. Whole app re-themes via existing useTheme/makeStyles. (2) NEW src/components/botanical-bg.tsx: decorative react-native-svg leaf backdrop (large, soft, semi-transparent, no text, pointerEvents none) rendered behind the Home ScrollView on a pale-green base. (3) index.tsx: added premiumize() (HSL deepen+desaturate, hue-preserving, DISPLAY-ONLY — stored a.color never modified) applied to account cards (solid/deep, reduced gradient), distribution bars, and recent-transaction category chips/icons. Home container bg -> pale green. (4) _layout.tsx: bottom tab bar now solid dark forest green (colors.navBar) with rounded top, white active icons/labels + translucent-white inactive; center FAB is now a white circle with a dark-green + and a green ring, slightly elevated. (5) reports.tsx + NEW src/color.ts (shared premiumizeColor): category icon + bar colors deepened/harmonized. Verified on web preview (light) via screenshots: Home, Informes, Más all render cohesively; tab navigation still works; layout unchanged vs before. Lint clean (only pre-existing unused accountTypeLabel warning). Backend untouched. Frontend auto-testing NOT run yet (awaiting user decision)."
-
   - task: "Tapping a transaction opens read-only Detail (from Home + Transactions list)"
     implemented: true
     working: true

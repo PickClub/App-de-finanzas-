@@ -700,7 +700,12 @@ export default function Home() {
   );
 }
 
-const useStyles = makeStyles((colors) => ({
+const useStyles = makeStyles((colors, scheme) => {
+  // Home-only surface refinement: warm greige (not pure white) for the main
+  // neutral cards in light mode, so they separate from the beige page
+  // background without harsh white contrast. Dark mode keeps its card color.
+  const cardSurface = scheme === "dark" ? colors.surfaceSecondary : "#F1EEE9";
+  return {
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -819,7 +824,7 @@ const useStyles = makeStyles((colors) => ({
     minHeight: 84,
     borderRadius: radius.md,
     padding: 10,
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: cardSurface,
     borderWidth: 2,
     borderStyle: "dashed",
     borderColor: colors.brandPrimary,
@@ -859,7 +864,7 @@ const useStyles = makeStyles((colors) => ({
     paddingHorizontal: 10,
   },
   miniCard: {
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: cardSurface,
     borderRadius: radius.cardLg,
     padding: 12,
     borderWidth: 1,
@@ -894,7 +899,7 @@ const useStyles = makeStyles((colors) => ({
   mcAvgLabel: { fontSize: 9, color: colors.muted, fontWeight: "600" },
   mcAvgVal: { fontSize: 13, fontWeight: "800", color: colors.onSurface, marginTop: 1 },
   debtCard: {
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: cardSurface,
     borderRadius: radius.cardLg,
     padding: 13,
     borderWidth: 1,
@@ -960,7 +965,7 @@ const useStyles = makeStyles((colors) => ({
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
   sectionTitle: { fontSize: 16, fontWeight: "800", color: colors.onSurface },
   txList: {
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: cardSurface,
     borderRadius: radius.cardLg,
     padding: spacing.md,
     borderWidth: 1,
@@ -1016,7 +1021,7 @@ const useStyles = makeStyles((colors) => ({
     borderColor: colors.brandPrimary + "55",
   },
   mrCard: {
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: cardSurface,
     borderRadius: radius.cardLg,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1056,4 +1061,5 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.brandPrimary + "1F",
     alignItems: "center", justifyContent: "center", marginLeft: 8,
   },
-}));
+  };
+});

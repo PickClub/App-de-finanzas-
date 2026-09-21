@@ -253,7 +253,7 @@ export default function Home() {
   ] as const;
 
   return (
-    <View style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#FFFFFF" }}>
+    <View style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#F3E8DC" }}>
     <ScrollView
       testID="home-scroll"
       style={{ flex: 1, backgroundColor: "transparent" }}
@@ -359,7 +359,7 @@ export default function Home() {
       {/* Resumen del mes */}
       <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
         <SectionHeader
-          icon="stats-chart"
+          icon="stats-chart-outline"
           title="Resumen del mes"
           subtitle="Un vistazo rápido de tus finanzas"
           onSeeAll={() => router.push("/(tabs)/reports")}
@@ -565,7 +565,7 @@ export default function Home() {
         {/* Section header */}
         <View style={styles.mrHeader}>
           <View style={styles.mrIconTile}>
-            <Ionicons name="layers" size={18} color={colors.brandPrimary} />
+            <Ionicons name="layers-outline" size={18} color={colors.brandPrimary} />
           </View>
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={styles.mrTitle} numberOfLines={1} ellipsizeMode="clip">

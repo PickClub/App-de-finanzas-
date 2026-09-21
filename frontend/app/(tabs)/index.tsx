@@ -125,6 +125,49 @@ const mb = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "flex-end", height: 34, gap: 3, marginTop: 2 },
 });
 
+// Reusable external section header — same visual style as the "Movimientos
+// recientes" header (soft coral icon tile on the left, title + subtitle, and a
+// compact very-light-coral "Ver todo >" pill on the right). Visual-only; it
+// wires an optional onSeeAll navigation and an optional right-side node.
+function SectionHeader({
+  icon,
+  title,
+  subtitle,
+  onSeeAll,
+  seeAllTestID,
+  right,
+}: {
+  icon: string;
+  title: string;
+  subtitle: string;
+  onSeeAll?: () => void;
+  seeAllTestID?: string;
+  right?: React.ReactNode;
+}) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  return (
+    <View style={styles.mrHeader}>
+      <View style={styles.mrIconTile}>
+        <Ionicons name={icon as any} size={18} color={colors.brandPrimary} />
+      </View>
+      <View style={{ flex: 1, marginLeft: 10 }}>
+        <Text style={styles.mrTitle} numberOfLines={1}>{title}</Text>
+        <Text style={styles.mrSubtitle} numberOfLines={1}>{subtitle}</Text>
+      </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        {right}
+        {onSeeAll && (
+          <Pressable testID={seeAllTestID} onPress={onSeeAll} style={styles.seeAllBtn}>
+            <Text style={styles.seeAllText}>Ver todo</Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
 // "17 sept, 3:24 p.m." — used only by the Movimientos recientes rows.
 function formatDateTime(iso: string): string {
   try {
@@ -244,11 +287,19 @@ export default function Home() {
 
       {/* Mis cuentas */}
       <View style={{ paddingTop: spacing.lg }}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Mis cuentas</Text>
-          <Pressable testID="toggle-hide-btn" onPress={() => setHidden((h) => !h)} hitSlop={8}>
-            <Ionicons name={hidden ? "eye-off-outline" : "eye-outline"} size={20} color={colors.muted} />
-          </Pressable>
+        <View style={{ paddingHorizontal: spacing.lg }}>
+          <SectionHeader
+            icon="wallet-outline"
+            title="Mis cuentas"
+            subtitle="Tus cuentas en un solo lugar"
+            onSeeAll={() => router.push("/accounts")}
+            seeAllTestID="see-all-accounts"
+            right={
+              <Pressable testID="toggle-hide-btn" onPress={() => setHidden((h) => !h)} hitSlop={8}>
+                <Ionicons name={hidden ? "eye-off-outline" : "eye-outline"} size={20} color={colors.muted} />
+              </Pressable>
+            }
+          />
         </View>
         <Text style={styles.totalLine} testID="total-balance">
           Saldo total: <Text style={{ color: colors.onSurface, fontWeight: "800" }}>{money(summary?.total_balance || 0)}</Text>
@@ -303,6 +354,17 @@ export default function Home() {
             <Text style={styles.walletAddText}>Agregar{"\n"}cuenta</Text>
           </Pressable>
         </View>
+      </View>
+
+      {/* Resumen del mes */}
+      <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
+        <SectionHeader
+          icon="stats-chart"
+          title="Resumen del mes"
+          subtitle="Un vistazo rápido de tus finanzas"
+          onSeeAll={() => router.push("/(tabs)/reports")}
+          seeAllTestID="see-all-summary"
+        />
       </View>
 
       {/* Income / Expense / Accounts distribution */}
@@ -371,8 +433,19 @@ export default function Home() {
         </View>
       </View>
 
+      {/* Deudas */}
+      <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}>
+        <SectionHeader
+          icon="wallet-outline"
+          title="Deudas"
+          subtitle="Tu panorama financiero, en un vistazo."
+          onSeeAll={() => router.push("/debts")}
+          seeAllTestID="see-all-debts"
+        />
+      </View>
+
       {/* Debts card */}
-      <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
+      <View style={{ paddingHorizontal: spacing.lg }}>
         <Pressable testID="debts-card" onPress={() => router.push("/debts")} style={styles.debtCard}>
           {/* soft abstract background */}
           <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -408,20 +481,6 @@ export default function Home() {
                 )),
               )}
             </Svg>
-          </View>
-
-          {/* header */}
-          <View style={styles.debtHeader}>
-            <View style={styles.debtHeaderIcon}>
-              <Ionicons name="wallet" size={18} color={colors.brandSecondary} />
-            </View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.debtTitle}>Deudas</Text>
-              <Text style={styles.debtHeaderSub}>Tu panorama financiero, en un vistazo.</Text>
-            </View>
-            <View style={styles.debtArrowBtn}>
-              <Ionicons name="chevron-forward" size={14} color={colors.onSurface} />
-            </View>
           </View>
 
           {/* first row */}

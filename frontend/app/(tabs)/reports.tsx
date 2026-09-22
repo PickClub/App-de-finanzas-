@@ -102,7 +102,7 @@ export default function Reports() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#F3E8DC" }}
+      style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#EFE3D2" }}
       contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 120 }}
     >
       <View style={styles.screenHead}>
@@ -302,7 +302,7 @@ const useStyles = makeStyles((colors, scheme) => ({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: radius.pill,
-    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#F1EEE9",
+    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#F7F1E6",
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -318,18 +318,18 @@ const useStyles = makeStyles((colors, scheme) => ({
   },
   pillActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   pillInactive: {
-    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#F1EEE9",
+    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#F7F1E6",
     borderColor: colors.border,
   },
   pillText: { fontSize: 12, fontWeight: "700" },
   card: {
     marginHorizontal: spacing.lg,
     marginTop: 10,
-    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#F1EEE9",
+    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#F7F1E6",
     borderRadius: radius.lg,
     padding: 13,
     borderWidth: 1,
-    borderColor: scheme === "dark" ? colors.border : "#E4DCD2",
+    borderColor: scheme === "dark" ? colors.border : "#E9DFCE",
     shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -354,7 +354,7 @@ const useStyles = makeStyles((colors, scheme) => ({
   },
   tRow: { flexDirection: "row", alignItems: "center", minHeight: 46 },
   tHeaderRow: {
-    backgroundColor: scheme === "dark" ? colors.surfaceTertiary : "#ECE5DB",
+    backgroundColor: scheme === "dark" ? colors.surfaceTertiary : "#EEE5D5",
     borderRadius: 10,
     minHeight: 40,
   },
@@ -455,7 +455,7 @@ const useStyles = makeStyles((colors, scheme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: colors.surface,
+    backgroundColor: scheme === "dark" ? colors.surface : "#FCF6ED",
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.pill,
@@ -488,7 +488,7 @@ const useStyles = makeStyles((colors, scheme) => ({
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: scheme === "dark" ? colors.surface : "#FCF6ED",
   },
   verTodasText: { fontSize: 13.5, fontWeight: "800", color: colors.onSurface },
   emptyText: { color: colors.muted, textAlign: "center", padding: 16 },

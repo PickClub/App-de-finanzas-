@@ -3,19 +3,18 @@ import { View, Text, ScrollView, Pressable } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BarChart } from "react-native-gifted-charts";
 import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatCurrency } from "@/src/format";
 import { Chip } from "@/src/components/ui";
 
 const RANGES = [
-  { id: "7d", label: "7d", days: 7, periodLabel: "Últimos 7 días" },
-  { id: "30d", label: "30d", days: 30, periodLabel: "Últimos 30 días" },
-  { id: "3m", label: "3m", days: 90, periodLabel: "Últimos 3 meses" },
-  { id: "6m", label: "6m", days: 180, periodLabel: "Últimos 6 meses" },
-  { id: "1y", label: "1a", days: 365, periodLabel: "Último año" },
-  { id: "all", label: "Todo", days: 99999, periodLabel: "Histórico" },
+  { id: "7d", label: "7d", pillLabel: "7 días", days: 7, periodLabel: "Últimos 7 días" },
+  { id: "30d", label: "30d", pillLabel: "30 días", days: 30, periodLabel: "Últimos 30 días" },
+  { id: "3m", label: "3m", pillLabel: "3 meses", days: 90, periodLabel: "Últimos 3 meses" },
+  { id: "6m", label: "6m", pillLabel: "6 meses", days: 180, periodLabel: "Últimos 6 meses" },
+  { id: "1y", label: "1a", pillLabel: "1 año", days: 365, periodLabel: "Último año" },
+  { id: "all", label: "Todo", pillLabel: "Todo", days: 99999, periodLabel: "Histórico" },
 ];
 
 // Solid colored circular icon (white glyph) — colors come from the theme tokens.
@@ -37,7 +36,7 @@ function CircleIcon({ icon, color, size = 42 }: { icon: string; color: string; s
 }
 
 export default function Reports() {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [range, setRange] = useState("30d");
@@ -70,40 +69,18 @@ export default function Reports() {
     effDays = Math.max(1, Math.round((now - earliest) / 86400000));
   }
 
-  // Immediately previous equivalent period (only for fixed ranges).
-  const prevCutoff = cutoff - days * 86400000;
-  const prevFiltered = range === "all"
-    ? []
-    : allTx.filter((t: any) => {
-        const d = new Date(t.date).getTime();
-        return d >= prevCutoff && d < cutoff;
-      });
-  const prevIncome = prevFiltered.filter((t: any) => t.type === "income").reduce((a: number, t: any) => a + t.amount, 0);
-  const prevExpense = prevFiltered.filter(isExpenseType).reduce((a: number, t: any) => a + t.amount, 0);
-  const prevIncomeCount = prevFiltered.filter((t: any) => t.type === "income").length;
-  const prevExpenseCount = prevFiltered.filter(isExpenseType).length;
-  const hasPrev = range !== "all" && prevFiltered.length > 0;
-
-  // Percentage change vs previous period; null => neutral (not enough history).
-  const pctChange = (cur: number, prev: number): number | null => {
-    if (!hasPrev || !prev) return null;
-    return ((cur - prev) / Math.abs(prev)) * 100;
-  };
-
   const balance = totalIncome - totalExpense;
-  const prevBalance = prevIncome - prevExpense;
-  const dailyAvg = totalIncome + totalExpense > 0 ? (totalIncome + totalExpense) / effDays : 0;
-  const prevDailyAvg = (prevIncome + prevExpense) / days;
+  const incomeDaily = effDays > 0 ? totalIncome / effDays : 0;
+  const expenseDaily = effDays > 0 ? totalExpense / effDays : 0;
   const incomeAvg = incomeCount ? totalIncome / incomeCount : 0;
-  const prevIncomeAvg = prevIncomeCount ? prevIncome / prevIncomeCount : 0;
   const expenseAvg = expenseCount ? totalExpense / expenseCount : 0;
-  const prevExpenseAvg = prevExpenseCount ? prevExpense / prevExpenseCount : 0;
 
-  const metrics = [
-    { key: "count", icon: "list", color: colors.statsPurple, label: "Movimientos", value: String(filtered.length), pct: pctChange(filtered.length, prevFiltered.length), goodWhenUp: true },
-    { key: "daily", icon: "calendar-outline", color: colors.loansYellow, label: "Promedio diario", value: formatCurrency(dailyAvg), pct: pctChange(dailyAvg, prevDailyAvg), goodWhenUp: true },
-    { key: "incomeAvg", icon: "arrow-up", color: colors.incomeGreen, label: "Ingreso promedio", value: formatCurrency(incomeAvg), pct: pctChange(incomeAvg, prevIncomeAvg), goodWhenUp: true },
-    { key: "expenseAvg", icon: "arrow-down", color: colors.expenseRed, label: "Gasto promedio", value: formatCurrency(expenseAvg), pct: pctChange(expenseAvg, prevExpenseAvg), goodWhenUp: false },
+  // Cash-flow table rows — real values only, never hardcoded.
+  const cashRows = [
+    { key: "count", icon: "list-outline", label: "Cantidad", inc: String(incomeCount), exp: String(expenseCount) },
+    { key: "daily", icon: "calendar-outline", label: "Promedio diario", inc: formatCurrency(incomeDaily), exp: formatCurrency(expenseDaily) },
+    { key: "perReg", icon: "document-text-outline", label: "Promedio por registro", inc: formatCurrency(incomeAvg), exp: formatCurrency(expenseAvg) },
+    { key: "total", icon: "calculator-outline", label: "Total del período", inc: formatCurrency(totalIncome), exp: formatCurrency(totalExpense) },
   ];
 
   // Expense-by-category (only expenses that have a category).
@@ -124,138 +101,129 @@ export default function Reports() {
   const maxCat = byCategory.length ? byCategory[0].amount : 0;
   const shownCats = showAll ? byCategory : byCategory.slice(0, 5);
 
-  const barData = [
-    { value: totalIncome, label: "Ingresos", frontColor: colors.incomeGreen, topLabelComponent: () => null },
-    { value: totalExpense, label: "Gastos", frontColor: colors.expenseRed, topLabelComponent: () => null },
-  ];
-
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.surface }}
+      style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#F3E8DC" }}
       contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 120 }}
     >
-      <Text style={styles.title}>Informes</Text>
-      <Text style={styles.subtitle}>Analiza tus finanzas y toma mejores decisiones</Text>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-        {RANGES.map((r) => (
-          <Chip key={r.id} label={r.label} active={range === r.id} onPress={() => setRange(r.id)} testID={`range-${r.id}`} />
-        ))}
-      </ScrollView>
-
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>Ingresos vs Gastos</Text>
-          <Text style={styles.cardHeaderMeta}>{rangeDef.periodLabel}</Text>
+      <View style={styles.screenHead}>
+        <View style={{ flex: 1, paddingRight: 10 }}>
+          <Text style={styles.title}>Informes</Text>
+          <Text style={styles.subtitle}>Analiza tu actividad financiera</Text>
         </View>
-        <View style={{ alignItems: "center", marginTop: 12 }}>
-          <BarChart
-            data={barData}
-            barWidth={44}
-            spacing={28}
-            hideRules
-            xAxisColor={colors.border}
-            yAxisColor={colors.border}
-            yAxisTextStyle={{ color: colors.muted, fontSize: 10 }}
-            xAxisLabelTextStyle={{ color: colors.onSurface, fontSize: 12 }}
-            noOfSections={4}
-            height={128}
-          />
-        </View>
-        <View style={styles.ivgFooter}>
-          <View style={{ alignItems: "center" }}>
-            <Text style={styles.ivgLabel}>Ingresos</Text>
-            <Text style={[styles.ivgValue, { color: colors.incomeGreen }]}>{formatCurrency(totalIncome)}</Text>
-          </View>
-          <View style={{ alignItems: "center" }}>
-            <Text style={styles.ivgLabel}>Gastos</Text>
-            <Text style={[styles.ivgValue, { color: colors.expenseRed }]}>{formatCurrency(totalExpense)}</Text>
-          </View>
+        <View style={styles.periodControl} testID="period-control">
+          <Text style={styles.periodControlText} numberOfLines={1}>{rangeDef.periodLabel}</Text>
+          <Ionicons name="chevron-down" size={15} color={colors.muted} />
         </View>
       </View>
 
-      {/* Resumen del período */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+        {RANGES.map((r) => (
+          <Chip key={r.id} label={r.pillLabel} active={range === r.id} onPress={() => setRange(r.id)} testID={`range-${r.id}`} />
+        ))}
+      </ScrollView>
+
+      {/* Flujo de efectivo */}
       <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.titleRow}>
-            <Text style={styles.cardTitle}>Resumen del período</Text>
-            <Ionicons name="information-circle-outline" size={16} color={colors.muted} />
+        <View style={styles.cHead}>
+          <View style={styles.cHeadIcon}>
+            <Ionicons name="bar-chart" size={18} color={colors.brandPrimary} />
           </View>
-          <Text style={styles.cardHeaderMeta}>{rangeDef.periodLabel}</Text>
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <View style={styles.titleRow}>
+              <Text style={styles.cardTitle}>Flujo de efectivo</Text>
+              <Ionicons name="information-circle-outline" size={15} color={colors.muted} />
+            </View>
+            <Text style={styles.cardHeaderMeta}>Resumen de tu actividad en el período</Text>
+          </View>
         </View>
 
-        <View style={styles.metricsGrid}>
-          {metrics.map((m) => {
-            const up = (m.pct ?? 0) >= 0;
-            const good = m.goodWhenUp ? up : !up;
-            const cc = good ? colors.incomeGreen : colors.expenseRed;
-            return (
-              <View key={m.key} style={styles.metricCard} testID={`metric-${m.key}`}>
-                <CircleIcon icon={m.icon} color={m.color} size={34} />
-                <View style={{ flex: 1, marginLeft: 9 }}>
-                  <Text style={styles.metricLabel} numberOfLines={1}>{m.label}</Text>
-                  <View style={styles.metricValueRow}>
-                    <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{m.value}</Text>
-                    {m.pct !== null && (
-                      <View style={styles.compareInline}>
-                        <Ionicons name={up ? "arrow-up" : "arrow-down"} size={10} color={cc} />
-                        <Text style={[styles.comparePct, { color: cc }]}>
-                          {up ? "+" : ""}{Math.round(m.pct)}%
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.metricPrev}>
-                    {m.pct !== null ? "vs. período anterior" : "Sin datos previos"}
-                  </Text>
-                </View>
+        {/* Cash-flow table */}
+        <View style={styles.table}>
+          <View style={[styles.tRow, styles.tHeaderRow]}>
+            <View style={styles.tConcept}>
+              <Text style={[styles.tHeaderText, { color: colors.muted }]}>Concepto</Text>
+            </View>
+            <View style={styles.tCol}>
+              <Text style={[styles.tHeaderText, { color: colors.incomeGreen }]}>Ingresos</Text>
+            </View>
+            <View style={styles.tCol}>
+              <Text style={[styles.tHeaderText, { color: colors.expenseRed }]}>Gastos</Text>
+            </View>
+          </View>
+          {cashRows.map((r, i) => (
+            <View
+              key={r.key}
+              style={[styles.tRow, i < cashRows.length - 1 && styles.tRowDivider]}
+              testID={`cash-row-${r.key}`}
+            >
+              <View style={styles.tConcept}>
+                <Ionicons name={r.icon as any} size={15} color={colors.muted} />
+                <Text style={styles.tConceptText} numberOfLines={1}>{r.label}</Text>
               </View>
-            );
-          })}
+              <View style={styles.tCol}>
+                <Text style={[styles.tValue, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  {r.inc}
+                </Text>
+              </View>
+              <View style={styles.tCol}>
+                <Text style={[styles.tValue, { color: colors.expenseRed }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  {r.exp}
+                </Text>
+              </View>
+            </View>
+          ))}
         </View>
 
-        {/* Balance del período — prominent */}
+        {/* Saldo neto del período — full visual calculation */}
         <View
           style={[
-            styles.balanceRow,
+            styles.netPanel,
             {
               backgroundColor: (balance >= 0 ? colors.incomeGreen : colors.expenseRed) + "12",
-              borderColor: (balance >= 0 ? colors.incomeGreen : colors.expenseRed) + "33",
+              borderColor: (balance >= 0 ? colors.incomeGreen : colors.expenseRed) + "2E",
             },
           ]}
           testID="balance-row"
         >
-          <View style={[styles.balanceIcon, { backgroundColor: colors.brandPrimary + "1F" }]}>
-            <Ionicons name="scale-outline" size={20} color={colors.brandPrimary} />
+          <View style={[styles.netIcon, { backgroundColor: (balance >= 0 ? colors.incomeGreen : colors.expenseRed) + "1F" }]}>
+            <Ionicons name="wallet-outline" size={20} color={balance >= 0 ? colors.incomeGreen : colors.expenseRed} />
           </View>
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={styles.balanceLabel}>Balance del período</Text>
-            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.balanceValue, { color: balance >= 0 ? colors.incomeGreen : colors.expenseRed }]}>
+          <View style={styles.netTextWrap}>
+            <Text style={styles.netTitle} numberOfLines={1}>Saldo neto del período</Text>
+            <Text style={styles.netSub} numberOfLines={1}>Ingresos menos gastos</Text>
+          </View>
+          <View style={styles.netCalc}>
+            <Text style={[styles.netInc, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              {formatCurrency(totalIncome)}
+            </Text>
+            <Text style={styles.netOp}>−</Text>
+            <Text style={[styles.netExp, { color: colors.expenseRed }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              {formatCurrency(totalExpense)}
+            </Text>
+            <Text style={styles.netOp}>=</Text>
+            <Text
+              style={[styles.netResult, { color: balance >= 0 ? colors.incomeGreen : colors.expenseRed }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+            >
               {balance < 0 ? "-" : ""}{formatCurrency(Math.abs(balance))}
             </Text>
           </View>
-          {(() => {
-            const p = pctChange(balance, prevBalance);
-            if (p === null) return <Text style={styles.balancePrevNeutral}>Sin datos{"\n"}previos</Text>;
-            const good = p >= 0;
-            const c = good ? colors.incomeGreen : colors.expenseRed;
-            return (
-              <View style={[styles.balanceBadge, { backgroundColor: c + "14" }]}>
-                <View style={styles.balanceBadgeTop}>
-                  <Ionicons name={good ? "arrow-up" : "arrow-down"} size={11} color={c} />
-                  <Text style={[styles.balanceBadgePct, { color: c }]}>{good ? "+" : ""}{Math.round(p)}%</Text>
-                </View>
-                <Text style={styles.balanceBadgeMeta}>vs. período anterior</Text>
-              </View>
-            );
-          })()}
         </View>
       </View>
 
       {/* Gastos por categoría */}
       <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>Gastos por categoría</Text>
+        <View style={styles.cHead}>
+          <View style={styles.cHeadIcon}>
+            <Ionicons name="pie-chart" size={18} color={colors.brandPrimary} />
+          </View>
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <Text style={styles.cardTitle}>Gastos por categoría</Text>
+            <Text style={styles.cardHeaderMeta}>Tus principales categorías en este período</Text>
+          </View>
           {byCategory.length > 0 && (
             <Pressable onPress={() => setShowAll((v) => !v)} style={styles.topBadge} testID="toggle-cats">
               <Text style={styles.topBadgeText}>{showAll ? "Todas" : "Top 5"}</Text>
@@ -265,17 +233,21 @@ export default function Reports() {
         </View>
 
         {byCategory.length > 0 ? (
-          <View style={{ marginTop: 14 }}>
-            {shownCats.map((x) => {
+          <View style={{ marginTop: 12 }}>
+            {shownCats.map((x, i) => {
               const pctOfTotal = expenseCatTotal > 0 ? (x.amount / expenseCatTotal) * 100 : 0;
               const barPct = maxCat > 0 ? (x.amount / maxCat) * 100 : 0;
               return (
-                <View key={x.id} style={styles.catRow} testID={`cat-row-${x.id}`}>
-                  <CircleIcon icon={x.cat.icon} color={x.cat.color} size={36} />
+                <View
+                  key={x.id}
+                  style={[styles.catRow, i < shownCats.length - 1 && styles.catRowDivider]}
+                  testID={`cat-row-${x.id}`}
+                >
+                  <CircleIcon icon={x.cat.icon} color={x.cat.color} size={42} />
                   <View style={styles.catMiddle}>
                     <Text style={styles.catName} numberOfLines={1}>{x.cat.name}</Text>
                     <View style={styles.barTrack}>
-                      <View style={[styles.barFill, { width: `${barPct}%`, backgroundColor: x.cat.color }]} />
+                      <View style={[styles.barFill, { width: `${Math.max(6, barPct)}%`, backgroundColor: x.cat.color }]} />
                     </View>
                   </View>
                   <View style={styles.catRight}>
@@ -300,18 +272,38 @@ export default function Reports() {
   );
 }
 
-const useStyles = makeStyles((colors) => ({
-  title: { fontSize: 22, fontWeight: "800", color: colors.onSurface, paddingHorizontal: spacing.lg },
-  subtitle: { fontSize: 13, color: colors.muted, paddingHorizontal: spacing.lg, marginTop: 1 },
+const useStyles = makeStyles((colors, scheme) => ({
+  screenHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+  },
+  title: { fontSize: 22, fontWeight: "800", color: colors.onSurface },
+  subtitle: { fontSize: 13, color: colors.muted, marginTop: 1 },
+  periodControl: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    maxWidth: 160,
+    marginTop: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#F1EEE9",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  periodControlText: { fontSize: 12.5, fontWeight: "700", color: colors.onSurface, flexShrink: 1 },
   chipRow: { paddingHorizontal: spacing.lg, gap: 8, marginTop: 10, height: 46, alignItems: "center" },
   card: {
     marginHorizontal: spacing.lg,
     marginTop: 10,
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#F1EEE9",
     borderRadius: radius.lg,
     padding: 13,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: scheme === "dark" ? colors.border : "#E4DCD2",
     shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -319,9 +311,67 @@ const useStyles = makeStyles((colors) => ({
     elevation: 2,
   },
   cardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  // Card header with a soft coral icon tile
+  cHead: { flexDirection: "row", alignItems: "center" },
+  cHeadIcon: {
+    width: 40, height: 40, borderRadius: 13,
+    backgroundColor: colors.brandPrimary + "1A",
+    alignItems: "center", justifyContent: "center",
+  },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   cardTitle: { fontSize: 15, fontWeight: "800", color: colors.onSurface },
-  cardHeaderMeta: { fontSize: 11.5, color: colors.muted, fontWeight: "600" },
+  cardHeaderMeta: { fontSize: 11.5, color: colors.muted, fontWeight: "600", marginTop: 1 },
+
+  // --- Cash-flow table ---
+  table: {
+    marginTop: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: scheme === "dark" ? colors.border : "#E4DCD2",
+    overflow: "hidden",
+  },
+  tRow: { flexDirection: "row", alignItems: "stretch", minHeight: 44 },
+  tHeaderRow: { backgroundColor: scheme === "dark" ? colors.surfaceTertiary : "#ECE5DB" },
+  tRowDivider: { borderBottomWidth: 1, borderBottomColor: colors.divider },
+  tConcept: {
+    flex: 1.5,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  tConceptText: { fontSize: 12.5, fontWeight: "600", color: colors.onSurface, flexShrink: 1 },
+  tCol: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+    paddingVertical: 11,
+    borderLeftWidth: 1,
+    borderLeftColor: colors.divider,
+  },
+  tHeaderText: { fontSize: 13, fontWeight: "800" },
+  tValue: { fontSize: 14.5, fontWeight: "800", letterSpacing: -0.3 },
+
+  // --- Saldo neto del período panel ---
+  netPanel: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: 11,
+  },
+  netIcon: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+  netTextWrap: { marginLeft: 10, flexShrink: 1 },
+  netTitle: { fontSize: 13, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.2 },
+  netSub: { fontSize: 10.5, color: colors.muted, marginTop: 1 },
+  netCalc: { flexDirection: "row", alignItems: "center", gap: 5, marginLeft: "auto", flexShrink: 1 },
+  netInc: { fontSize: 15, fontWeight: "800", letterSpacing: -0.3 },
+  netExp: { fontSize: 15, fontWeight: "800", letterSpacing: -0.3 },
+  netOp: { fontSize: 14, fontWeight: "700", color: colors.muted },
+  netResult: { fontSize: 20, fontWeight: "800", letterSpacing: -0.5 },
 
   // Ingresos vs Gastos footer
   ivgFooter: { flexDirection: "row", justifyContent: "space-around", marginTop: 6 },
@@ -380,11 +430,18 @@ const useStyles = makeStyles((colors) => ({
     paddingVertical: 5,
   },
   topBadgeText: { fontSize: 12, fontWeight: "700", color: colors.onSurface },
-  catRow: { flexDirection: "row", alignItems: "center", paddingVertical: 6 },
-  catMiddle: { flex: 1, marginLeft: 10, marginRight: 10 },
+  catRow: { flexDirection: "row", alignItems: "center", paddingVertical: 9 },
+  catRowDivider: { borderBottomWidth: 1, borderBottomColor: colors.divider },
+  catMiddle: { flex: 1, marginLeft: 12, marginRight: 10 },
   catName: { fontSize: 14, fontWeight: "700", color: colors.onSurface },
-  barTrack: { height: 6, borderRadius: 3, backgroundColor: colors.surfaceTertiary, marginTop: 5, overflow: "hidden" },
-  barFill: { height: 6, borderRadius: 3 },
+  barTrack: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: scheme === "dark" ? "#3A352F" : "#DED6CB",
+    marginTop: 7,
+    overflow: "hidden",
+  },
+  barFill: { height: 10, borderRadius: 5 },
   catRight: { alignItems: "flex-end", minWidth: 70 },
   catAmount: { fontSize: 14, fontWeight: "800", color: colors.onSurface },
   catPct: { fontSize: 11.5, color: colors.muted, fontWeight: "600", marginTop: 2 },

@@ -1,27 +1,85 @@
 import React, { useState } from "react";
 import { Tabs, useRouter } from "expo-router";
-import { Pressable, StyleSheet, View, Text, Modal, TouchableOpacity, Easing } from "react-native";
+import { Pressable, View, Text, Modal, TouchableOpacity, Easing } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, makeStyles, radius } from "@/src/theme";
 
-function FabButton({ onPress }: { onPress: () => void }) {
-  const { colors } = useTheme();
+// Bottom-bar tab definitions (icons keep the app's existing solid Ionicons
+// language). Order is fixed: Cuentas · IA · (centro) · Informes · Más.
+const TAB_CONFIG: Record<string, { label: string; icon: string }> = {
+  index: { label: "Cuentas", icon: "home" },
+  transactions: { label: "IA", icon: "mic" },
+  reports: { label: "Informes", icon: "stats-chart" },
+  more: { label: "Más", icon: "grid" },
+};
+
+// Custom bottom navigation bar. Keeps every existing route/action; only the
+// visual presentation is redefined (rounded top, cream surface, compact
+// height, integrated wallet+ center button, discreet coral selection dot).
+function CustomTabBar({ state, navigation, openMenu }: any) {
+  const { colors, scheme } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  const barBg = scheme === "dark" ? colors.surfaceSecondary : "#FBF6EC";
+
   return (
-    <View pointerEvents="box-none" style={[styles.fabWrap, { bottom: 20 + insets.bottom }]}>
-      <Pressable
-        testID="fab-add-btn"
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          onPress();
-        }}
-        style={({ pressed }) => [styles.fab, pressed && { transform: [{ scale: 0.95 }] }]}
-      >
-        <Ionicons name="add" size={34} color={colors.onBrandPrimary} />
-      </Pressable>
+    <View style={[styles.bar, { backgroundColor: barBg, paddingBottom: Math.max(insets.bottom, 6) }]}>
+      {state.routes.map((route: any, index: number) => {
+        const isFocused = state.index === index;
+
+        // Center action — visually a compact "wallet+"; runs the SAME action
+        // the old floating + button did (opens the quick-add menu).
+        if (route.name === "fab") {
+          return (
+            <View key={route.key} style={styles.item}>
+              <Pressable
+                testID="fab-add-btn"
+                accessibilityRole="button"
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  openMenu();
+                }}
+                style={({ pressed }) => [styles.centerBtn, pressed && { transform: [{ scale: 0.94 }] }]}
+              >
+                <View style={styles.centerCircle}>
+                  <Ionicons name="wallet" size={22} color={colors.brandPrimary} />
+                  <View style={styles.plusBadge}>
+                    <Ionicons name="add" size={11} color={colors.onBrandPrimary} />
+                  </View>
+                </View>
+              </Pressable>
+            </View>
+          );
+        }
+
+        const cfg = TAB_CONFIG[route.name];
+        if (!cfg) return <View key={route.key} style={styles.item} />;
+        const tint = isFocused ? colors.brandPrimary : colors.muted;
+
+        const onPress = () => {
+          const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
+          if (!isFocused && !event.defaultPrevented) {
+            navigation.navigate(route.name);
+          }
+        };
+
+        return (
+          <Pressable
+            key={route.key}
+            testID={`tab-${route.name}`}
+            accessibilityRole="button"
+            accessibilityState={isFocused ? { selected: true } : {}}
+            onPress={onPress}
+            style={styles.item}
+          >
+            <Ionicons name={cfg.icon as any} size={22} color={tint} />
+            <Text style={[styles.label, { color: tint }]} numberOfLines={1}>{cfg.label}</Text>
+            <View style={[styles.dot, { backgroundColor: isFocused ? colors.brandPrimary : "transparent" }]} />
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -70,12 +128,12 @@ function QuickMenu({ visible, onClose }: { visible: boolean; onClose: () => void
 
 export default function TabsLayout() {
   const { colors } = useTheme();
-  const styles = useStyles();
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <Tabs
+        tabBar={(props) => <CustomTabBar {...props} openMenu={() => setMenuOpen(true)} />}
         screenOptions={{
           headerShown: false,
           // Bottom-tab switching stays near-instant: only a very subtle
@@ -85,74 +143,61 @@ export default function TabsLayout() {
             animation: "timing",
             config: { duration: 140, easing: Easing.out(Easing.ease) },
           },
-          tabBarActiveTintColor: colors.brandPrimary,
-          tabBarInactiveTintColor: colors.muted,
-          tabBarStyle: {
-            backgroundColor: colors.surfaceSecondary,
-            borderTopColor: colors.border,
-            borderTopWidth: 1,
-          },
-          tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
-          tabBarItemStyle: { alignSelf: "center" },
         }}
       >
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: "Inicio",
-            tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="transactions"
-          options={{
-            title: "IA",
-            tabBarIcon: ({ color, size }) => <Ionicons name="mic" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="fab"
-          options={{
-            title: "",
-            tabBarIcon: () => <View style={{ width: 40, height: 40 }} />,
-            tabBarButton: () => <View style={{ flex: 1 }} />,
-          }}
-        />
-        <Tabs.Screen
-          name="reports"
-          options={{
-            title: "Informes",
-            tabBarIcon: ({ color, size }) => <Ionicons name="stats-chart" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="more"
-          options={{
-            title: "Más",
-            tabBarIcon: ({ color, size }) => <Ionicons name="grid" size={size} color={color} />,
-          }}
-        />
+        <Tabs.Screen name="index" options={{ title: "Cuentas" }} />
+        <Tabs.Screen name="transactions" options={{ title: "IA" }} />
+        <Tabs.Screen name="fab" options={{ title: "" }} />
+        <Tabs.Screen name="reports" options={{ title: "Informes" }} />
+        <Tabs.Screen name="more" options={{ title: "Más" }} />
       </Tabs>
-      <FabButton onPress={() => setMenuOpen(true)} />
       <QuickMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
     </View>
   );
 }
 
-const useStyles = makeStyles((colors) => ({
-  fabWrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
-  fab: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+const useStyles = makeStyles((colors, scheme) => ({
+  // --- Bottom navigation bar ---
+  bar: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingTop: 8,
+    paddingHorizontal: 6,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    // Extremely soft top shadow to lift the bar off the content.
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: -2 },
+    elevation: 6,
+  },
+  item: { flex: 1, alignItems: "center", justifyContent: "flex-start" },
+  label: { fontSize: 11, fontWeight: "600", marginTop: 3 },
+  dot: { width: 5, height: 5, borderRadius: 2.5, marginTop: 3 },
+  // Center wallet+ button — integrated, slightly emphasized, not a big FAB.
+  centerBtn: { alignItems: "center", justifyContent: "center" },
+  centerCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    marginTop: -2,
+    backgroundColor: colors.brandPrimary + "1F",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  plusBadge: {
+    position: "absolute",
+    right: 4,
+    bottom: 4,
+    width: 15,
+    height: 15,
+    borderRadius: 7.5,
     backgroundColor: colors.brandPrimary,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: colors.brandPrimary,
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
+    borderWidth: 1.5,
+    borderColor: scheme === "dark" ? colors.surfaceSecondary : "#FBF6EC",
   },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" },
   sheet: {

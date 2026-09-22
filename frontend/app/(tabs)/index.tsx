@@ -42,33 +42,36 @@ function accountTypeLabel(t: string) {
   return m[t] || t;
 }
 
-function accountBars(accounts: any[], total: number, colors: ThemeColors) {
+function accountBars(accounts: any[], total: number, colors: ThemeColors, scheme: string) {
   const positives = accounts.filter((a) => a.current_balance > 0);
   const base = total > 0 ? total : positives.reduce((s, a) => s + a.current_balance, 0);
-  const sorted = [...positives].sort((a, b) => b.current_balance - a.current_balance);
+  // Home distribution preview shows a MAXIMUM of 5 accounts (top by balance).
+  const sorted = [...positives].sort((a, b) => b.current_balance - a.current_balance).slice(0, 5);
   if (sorted.length === 0) {
     return <Text style={{ color: colors.muted, fontSize: 10 }}>Sin cuentas</Text>;
   }
+  // Soft neutral gray track — clearly visible against the greige card surface.
+  const track = scheme === "dark" ? "#3A352F" : "#DED6CB";
   return sorted.map((a) => {
     const pct = base > 0 ? Math.round((a.current_balance / base) * 100) : 0;
     return (
       <View key={a.id}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <Text style={{ flexShrink: 1, fontSize: 9, fontWeight: "600", color: colors.onSurface }}>
+          <Text style={{ flexShrink: 1, fontSize: 10, fontWeight: "700", color: colors.onSurface }} numberOfLines={1}>
             {a.name}
           </Text>
-          <Text style={{ fontSize: 9, fontWeight: "700", color: a.color, marginLeft: 4 }}>{pct}%</Text>
+          <Text style={{ fontSize: 10, fontWeight: "800", color: a.color, marginLeft: 4 }}>{pct}%</Text>
         </View>
         <View
           style={{
-            marginTop: 2,
-            height: 4,
-            borderRadius: 2,
-            backgroundColor: colors.surfaceTertiary,
+            marginTop: 4,
+            height: 9,
+            borderRadius: 4.5,
+            backgroundColor: track,
             overflow: "hidden",
           }}
         >
-          <View style={{ width: `${Math.max(4, pct)}%`, height: "100%", backgroundColor: a.color }} />
+          <View style={{ width: `${Math.max(6, pct)}%`, height: "100%", backgroundColor: a.color, borderRadius: 4.5 }} />
         </View>
       </View>
     );
@@ -221,6 +224,13 @@ export default function Home() {
   const money = (n: number) => (hidden ? "••••" : formatCurrency(n));
   const debtMoney = (n: number) => (hidden ? "••••" : formatCurrencyInt(n));
 
+  // Account growth indicator (visual-only) — derived from real summary data:
+  // this month's net movement relative to the opening balance. No hardcoding.
+  const monthNet = (summary?.month_income || 0) - (summary?.month_expense || 0);
+  const openingBalance = (summary?.total_balance || 0) - monthNet;
+  const growthPct = openingBalance > 0 ? (monthNet / openingBalance) * 100 : 0;
+  const growthPositive = growthPct >= 0;
+
   // Last-7-days mini-chart data + daily averages for the Income / Expense cards.
   const stats = useMemo(() => {
     const txs = txQ.data || [];
@@ -269,11 +279,31 @@ export default function Home() {
         />
       }
     >
-      {/* Header */}
+      {/* Header — compact balance + growth (greeting removed) */}
       <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.hello}>Hola, {user?.name || "Usuario"} 👋</Text>
-          <Text style={styles.sub}>Gestionemos tus finanzas</Text>
+        <View style={styles.balanceIconTile}>
+          <Ionicons name="wallet-outline" size={20} color={colors.brandPrimary} />
+        </View>
+        <View style={styles.balanceBlock}>
+          <Text
+            style={styles.balanceNumber}
+            testID="total-balance"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+          >
+            {hidden ? "••••" : formatCurrencyInt(summary?.total_balance || 0)}
+          </Text>
+          <View style={styles.growthRow}>
+            <Ionicons
+              name={growthPositive ? "arrow-up" : "arrow-down"}
+              size={15}
+              color={growthPositive ? colors.incomeGreen : colors.expenseRed}
+            />
+            <Text style={[styles.growthText, { color: growthPositive ? colors.incomeGreen : colors.expenseRed }]}>
+              {Math.abs(growthPct).toFixed(1)}%
+            </Text>
+          </View>
         </View>
         <Pressable testID="notifications-btn" style={styles.roundIcon}>
           <Ionicons name="notifications-outline" size={22} color={colors.onSurface} />
@@ -284,6 +314,9 @@ export default function Home() {
           </Text>
         </View>
       </View>
+
+      {/* Section divider — before Mis cuentas */}
+      <View style={styles.sectionDivider} />
 
       {/* Mis cuentas */}
       <View style={{ paddingTop: spacing.lg }}>
@@ -301,9 +334,6 @@ export default function Home() {
             }
           />
         </View>
-        <Text style={styles.totalLine} testID="total-balance">
-          Saldo total: <Text style={{ color: colors.onSurface, fontWeight: "800" }}>{money(summary?.total_balance || 0)}</Text>
-        </Text>
         <View style={styles.walletGrid}>
           {accounts.map((a, idx) => {
             const isThird = (idx + 1) % 3 === 0;
@@ -355,6 +385,9 @@ export default function Home() {
           </Pressable>
         </View>
       </View>
+
+      {/* Section divider — before Resumen del mes */}
+      <View style={styles.sectionDivider} />
 
       {/* Resumen del mes */}
       <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
@@ -422,16 +455,14 @@ export default function Home() {
           </View>
         </View>
         <View style={[styles.miniCard, styles.miniAccounts]}>
-          <ScrollView
-            testID="cuentas-scroll"
-            nestedScrollEnabled
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ gap: 6 }}
-          >
-            {accountBars(accounts, summary?.total_balance || 0, colors)}
-          </ScrollView>
+          <View testID="cuentas-scroll" style={{ gap: 6 }}>
+            {accountBars(accounts, summary?.total_balance || 0, colors, scheme)}
+          </View>
         </View>
       </View>
+
+      {/* Section divider — before Deudas */}
+      <View style={styles.sectionDivider} />
 
       {/* Deudas */}
       <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}>
@@ -559,6 +590,9 @@ export default function Home() {
           </View>
         </Pressable>
       </View>
+
+      {/* Section divider — before Movimientos recientes */}
+      <View style={styles.sectionDivider} />
 
       {/* Recent transactions — "Movimientos recientes" */}
       <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}>
@@ -723,6 +757,44 @@ const useStyles = makeStyles((colors, scheme) => {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center",
   },
+  balanceIconTile: {
+    width: 44, height: 44, borderRadius: 14,
+    backgroundColor: colors.brandPrimary + "1A",
+    alignItems: "center", justifyContent: "center",
+  },
+  balanceBlock: {
+    flex: 1,
+    marginLeft: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  balanceNumber: {
+    flexShrink: 1,
+    fontSize: 30,
+    fontWeight: "800",
+    color: colors.onSurface,
+    letterSpacing: -0.8,
+  },
+  growthRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 1,
+  },
+  growthText: {
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+  },
+  // Subtle, short, continuous inset divider used to separate Home sections.
+  // Neutral warm gray at low opacity — inset ~15% from both ends.
+  sectionDivider: {
+    height: 1,
+    marginHorizontal: "15%",
+    marginTop: spacing.md,
+    backgroundColor: colors.borderStrong,
+    opacity: scheme === "dark" ? 0.5 : 0.6,
+  },
   balanceCard: {
     borderRadius: radius.cardLg,
     padding: 22,
@@ -860,8 +932,13 @@ const useStyles = makeStyles((colors, scheme) => {
   },
   miniAccounts: {
     flex: 2, // ~40%
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    justifyContent: "center",
+    // Distinct warm greige surface — visibly separated from the beige page
+    // background and the whiter income/expense tints (not pure white).
+    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#EAE3D9",
+    borderColor: scheme === "dark" ? colors.border : "#E1D9CE",
   },
   miniCard: {
     backgroundColor: cardSurface,

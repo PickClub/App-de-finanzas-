@@ -6,7 +6,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatCurrency } from "@/src/format";
-import { Chip } from "@/src/components/ui";
 
 const RANGES = [
   { id: "7d", label: "7d", pillLabel: "7 días", days: 7, periodLabel: "Últimos 7 días" },
@@ -118,9 +117,21 @@ export default function Reports() {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-        {RANGES.map((r) => (
-          <Chip key={r.id} label={r.pillLabel} active={range === r.id} onPress={() => setRange(r.id)} testID={`range-${r.id}`} />
-        ))}
+        {RANGES.map((r) => {
+          const active = range === r.id;
+          return (
+            <Pressable
+              key={r.id}
+              onPress={() => setRange(r.id)}
+              style={[styles.pill, active ? styles.pillActive : styles.pillInactive]}
+              testID={`range-${r.id}`}
+            >
+              <Text style={[styles.pillText, { color: active ? colors.onBrandPrimary : colors.onSurface }]}>
+                {r.pillLabel}
+              </Text>
+            </Pressable>
+          );
+        })}
       </ScrollView>
 
       {/* Flujo de efectivo */}
@@ -159,7 +170,7 @@ export default function Reports() {
             >
               <View style={styles.tConcept}>
                 <Ionicons name={r.icon as any} size={15} color={colors.muted} />
-                <Text style={styles.tConceptText} numberOfLines={1}>{r.label}</Text>
+                <Text style={styles.tConceptText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{r.label}</Text>
               </View>
               <View style={styles.tCol}>
                 <Text style={[styles.tValue, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
@@ -190,15 +201,16 @@ export default function Reports() {
             <Ionicons name="wallet-outline" size={20} color={balance >= 0 ? colors.incomeGreen : colors.expenseRed} />
           </View>
           <View style={styles.netTextWrap}>
-            <Text style={styles.netTitle} numberOfLines={1}>Saldo neto del período</Text>
+            <Text style={styles.netTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Saldo neto del período</Text>
             <Text style={styles.netSub} numberOfLines={1}>Ingresos menos gastos</Text>
           </View>
+          <View style={styles.netVDivider} />
           <View style={styles.netCalc}>
-            <Text style={[styles.netInc, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+            <Text style={[styles.netInc, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55}>
               {formatCurrency(totalIncome)}
             </Text>
             <Text style={styles.netOp}>−</Text>
-            <Text style={[styles.netExp, { color: colors.expenseRed }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+            <Text style={[styles.netExp, { color: colors.expenseRed }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55}>
               {formatCurrency(totalExpense)}
             </Text>
             <Text style={styles.netOp}>=</Text>
@@ -206,7 +218,7 @@ export default function Reports() {
               style={[styles.netResult, { color: balance >= 0 ? colors.incomeGreen : colors.expenseRed }]}
               numberOfLines={1}
               adjustsFontSizeToFit
-              minimumFontScale={0.6}
+              minimumFontScale={0.55}
             >
               {balance < 0 ? "-" : ""}{formatCurrency(Math.abs(balance))}
             </Text>
@@ -295,7 +307,21 @@ const useStyles = makeStyles((colors, scheme) => ({
     borderColor: colors.border,
   },
   periodControlText: { fontSize: 12.5, fontWeight: "700", color: colors.onSurface, flexShrink: 1 },
-  chipRow: { paddingHorizontal: spacing.lg, gap: 8, marginTop: 10, height: 46, alignItems: "center" },
+  chipRow: { paddingHorizontal: spacing.lg, gap: 6, marginTop: 10, height: 40, alignItems: "center" },
+  // Compact period pills (Reports-local, so no other screen is affected)
+  pill: {
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    justifyContent: "center",
+  },
+  pillActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  pillInactive: {
+    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#F1EEE9",
+    borderColor: colors.border,
+  },
+  pillText: { fontSize: 12, fontWeight: "700" },
   card: {
     marginHorizontal: spacing.lg,
     marginTop: 10,
@@ -322,56 +348,63 @@ const useStyles = makeStyles((colors, scheme) => ({
   cardTitle: { fontSize: 15, fontWeight: "800", color: colors.onSurface },
   cardHeaderMeta: { fontSize: 11.5, color: colors.muted, fontWeight: "600", marginTop: 1 },
 
-  // --- Cash-flow table ---
+  // --- Cash-flow table (open, horizontal-divider style — no grid box) ---
   table: {
-    marginTop: 12,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: scheme === "dark" ? colors.border : "#E4DCD2",
-    overflow: "hidden",
+    marginTop: 10,
   },
-  tRow: { flexDirection: "row", alignItems: "stretch", minHeight: 44 },
-  tHeaderRow: { backgroundColor: scheme === "dark" ? colors.surfaceTertiary : "#ECE5DB" },
+  tRow: { flexDirection: "row", alignItems: "center", minHeight: 46 },
+  tHeaderRow: {
+    backgroundColor: scheme === "dark" ? colors.surfaceTertiary : "#ECE5DB",
+    borderRadius: 10,
+    minHeight: 40,
+  },
   tRowDivider: { borderBottomWidth: 1, borderBottomColor: colors.divider },
   tConcept: {
-    flex: 1.5,
+    flex: 1.95,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    paddingLeft: 8,
+    paddingRight: 4,
+    paddingVertical: 10,
   },
   tConceptText: { fontSize: 12.5, fontWeight: "600", color: colors.onSurface, flexShrink: 1 },
   tCol: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 6,
-    paddingVertical: 11,
-    borderLeftWidth: 1,
-    borderLeftColor: colors.divider,
+    paddingHorizontal: 2,
+    paddingVertical: 10,
   },
-  tHeaderText: { fontSize: 13, fontWeight: "800" },
+  tHeaderText: { fontSize: 12.5, fontWeight: "800" },
   tValue: { fontSize: 14.5, fontWeight: "800", letterSpacing: -0.3 },
 
   // --- Saldo neto del período panel ---
   netPanel: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 12,
+    marginTop: 14,
     borderRadius: radius.md,
     borderWidth: 1,
-    padding: 11,
+    paddingVertical: 12,
+    paddingHorizontal: 11,
   },
-  netIcon: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
-  netTextWrap: { marginLeft: 10, flexShrink: 1 },
-  netTitle: { fontSize: 13, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.2 },
-  netSub: { fontSize: 10.5, color: colors.muted, marginTop: 1 },
-  netCalc: { flexDirection: "row", alignItems: "center", gap: 5, marginLeft: "auto", flexShrink: 1 },
-  netInc: { fontSize: 15, fontWeight: "800", letterSpacing: -0.3 },
-  netExp: { fontSize: 15, fontWeight: "800", letterSpacing: -0.3 },
-  netOp: { fontSize: 14, fontWeight: "700", color: colors.muted },
-  netResult: { fontSize: 20, fontWeight: "800", letterSpacing: -0.5 },
+  netIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  netTextWrap: { marginLeft: 10, flex: 1, minWidth: 86 },
+  netTitle: { fontSize: 12.5, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.3 },
+  netSub: { fontSize: 10.5, color: colors.muted, marginTop: 2 },
+  netVDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    marginVertical: 2,
+    marginHorizontal: 8,
+    backgroundColor: colors.divider,
+  },
+  netCalc: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1 },
+  netInc: { fontSize: 14, fontWeight: "800", letterSpacing: -0.3, flexShrink: 1 },
+  netExp: { fontSize: 14, fontWeight: "800", letterSpacing: -0.3, flexShrink: 1 },
+  netOp: { fontSize: 13, fontWeight: "700", color: colors.muted },
+  netResult: { fontSize: 17.5, fontWeight: "800", letterSpacing: -0.5, flexShrink: 1 },
 
   // Ingresos vs Gastos footer
   ivgFooter: { flexDirection: "row", justifyContent: "space-around", marginTop: 6 },

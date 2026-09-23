@@ -7,11 +7,13 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatCurrency } from "@/src/format";
+import { useTranslation } from "@/src/i18n";
 import { IconTile } from "@/src/components/ui";
 import { LockToggle, useLock } from "@/src/lock";
 
 export default function Accounts() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -29,7 +31,7 @@ export default function Accounts() {
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
         </Pressable>
-        <Text style={styles.title}>Cuentas</Text>
+        <Text style={styles.title}>{t("accounts.title")}</Text>
         <LockToggle testID="lock-accounts" compact />
         <Pressable testID="add-account" onPress={() => router.push("/accounts/new")} style={[styles.backBtn, { backgroundColor: colors.brandPrimary }]}>
           <Ionicons name="add" size={22} color="#fff" />
@@ -37,7 +39,7 @@ export default function Accounts() {
       </View>
 
       <View style={styles.totalCard}>
-        <Text style={{ color: colors.muted, fontWeight: "700", fontSize: 12, textTransform: "uppercase" }}>Saldo total</Text>
+        <Text style={{ color: colors.muted, fontWeight: "700", fontSize: 12, textTransform: "uppercase" }}>{t("accounts.totalBalance")}</Text>
         <Text style={styles.totalAmount}>{formatCurrency(total)}</Text>
       </View>
 
@@ -52,7 +54,7 @@ export default function Accounts() {
             <IconTile icon={a.icon} tint={a.color} size={48} />
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.name}>{a.name}</Text>
-              <Text style={styles.sub}>{typeLabel(a.type)}</Text>
+              <Text style={styles.sub}>{t(`accounts.types.${a.type}`, { defaultValue: a.type })}</Text>
             </View>
             <Text style={styles.balance}>{formatCurrency(a.current_balance)}</Text>
           </Pressable>
@@ -60,14 +62,6 @@ export default function Accounts() {
       </View>
     </ScrollView>
   );
-}
-
-function typeLabel(t: string) {
-  const m: Record<string, string> = {
-    cash: "Efectivo", checking: "Corriente", savings: "Ahorro",
-    credit_card: "Tarjeta de crédito", wallet: "Wallet digital", other: "Otra",
-  };
-  return m[t] || t;
 }
 
 const useStyles = makeStyles((colors) => ({

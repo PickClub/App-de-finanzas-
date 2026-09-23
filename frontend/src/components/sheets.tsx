@@ -3,6 +3,7 @@ import { View, Text, Pressable, Modal, Animated, Easing, StyleSheet, Dimensions 
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, radius, spacing } from "@/src/theme";
+import { useTranslation } from "@/src/i18n";
 
 const { height: SCREEN_H } = Dimensions.get("window");
 
@@ -103,6 +104,7 @@ export function ConfirmSheet({
   confirmTestID?: string;
 }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const main = destructive ? colors.expenseRed : accent;
   return (
     <AppSheet visible={visible} onClose={onClose} testID="confirm-sheet">
@@ -116,7 +118,7 @@ export function ConfirmSheet({
           <Text style={s.primaryText}>{confirmLabel}</Text>
         </Pressable>
         <Pressable onPress={onClose} style={[s.cancelBtn, { backgroundColor: colors.surfaceTertiary }]}>
-          <Text style={[s.cancelText, { color: colors.onSurface }]}>Cancelar</Text>
+          <Text style={[s.cancelText, { color: colors.onSurface }]}>{t("common.cancel")}</Text>
         </Pressable>
       </View>
     </AppSheet>

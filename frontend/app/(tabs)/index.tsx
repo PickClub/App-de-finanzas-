@@ -9,7 +9,8 @@ import { useRouter } from "expo-router";
 
 import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing, type ThemeColors } from "@/src/theme";
-import { formatCurrency, formatCurrencyInt, formatDateLong } from "@/src/format";
+import { formatCurrency, formatCurrencyInt, formatDateLong, formatDateTime, translateCategoryName } from "@/src/format";
+import i18n, { useTranslation } from "@/src/i18n";
 import { IconTile } from "@/src/components/ui";
 import { LockToggle, useLock } from "@/src/lock";
 
@@ -84,7 +85,7 @@ function accountBars(accounts: any[], total: number, colors: ThemeColors, scheme
   // Home distribution preview shows a MAXIMUM of 5 accounts (top by balance).
   const sorted = [...positives].sort((a, b) => b.current_balance - a.current_balance).slice(0, 5);
   if (sorted.length === 0) {
-    return <Text style={{ color: colors.muted, fontSize: 10 }}>Sin cuentas</Text>;
+    return <Text style={{ color: colors.muted, fontSize: 10 }}>{i18n.t("home.noAccounts")}</Text>;
   }
   // Soft neutral track — clearly visible against the warm-white card surface.
   const track = scheme === "dark" ? "#3A352F" : "#E5E9E3";
@@ -185,6 +186,7 @@ function SectionHeader({
   right?: React.ReactNode;
 }) {
   const { colors: baseColors, scheme } = useTheme();
+  const { t } = useTranslation();
   const colors = scheme === "dark" ? baseColors : ({ ...baseColors, ...HOME_LIGHT } as ThemeColors);
   const styles = useStyles();
   return (
@@ -200,7 +202,7 @@ function SectionHeader({
         {right}
         {onSeeAll && (
           <Pressable testID={seeAllTestID} onPress={onSeeAll} style={styles.seeAllBtn}>
-            <Text style={styles.seeAllText}>Ver todo</Text>
+            <Text style={styles.seeAllText}>{t("common.seeAll")}</Text>
             <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
           </Pressable>
         )}
@@ -209,24 +211,9 @@ function SectionHeader({
   );
 }
 
-// "17 sept, 3:24 p.m." — used only by the Movimientos recientes rows.
-function formatDateTime(iso: string): string {
-  try {
-    const d = new Date(iso);
-    const date = d.toLocaleDateString("es-ES", { day: "2-digit", month: "short" }).replace(".", "");
-    let h = d.getHours();
-    const m = d.getMinutes().toString().padStart(2, "0");
-    const ampm = h >= 12 ? "p.m." : "a.m.";
-    h = h % 12;
-    if (h === 0) h = 12;
-    return `${date}, ${h}:${m} ${ampm}`;
-  } catch {
-    return "";
-  }
-}
-
 export default function Home() {
   const { colors: baseColors, scheme } = useTheme();
+  const { t } = useTranslation();
   // Home-only light palette override (dark mode untouched).
   const colors = useMemo(
     () => (scheme === "dark" ? baseColors : ({ ...baseColors, ...HOME_LIGHT } as ThemeColors)),
@@ -299,10 +286,10 @@ export default function Home() {
   }, [txQ.data, summary?.month_income, summary?.month_expense]);
 
   const TX_FILTERS = [
-    { id: "all", label: "Todas", icon: "grid", color: colors.brandPrimary },
-    { id: "income", label: "Ingresos", icon: "trending-up", color: colors.incomeGreen },
-    { id: "expense", label: "Gastos", icon: "trending-down", color: colors.expenseRed },
-    { id: "transfer", label: "Transferencias", icon: "swap-horizontal", color: colors.accountsBlue },
+    { id: "all", label: t("home.filterAll"), icon: "grid", color: colors.brandPrimary },
+    { id: "income", label: t("home.filterIncome"), icon: "trending-up", color: colors.incomeGreen },
+    { id: "expense", label: t("home.filterExpenses"), icon: "trending-down", color: colors.expenseRed },
+    { id: "transfer", label: t("home.filterTransfers"), icon: "swap-horizontal", color: colors.accountsBlue },
   ] as const;
 
   return (
@@ -366,8 +353,8 @@ export default function Home() {
         <View style={{ paddingHorizontal: spacing.lg }}>
           <SectionHeader
             icon="wallet-outline"
-            title="Mis cuentas"
-            subtitle="Tus cuentas en un solo lugar"
+            title={t("home.myAccounts")}
+            subtitle={t("home.myAccountsSubtitle")}
             onSeeAll={() => router.push("/accounts")}
             seeAllTestID="see-all-accounts"
             right={
@@ -425,7 +412,7 @@ export default function Home() {
             style={[styles.walletAddCard, (accounts.length + 1) % 3 === 0 && styles.walletCardLast]}
           >
             <Ionicons name="add" size={22} color={colors.brandPrimary} />
-            <Text style={styles.walletAddText}>Agregar{"\n"}cuenta</Text>
+            <Text style={styles.walletAddText}>{t("home.addAccount")}</Text>
           </Pressable>
         </View>
       </View>
@@ -437,8 +424,8 @@ export default function Home() {
       <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
         <SectionHeader
           icon="stats-chart-outline"
-          title="Resumen del mes"
-          subtitle="Un vistazo rápido de tus finanzas"
+          title={t("home.monthSummary")}
+          subtitle={t("home.monthSummarySubtitle")}
           onSeeAll={() => router.push("/(tabs)/reports")}
           seeAllTestID="see-all-summary"
         />
@@ -453,11 +440,11 @@ export default function Home() {
                 <Ionicons name="arrow-up" size={14} color="#fff" />
               </View>
               <View style={styles.mcTopRight}>
-                <Text style={styles.miniSub}>Este mes</Text>
+                <Text style={styles.miniSub}>{t("home.thisMonth")}</Text>
                 <DragDots color={colors.muted} />
               </View>
             </View>
-            <Text style={styles.miniLabel}>Ingresos</Text>
+            <Text style={styles.miniLabel}>{t("home.income")}</Text>
             <Text
               style={[styles.miniAmount, { color: colors.incomeGreen }]}
               numberOfLines={1}
@@ -468,7 +455,7 @@ export default function Home() {
             </Text>
             <MiniBars data={stats.incBars} color={colors.incomeGreen} />
             <View style={styles.mcAvg}>
-              <Text style={styles.mcAvgLabel}>Promedio diario</Text>
+              <Text style={styles.mcAvgLabel}>{t("home.dailyAverage")}</Text>
               <Text style={styles.mcAvgVal}>{money(stats.avgIncome)}</Text>
             </View>
           </View>
@@ -478,11 +465,11 @@ export default function Home() {
                 <Ionicons name="arrow-down" size={14} color="#fff" />
               </View>
               <View style={styles.mcTopRight}>
-                <Text style={styles.miniSub}>Este mes</Text>
+                <Text style={styles.miniSub}>{t("home.thisMonth")}</Text>
                 <DragDots color={colors.muted} />
               </View>
             </View>
-            <Text style={styles.miniLabel}>Gastos</Text>
+            <Text style={styles.miniLabel}>{t("home.expenses")}</Text>
             <Text
               style={[styles.miniAmount, { color: colors.expenseRed }]}
               numberOfLines={1}
@@ -493,7 +480,7 @@ export default function Home() {
             </Text>
             <MiniBars data={stats.expBars} color={colors.expenseRed} />
             <View style={styles.mcAvg}>
-              <Text style={styles.mcAvgLabel}>Promedio diario</Text>
+              <Text style={styles.mcAvgLabel}>{t("home.dailyAverage")}</Text>
               <Text style={styles.mcAvgVal}>{money(stats.avgExpense)}</Text>
             </View>
           </View>
@@ -512,8 +499,8 @@ export default function Home() {
       <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}>
         <SectionHeader
           icon="wallet-outline"
-          title="Deudas"
-          subtitle="Tu panorama financiero, en un vistazo."
+          title={t("home.debts")}
+          subtitle={t("home.debtsSubtitle")}
           onSeeAll={() => router.push("/debts")}
           seeAllTestID="see-all-debts"
         />
@@ -566,7 +553,7 @@ export default function Home() {
                   <Ionicons name="arrow-up" size={14} color={colors.expenseRed} />
                 </View>
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.debtQuadLabel}>Debo</Text>
+                  <Text style={styles.debtQuadLabel}>{t("home.iOwe")}</Text>
                   <Text style={[styles.debtQuadValue, { color: colors.expenseRed }]} numberOfLines={1} adjustsFontSizeToFit>
                     {debtMoney(summary?.debts?.i_owe || 0)}
                   </Text>
@@ -580,7 +567,7 @@ export default function Home() {
                   <Ionicons name="arrow-down" size={14} color={colors.incomeGreen} />
                 </View>
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.debtQuadLabel}>Me deben</Text>
+                  <Text style={styles.debtQuadLabel}>{t("home.owedToMe")}</Text>
                   <Text style={[styles.debtQuadValue, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit>
                     {debtMoney(summary?.debts?.they_owe || 0)}
                   </Text>
@@ -599,11 +586,11 @@ export default function Home() {
                   <Ionicons name="card" size={14} color={colors.statsPurple} />
                 </View>
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.debtQuadLabel}>Pagado este mes</Text>
+                  <Text style={styles.debtQuadLabel}>{t("home.paidThisMonth")}</Text>
                   <Text style={[styles.debtQuadValue, { color: colors.statsPurple }]} numberOfLines={1} adjustsFontSizeToFit>
                     {debtMoney(summary?.debts?.paid_this_month || 0)}
                   </Text>
-                  <Text style={styles.debtQuadFoot}>¡Buen progreso!</Text>
+                  <Text style={styles.debtQuadFoot}>{t("home.goodProgress")}</Text>
                 </View>
               </View>
             </View>
@@ -614,7 +601,7 @@ export default function Home() {
                   <Ionicons name="calendar" size={14} color={colors.brandSecondary} />
                 </View>
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.debtQuadLabel}>Próximo pago</Text>
+                  <Text style={styles.debtQuadLabel}>{t("home.nextPayment")}</Text>
                   {summary?.debts?.next_payment ? (
                     <>
                       <Text style={styles.debtQuadDate} numberOfLines={1}>
@@ -623,10 +610,10 @@ export default function Home() {
                       <Text style={[styles.debtQuadValue, { color: colors.brandSecondary, fontSize: 15 }]} numberOfLines={1} adjustsFontSizeToFit>
                         {debtMoney(summary.debts.next_payment.amount)}
                       </Text>
-                      <Text style={styles.debtQuadFoot}>Mantén tus pagos al día</Text>
+                      <Text style={styles.debtQuadFoot}>{t("home.keepPaymentsUpToDate")}</Text>
                     </>
                   ) : (
-                    <Text style={styles.debtQuadFoot}>Sin próximos pagos</Text>
+                    <Text style={styles.debtQuadFoot}>{t("home.noUpcomingPayments")}</Text>
                   )}
                 </View>
               </View>
@@ -647,16 +634,16 @@ export default function Home() {
           </View>
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={styles.mrTitle} numberOfLines={1} ellipsizeMode="clip">
-              Movimientos <Text style={styles.mrTitleAccent}>recientes</Text>
+              {t("home.recentMovements")} <Text style={styles.mrTitleAccent}>{t("home.recentMovementsAccent")}</Text>
             </Text>
             <Text style={styles.mrSubtitle} numberOfLines={1}>
-              Aquí tienes tus últimos movimientos, en un vistazo.
+              {t("home.recentMovementsSubtitle")}
             </Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <LockToggle testID="lock-home" compact />
             <Pressable testID="see-all-tx" onPress={() => router.push("/(tabs)/transactions")} style={styles.seeAllBtn}>
-              <Text style={styles.seeAllText}>Ver todo</Text>
+              <Text style={styles.seeAllText}>{t("common.seeAll")}</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
             </Pressable>
           </View>
@@ -711,7 +698,7 @@ export default function Home() {
         <View style={styles.mrCard}>
           {recent.length === 0 && (
             <Text style={{ color: colors.muted, textAlign: "center", padding: spacing.lg }}>
-              Aún no hay movimientos
+              {t("home.noMovements")}
             </Text>
           )}
           {recent.map((t, idx) => {
@@ -723,7 +710,7 @@ export default function Home() {
             const iconName =
               cat?.icon || (isTransfer ? "swap-horizontal-outline" : isIncome ? "trending-up-outline" : "trending-down-outline");
             const tint = cat?.color || color;
-            const badgeLabel = cat?.name || (isTransfer ? "Transferencia" : isIncome ? "Ingreso" : "Gasto");
+            const badgeLabel = cat?.name ? translateCategoryName(cat.name) : (isTransfer ? t("txType.transfer") : isIncome ? t("txType.income") : t("txType.expense"));
             const badgeColor = cat?.color || color;
             return (
               <View key={t.id}>
@@ -764,8 +751,8 @@ export default function Home() {
               <Ionicons name="sparkles" size={17} color={scheme === "dark" ? colors.brandPrimary : "#147450"} />
             </View>
             <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={styles.aiTitle} numberOfLines={1}>Registra un gasto más rápido</Text>
-              <Text style={styles.aiSub} numberOfLines={1}>Usa el botón de IA o prueba con tu voz.</Text>
+              <Text style={styles.aiTitle} numberOfLines={1}>{t("home.aiBannerTitle")}</Text>
+              <Text style={styles.aiSub} numberOfLines={1}>{t("home.aiBannerSubtitle")}</Text>
             </View>
             <View style={styles.aiChevron}>
               <Ionicons name="chevron-forward" size={16} color={scheme === "dark" ? colors.brandPrimary : "#126047"} />

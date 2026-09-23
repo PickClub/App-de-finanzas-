@@ -5,14 +5,16 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, makeStyles, radius } from "@/src/theme";
+import { useTranslation } from "@/src/i18n";
 
 // Bottom-bar tab definitions (icons keep the app's existing solid Ionicons
 // language). Order is fixed: Cuentas · IA · (centro) · Informes · Más.
-const TAB_CONFIG: Record<string, { label: string; icon: string }> = {
-  index: { label: "Cuentas", icon: "home" },
-  transactions: { label: "IA", icon: "mic" },
-  reports: { label: "Informes", icon: "stats-chart" },
-  more: { label: "Más", icon: "grid" },
+// `labelKey` points at the i18n key; the visible label is translated at render.
+const TAB_CONFIG: Record<string, { labelKey: string; icon: string }> = {
+  index: { labelKey: "tabs.accounts", icon: "home" },
+  transactions: { labelKey: "tabs.ai", icon: "mic" },
+  reports: { labelKey: "tabs.reports", icon: "stats-chart" },
+  more: { labelKey: "tabs.more", icon: "grid" },
 };
 
 // Custom bottom navigation bar. Keeps every existing route/action; only the
@@ -20,6 +22,7 @@ const TAB_CONFIG: Record<string, { label: string; icon: string }> = {
 // height, integrated wallet+ center button, discreet coral selection dot).
 function CustomTabBar({ state, navigation, openMenu }: any) {
   const { colors, scheme } = useTheme();
+  const { t } = useTranslation();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const barBg = scheme === "dark" ? colors.surfaceSecondary : "#0B513C";
@@ -79,7 +82,7 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
             style={styles.item}
           >
             <Ionicons name={cfg.icon as any} size={22} color={tint} />
-            <Text style={[styles.label, { color: tint }]} numberOfLines={1}>{cfg.label}</Text>
+            <Text style={[styles.label, { color: tint }]} numberOfLines={1}>{t(cfg.labelKey)}</Text>
             <View style={[styles.dot, { backgroundColor: isFocused ? activeCol : "transparent" }]} />
           </Pressable>
         );
@@ -90,22 +93,23 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
 
 function QuickMenu({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = useStyles();
   const router = useRouter();
   const items = [
-    { icon: "trending-down-outline", label: "Gasto", color: colors.expenseRed, route: "/transactions/new?type=expense" },
-    { icon: "trending-up-outline", label: "Ingreso", color: colors.incomeGreen, route: "/transactions/new?type=income" },
-    { icon: "swap-horizontal-outline", label: "Transferencia", color: colors.accountsBlue, route: "/transactions/new?type=transfer" },
-    { icon: "card-outline", label: "Crear deuda", color: colors.statsPurple, route: "/debts/new?direction=i_owe" },
-    { icon: "hand-left-outline", label: "Registrar préstamo", color: colors.loansYellow, route: "/debts/new?direction=they_owe" },
-    { icon: "cash-outline", label: "Pago de deuda", color: colors.brandPrimary, route: "/debts" },
+    { icon: "trending-down-outline", label: t("quickAdd.expense"), color: colors.expenseRed, route: "/transactions/new?type=expense" },
+    { icon: "trending-up-outline", label: t("quickAdd.income"), color: colors.incomeGreen, route: "/transactions/new?type=income" },
+    { icon: "swap-horizontal-outline", label: t("quickAdd.transfer"), color: colors.accountsBlue, route: "/transactions/new?type=transfer" },
+    { icon: "card-outline", label: t("quickAdd.createDebt"), color: colors.statsPurple, route: "/debts/new?direction=i_owe" },
+    { icon: "hand-left-outline", label: t("quickAdd.registerLoan"), color: colors.loansYellow, route: "/debts/new?direction=they_owe" },
+    { icon: "cash-outline", label: t("quickAdd.debtPayment"), color: colors.brandPrimary, route: "/debts" },
   ];
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>Añadir rápido</Text>
+          <Text style={styles.sheetTitle}>{t("quickAdd.title")}</Text>
           <View style={styles.grid}>
             {items.map((it) => (
               <TouchableOpacity

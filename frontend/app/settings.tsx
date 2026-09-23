@@ -6,24 +6,34 @@ import { useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing, type ThemeMode } from "@/src/theme";
+import { useTranslation, useLang, type Lang } from "@/src/i18n";
+import { AppSheet } from "@/src/components/sheets";
 
 const CURRENCIES = ["USD", "EUR", "MXN", "COP", "ARS", "CLP"];
-const THEMES: { id: ThemeMode; label: string; icon: string }[] = [
-  { id: "light", label: "Claro", icon: "sunny-outline" },
-  { id: "dark", label: "Oscuro", icon: "moon-outline" },
-  { id: "system", label: "Sistema", icon: "phone-portrait-outline" },
-];
 
 export default function Settings() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const qc = useQueryClient();
   const { colors, mode, setMode } = useTheme();
+  const { t } = useTranslation();
+  const { lang, setLang } = useLang();
   const styles = useStyles();
   const q = useQuery({ queryKey: ["user"], queryFn: api.getUser });
 
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("USD");
+  const [langOpen, setLangOpen] = useState(false);
+
+  const THEMES: { id: ThemeMode; label: string; icon: string }[] = [
+    { id: "light", label: t("settings.themeLight"), icon: "sunny-outline" },
+    { id: "dark", label: t("settings.themeDark"), icon: "moon-outline" },
+    { id: "system", label: t("settings.themeSystem"), icon: "phone-portrait-outline" },
+  ];
+  const LANGUAGES: { id: Lang; label: string }[] = [
+    { id: "es", label: t("settings.spanish") },
+    { id: "en", label: t("settings.english") },
+  ];
 
   useEffect(() => {
     if (q.data) { setName(q.data.name || ""); setCurrency(q.data.currency || "USD"); }
@@ -41,13 +51,13 @@ export default function Settings() {
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
         </Pressable>
-        <Text style={styles.title}>Ajustes</Text>
+        <Text style={styles.title}>{t("settings.title")}</Text>
       </View>
 
-      <Text style={styles.label}>Nombre</Text>
-      <TextInput value={name} onChangeText={setName} placeholder="Tu nombre" placeholderTextColor={colors.muted} style={styles.input} />
+      <Text style={styles.label}>{t("settings.name")}</Text>
+      <TextInput value={name} onChangeText={setName} placeholder={t("settings.namePlaceholder")} placeholderTextColor={colors.muted} style={styles.input} />
 
-      <Text style={styles.label}>Moneda</Text>
+      <Text style={styles.label}>{t("settings.currency")}</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {CURRENCIES.map((c) => (
           <Pressable key={c} onPress={() => setCurrency(c)} style={[styles.currency, currency === c && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
@@ -56,7 +66,7 @@ export default function Settings() {
         ))}
       </View>
 
-      <Text style={styles.label}>Apariencia</Text>
+      <Text style={styles.label}>{t("settings.appearance")}</Text>
       <View style={{ flexDirection: "row", gap: 8 }}>
         {THEMES.map((t) => {
           const active = mode === t.id;
@@ -90,8 +100,20 @@ export default function Settings() {
         })}
       </View>
 
+      <Text style={styles.label}>{t("settings.language")}</Text>
+      <Pressable testID="language-row" onPress={() => setLangOpen(true)} style={styles.langRow}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <Ionicons name="language-outline" size={20} color={colors.onSurface} />
+          <Text style={styles.langRowLabel}>{t("settings.language")}</Text>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Text style={styles.langRowValue}>{lang === "es" ? t("settings.spanish") : t("settings.english")}</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+        </View>
+      </Pressable>
+
       <Pressable testID="save-settings" onPress={save} style={styles.saveBtn}>
-        <Text style={styles.saveText}>Guardar</Text>
+        <Text style={styles.saveText}>{t("common.save")}</Text>
       </Pressable>
 
       <Pressable
@@ -99,8 +121,26 @@ export default function Settings() {
         onPress={async () => { await api.seed(); qc.invalidateQueries(); }}
         style={[styles.saveBtn, { marginTop: 12, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border }]}
       >
-        <Text style={[styles.saveText, { color: colors.onSurface }]}>Restaurar datos de ejemplo</Text>
+        <Text style={[styles.saveText, { color: colors.onSurface }]}>{t("settings.restoreSampleData")}</Text>
       </Pressable>
+
+      <AppSheet visible={langOpen} onClose={() => setLangOpen(false)} testID="language-sheet">
+        <Text style={styles.sheetTitle}>{t("settings.chooseLanguage")}</Text>
+        {LANGUAGES.map((l) => {
+          const active = lang === l.id;
+          return (
+            <Pressable
+              key={l.id}
+              testID={`language-option-${l.id}`}
+              onPress={() => { setLang(l.id); setLangOpen(false); }}
+              style={styles.langOption}
+            >
+              <Text style={[styles.langOptionText, active && { color: colors.brandPrimary, fontWeight: "800" }]}>{l.label}</Text>
+              {active && <Ionicons name="checkmark" size={20} color={colors.brandPrimary} />}
+            </Pressable>
+          );
+        })}
+      </AppSheet>
     </ScrollView>
   );
 }
@@ -123,4 +163,17 @@ const useStyles = makeStyles((colors) => ({
   },
   saveBtn: { marginTop: 28, backgroundColor: colors.brandPrimary, padding: 16, borderRadius: radius.pill, alignItems: "center" },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  langRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: colors.surfaceSecondary, paddingHorizontal: 14, paddingVertical: 14,
+    borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border,
+  },
+  langRowLabel: { fontSize: 15, fontWeight: "700", color: colors.onSurface },
+  langRowValue: { fontSize: 14, fontWeight: "600", color: colors.muted },
+  sheetTitle: { fontSize: 18, fontWeight: "800", color: colors.onSurface, marginBottom: 8, marginTop: 2 },
+  langOption: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.divider,
+  },
+  langOptionText: { fontSize: 16, fontWeight: "600", color: colors.onSurface },
 }));

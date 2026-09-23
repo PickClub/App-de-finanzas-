@@ -15,6 +15,7 @@ import { ErrorBoundary } from "@/src/components/error-boundary";
 import { queryClient } from "@/src/query-client";
 import { ThemeProvider, useTheme } from "@/src/theme";
 import { LockProvider } from "@/src/lock";
+import { LanguageProvider } from "@/src/i18n";
 
 // Prewarm the icon fonts so bundled routes have icons on first render.
 import "@react-native-vector-icons/ionicons";
@@ -34,9 +35,11 @@ export default function RootLayout() {
 
   return (
     <ErrorBoundary>
-      <ThemeProvider>
-        <ThemedApp />
-      </ThemeProvider>
+      <LanguageProvider>
+        <ThemeProvider>
+          <ThemedApp />
+        </ThemeProvider>
+      </LanguageProvider>
     </ErrorBoundary>
   );
 }

@@ -4,6 +4,7 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useTheme, makeStyles, radius } from "@/src/theme";
+import { useTranslation } from "@/src/i18n";
 
 type Tile = {
   icon: string;
@@ -15,6 +16,7 @@ type Tile = {
 
 export default function More() {
   const { colors, scheme } = useTheme();
+  const { t } = useTranslation();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -26,20 +28,20 @@ export default function More() {
   const tileBg = (c: string) => c + (scheme === "dark" ? "22" : "16");
 
   const MONEY: Tile[] = [
-    { icon: "wallet-outline", label: "Cuentas", subtitle: "Gestiona tus cuentas bancarias y efectivo", color: colors.accountsBlue, route: "/accounts" },
-    { icon: "pricetag-outline", label: "Categorías", subtitle: "Personaliza tus ingresos y gastos", color: colors.brandSecondary, route: "/categories" },
-    { icon: "pie-chart-outline", label: "Presupuestos", subtitle: "Define límites y controla tus gastos", color: colors.expenseRed, route: "/budgets" },
-    { icon: "flag-outline", label: "Metas de ahorro", subtitle: "Establece y sigue tus objetivos", color: colors.savingsTurquoise, route: "/goals" },
-    { icon: "cash-outline", label: "Deudas y préstamos", subtitle: "Lleva el control de tus deudas", color: colors.loansYellow, route: "/debts" },
-    { icon: "sync-outline", label: "Pagos recurrentes", subtitle: "Administra tus suscripciones", color: colors.statsPurple },
+    { icon: "wallet-outline", label: t("more.accounts"), subtitle: t("more.subAccounts"), color: colors.accountsBlue, route: "/accounts" },
+    { icon: "pricetag-outline", label: t("more.categories"), subtitle: t("more.subCategories"), color: colors.brandSecondary, route: "/categories" },
+    { icon: "pie-chart-outline", label: t("more.budgets"), subtitle: t("more.subBudgets"), color: colors.expenseRed, route: "/budgets" },
+    { icon: "flag-outline", label: t("more.savingsGoals"), subtitle: t("more.subGoals"), color: colors.savingsTurquoise, route: "/goals" },
+    { icon: "cash-outline", label: t("more.debtsAndLoans"), subtitle: t("more.subDebts"), color: colors.loansYellow, route: "/debts" },
+    { icon: "sync-outline", label: t("more.recurringPayments"), subtitle: t("more.subRecurring"), color: colors.statsPurple },
   ];
 
   const APP: Tile[] = [
-    { icon: "settings-outline", label: "Ajustes", subtitle: "Preferencias de la app", color: colors.muted, route: "/settings" },
-    { icon: "shield-checkmark-outline", label: "Privacidad y seguridad", subtitle: "Tus datos siempre protegidos", color: colors.accountsBlue },
-    { icon: "help-circle-outline", label: "Centro de ayuda", subtitle: "Preguntas frecuentes y soporte", color: colors.success },
-    { icon: "star-outline", label: "Califica la app", subtitle: "Tu opinión nos ayuda a mejorar", color: colors.warning },
-    { icon: "information-circle-outline", label: "Acerca de MoneyFlow", subtitle: "Versión 1.0.0 · Hecho con amor", color: colors.info },
+    { icon: "settings-outline", label: t("more.settings"), subtitle: t("more.subSettings"), color: colors.muted, route: "/settings" },
+    { icon: "shield-checkmark-outline", label: t("more.privacySecurity"), subtitle: t("more.subPrivacy"), color: colors.accountsBlue },
+    { icon: "help-circle-outline", label: t("more.helpCenter"), subtitle: t("more.subHelp"), color: colors.success },
+    { icon: "star-outline", label: t("more.rateApp"), subtitle: t("more.subRate"), color: colors.warning },
+    { icon: "information-circle-outline", label: t("more.about"), subtitle: t("more.subAbout"), color: colors.info },
   ];
 
   const rows: Tile[][] = [
@@ -61,9 +63,9 @@ export default function More() {
         {/* Header */}
         <View style={styles.header}>
           <View style={{ flex: 1, paddingRight: 12 }}>
-            <Text style={styles.title}>Más</Text>
+            <Text style={styles.title}>{t("more.title")}</Text>
             <Text style={styles.subtitle}>
-              Todo lo que necesitas para personalizar tu experiencia en MoneyFlow.
+              {t("more.headerSubtitle")}
             </Text>
           </View>
           <Pressable
@@ -75,8 +77,8 @@ export default function More() {
               <Ionicons name="person" size={16} color={colors.brandPrimary} />
             </View>
             <View style={{ marginHorizontal: 8 }}>
-              <Text style={styles.profileHi}>Hola,</Text>
-              <Text style={styles.profileName}>Usuario</Text>
+              <Text style={styles.profileHi}>{t("more.greeting")}</Text>
+              <Text style={styles.profileName}>{t("more.defaultUser")}</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.muted} />
           </Pressable>
@@ -88,20 +90,20 @@ export default function More() {
             <Ionicons name="ribbon" size={26} color={colors.brandPrimary} />
           </View>
           <View style={{ flex: 1, marginHorizontal: 14 }}>
-            <Text style={styles.bannerTitle}>Saca más provecho de MoneyFlow</Text>
+            <Text style={styles.bannerTitle}>{t("more.premiumTitle")}</Text>
             <Text style={styles.bannerSub}>
-              Descubre funciones premium para alcanzar tus metas más rápido.
+              {t("more.premiumSubtitleFull")}
             </Text>
           </View>
           <View style={styles.bannerBtn}>
-            <Text style={styles.bannerBtnText}>Conocer más</Text>
+            <Text style={styles.bannerBtnText}>{t("more.learnMore")}</Text>
           </View>
         </Pressable>
 
         {/* Tu dinero */}
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Tu dinero</Text>
-          <Text style={styles.sectionHint}>Organiza hoy un mejor mañana</Text>
+          <Text style={styles.sectionTitle}>{t("more.yourMoney")}</Text>
+          <Text style={styles.sectionHint}>{t("more.moneyHint")}</Text>
         </View>
         <View style={styles.grid}>
           {rows.map((pair, ri) => (
@@ -129,8 +131,8 @@ export default function More() {
 
         {/* Aplicación */}
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Aplicación</Text>
-          <Text style={styles.sectionHint}>Personaliza tu experiencia</Text>
+          <Text style={styles.sectionTitle}>{t("more.application")}</Text>
+          <Text style={styles.sectionHint}>{t("more.appHint")}</Text>
         </View>
         <View style={styles.appCard}>
           {APP.map((it, i) => (
@@ -158,11 +160,11 @@ export default function More() {
             <Ionicons name="bulb-outline" size={22} color={colors.success} />
           </View>
           <View style={{ flex: 1, marginHorizontal: 14 }}>
-            <Text style={styles.suggTitle} numberOfLines={2}>¿Tienes alguna sugerencia?</Text>
-            <Text style={styles.suggSub} numberOfLines={2}>Nos encantaría escucharla.</Text>
+            <Text style={styles.suggTitle} numberOfLines={2}>{t("more.suggestionTitle")}</Text>
+            <Text style={styles.suggSub} numberOfLines={2}>{t("more.suggestionSubFull")}</Text>
           </View>
           <View style={styles.suggBtn}>
-            <Text style={styles.suggBtnText}>Enviar</Text>
+            <Text style={styles.suggBtnText}>{t("more.send")}</Text>
           </View>
         </Pressable>
       </ScrollView>

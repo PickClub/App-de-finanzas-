@@ -22,7 +22,11 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
   const { colors, scheme } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const barBg = scheme === "dark" ? colors.surfaceSecondary : "#FBF6EC";
+  const barBg = scheme === "dark" ? colors.surfaceSecondary : "#0B513C";
+  // Light mode: dark-green anchored bar with light icons/labels.
+  const activeCol = scheme === "dark" ? colors.brandPrimary : "#FFFFFF";
+  const inactiveCol = scheme === "dark" ? colors.muted : "#DCE5DF";
+  const centerIconCol = scheme === "dark" ? colors.brandPrimary : "#0D5A43";
 
   return (
     <View style={[styles.bar, { backgroundColor: barBg, paddingBottom: Math.max(insets.bottom, 6) }]}>
@@ -44,9 +48,9 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
                 style={({ pressed }) => [styles.centerBtn, pressed && { transform: [{ scale: 0.94 }] }]}
               >
                 <View style={styles.centerCircle}>
-                  <Ionicons name="wallet" size={22} color={colors.brandPrimary} />
+                  <Ionicons name="wallet" size={22} color={centerIconCol} />
                   <View style={styles.plusBadge}>
-                    <Ionicons name="add" size={11} color={colors.onBrandPrimary} />
+                    <Ionicons name="add" size={11} color="#FFFFFF" />
                   </View>
                 </View>
               </Pressable>
@@ -56,7 +60,7 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
 
         const cfg = TAB_CONFIG[route.name];
         if (!cfg) return <View key={route.key} style={styles.item} />;
-        const tint = isFocused ? colors.brandPrimary : colors.muted;
+        const tint = isFocused ? activeCol : inactiveCol;
 
         const onPress = () => {
           const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
@@ -76,7 +80,7 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
           >
             <Ionicons name={cfg.icon as any} size={22} color={tint} />
             <Text style={[styles.label, { color: tint }]} numberOfLines={1}>{cfg.label}</Text>
-            <View style={[styles.dot, { backgroundColor: isFocused ? colors.brandPrimary : "transparent" }]} />
+            <View style={[styles.dot, { backgroundColor: isFocused ? activeCol : "transparent" }]} />
           </Pressable>
         );
       })}
@@ -182,7 +186,9 @@ const useStyles = makeStyles((colors, scheme) => ({
     height: 42,
     borderRadius: 21,
     marginTop: -2,
-    backgroundColor: colors.brandPrimary + "1F",
+    backgroundColor: scheme === "dark" ? colors.brandPrimary + "1F" : "#F6F8F2",
+    borderWidth: scheme === "dark" ? 0 : 2,
+    borderColor: "#77B76D",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -193,11 +199,11 @@ const useStyles = makeStyles((colors, scheme) => ({
     width: 15,
     height: 15,
     borderRadius: 7.5,
-    backgroundColor: colors.brandPrimary,
+    backgroundColor: scheme === "dark" ? colors.brandPrimary : "#0D5A43",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,
-    borderColor: scheme === "dark" ? colors.surfaceSecondary : "#FBF6EC",
+    borderColor: scheme === "dark" ? colors.surfaceSecondary : "#0B513C",
   },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" },
   sheet: {

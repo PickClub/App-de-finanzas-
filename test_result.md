@@ -359,6 +359,18 @@ frontend:
           agent: "testing"
           comment: "⚠️ TESTED ON WEB ONLY (NOT ANDROID). PLATFORM: Web browser (localhost:3000). CRITICAL LIMITATION: The reported bug is Android-specific (JS stack horizontal pan gesture intercepting vertical ScrollView touches). On web, ScrollViews already worked correctly before the fix. The actual Android touch-scroll behavior CANNOT be verified in a web browser and requires testing on an Android device or emulator. IMPLEMENTATION VERIFIED: ✓ Code review confirms Stack is now imported from 'expo-router' (line 5 of app/_layout.tsx), NOT from internal JSStack. ✓ screenOptions include animation='slide_from_right', animationDuration:220, gestureEnabled:true, fullScreenGestureEnabled:false. ✓ Internal JSStack import removed. WEB TEST RESULTS (7 acceptance criteria): [1] SCROLL /debts: PASS - navigated to /debts successfully, content fits in viewport (1080px height), no scrolling needed in current empty state. [2] SCROLL /accounts/new: PASS - opened new account form, all elements visible including Guardar button, form fits in viewport. [3] HORIZONTAL CHIPS: PASS - filter chips (Todos/Activos/Pagados/Yo debo/Me deben) present on /debts, fit in viewport. [4] BACK NAVIGATION: PARTIAL - back button present and functional in manual inspection of screenshots, automated test had timing issues. [5] TRANSITIONS: PARTIAL - screens load without blank screens, slide animation present (cannot verify 220ms timing or smoothness in static screenshots). [6] FLIP CARD: NOT TESTED - debt summary card visible in screenshot with testID='debt-summary-flip', but flip interaction not tested due to navigation issues in automated test. [7] NO REGRESSIONS: PASS - app loads cleanly, no red-box errors, all screens render correctly (Más tab, Deudas screen, Cuentas screen, Nueva cuenta form all functional). CONCLUSION: Implementation change is correct and web behavior is functional. However, the Android-specific bug fix (preventing horizontal pan gesture from intercepting vertical scroll) CANNOT be verified without testing on Android. Recommend testing on Android device/emulator to confirm the touch-scroll behavior is fixed."
 
+  - task: "Home/dashboard premium color redesign (sage wall, rich account cards, green identity) — light mode only"
+    implemented: true
+    working: "NA"
+    file: "app/(tabs)/index.tsx, app/(tabs)/_layout.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "COLOR-ONLY redesign of Home (no layout/text/data/logic changes). Home-local light palette SHADOWS global tokens ONLY on Home in light mode (dark mode + other screens untouched). Wall #E8EFE7; warm-white #FCFCF8; text #15251E/#68746D; green accent #126046; tiles #DCE9DD; Ver todo #DFEBDD. Account cards use Home-only name->color map (Chase #0C5C46, Efectivo #C6952C, Ahorros #176F78, Cuenta 2 #678E58, Cuenta 6 #E2763E) fallback to real color; distribution bars reuse same per-account color. Ingresos #ECF6F0, Gastos #F8ECE8. Debt card white w/ semantic tiles. Active filter solid green #146448. AI banner #E5F1E7. Bottom nav (shared (tabs)/_layout.tsx) recolored dark green #0B513C LIGHT mode only, geometry unchanged (shows on all tabs since shared — flagged to user). Verified on WEB screenshot: renders, no layout shift, data intact, 'Cuenta 2' moss green confirms map. Dark mode preserved. Android to be verified by user."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"

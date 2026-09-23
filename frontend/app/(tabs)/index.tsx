@@ -13,6 +13,42 @@ import { formatCurrency, formatCurrencyInt, formatDateLong } from "@/src/format"
 import { IconTile } from "@/src/components/ui";
 import { LockToggle, useLock } from "@/src/lock";
 
+// --- HOME-ONLY color redesign (light mode only) ---------------------------
+// These tokens SHADOW the global theme ONLY on the Home screen in light mode,
+// so no other screen/tab is affected and dark mode keeps its existing look.
+// They map onto existing theme-token keys so the many `colors.*` references in
+// this file automatically pick up the new premium sage/green identity.
+const HOME_LIGHT: Partial<ThemeColors> = {
+  onSurface: "#15251E", // strong dark green-black titles/values
+  muted: "#68746D", // muted gray-green secondary text
+  brandPrimary: "#126046", // green becomes the Home accent (was coral)
+  onBrandPrimary: "#FFFFFF",
+  brandSecondary: "#E66B27", // warm burnt-orange accent (próximo pago)
+  statsPurple: "#7546D7",
+  accountsBlue: "#377FC4",
+  incomeGreen: "#138B66",
+  expenseRed: "#D84D45",
+  border: "rgba(39,71,56,0.10)",
+  borderStrong: "rgba(39,71,56,0.14)",
+  divider: "#E4E7E2",
+  surfaceSecondary: "#FCFCF8", // warm white surfaces
+};
+
+// Rich, distinctive per-account identity colors (Home light mode only). Keyed
+// by lowercased account name; unknown accounts fall back to their real color.
+const HOME_ACCOUNT_COLORS: Record<string, string> = {
+  "chase checking": "#0C5C46", // deep emerald
+  efectivo: "#C6952C", // premium gold
+  ahorros: "#176F78", // blue-teal
+  "cuenta 2": "#678E58", // moss green
+  "cuenta 6": "#E2763E", // burnt orange
+};
+function homeAccountColor(a: any, scheme: string): string {
+  if (scheme === "dark") return a?.color;
+  const key = (a?.name || "").trim().toLowerCase();
+  return HOME_ACCOUNT_COLORS[key] || a?.color;
+}
+
 // --- Color helpers (visual-only) for the account cards. Blend a hex color
 // toward white (lighten) or black (darken) to build subtle gradients and the
 // slightly darker arrow button, without touching any data. ---
@@ -50,9 +86,10 @@ function accountBars(accounts: any[], total: number, colors: ThemeColors, scheme
   if (sorted.length === 0) {
     return <Text style={{ color: colors.muted, fontSize: 10 }}>Sin cuentas</Text>;
   }
-  // Soft neutral gray track — clearly visible against the greige card surface.
-  const track = scheme === "dark" ? "#3A352F" : "#DED6CB";
+  // Soft neutral track — clearly visible against the warm-white card surface.
+  const track = scheme === "dark" ? "#3A352F" : "#E5E9E3";
   return sorted.map((a) => {
+    const ac = homeAccountColor(a, scheme);
     const pct = base > 0 ? Math.round((a.current_balance / base) * 100) : 0;
     return (
       <View key={a.id}>
@@ -60,7 +97,7 @@ function accountBars(accounts: any[], total: number, colors: ThemeColors, scheme
           <Text style={{ flexShrink: 1, fontSize: 10, fontWeight: "700", color: colors.onSurface }} numberOfLines={1}>
             {a.name}
           </Text>
-          <Text style={{ fontSize: 10, fontWeight: "800", color: a.color, marginLeft: 4 }}>{pct}%</Text>
+          <Text style={{ fontSize: 10, fontWeight: "800", color: ac, marginLeft: 4 }}>{pct}%</Text>
         </View>
         <View
           style={{
@@ -71,7 +108,7 @@ function accountBars(accounts: any[], total: number, colors: ThemeColors, scheme
             overflow: "hidden",
           }}
         >
-          <View style={{ width: `${Math.max(6, pct)}%`, height: "100%", backgroundColor: a.color, borderRadius: 4.5 }} />
+          <View style={{ width: `${Math.max(6, pct)}%`, height: "100%", backgroundColor: ac, borderRadius: 4.5 }} />
         </View>
       </View>
     );
@@ -147,7 +184,8 @@ function SectionHeader({
   seeAllTestID?: string;
   right?: React.ReactNode;
 }) {
-  const { colors } = useTheme();
+  const { colors: baseColors, scheme } = useTheme();
+  const colors = scheme === "dark" ? baseColors : ({ ...baseColors, ...HOME_LIGHT } as ThemeColors);
   const styles = useStyles();
   return (
     <View style={styles.mrHeader}>
@@ -188,7 +226,12 @@ function formatDateTime(iso: string): string {
 }
 
 export default function Home() {
-  const { colors, scheme } = useTheme();
+  const { colors: baseColors, scheme } = useTheme();
+  // Home-only light palette override (dark mode untouched).
+  const colors = useMemo(
+    () => (scheme === "dark" ? baseColors : ({ ...baseColors, ...HOME_LIGHT } as ThemeColors)),
+    [baseColors, scheme],
+  );
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -263,7 +306,7 @@ export default function Home() {
   ] as const;
 
   return (
-    <View style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#F3E8DC" }}>
+    <View style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#E8EFE7" }}>
     <ScrollView
       testID="home-scroll"
       style={{ flex: 1, backgroundColor: "transparent" }}
@@ -337,16 +380,17 @@ export default function Home() {
         <View style={styles.walletGrid}>
           {accounts.map((a, idx) => {
             const isThird = (idx + 1) % 3 === 0;
+            const ac = homeAccountColor(a, scheme);
             return (
               <Pressable
                 key={a.id}
                 testID={`wallet-${a.id}`}
                 onPress={guard(() => router.push(`/accounts/new?id=${a.id}`))}
-                style={[styles.walletCard, { backgroundColor: a.color }, isThird && styles.walletCardLast]}
+                style={[styles.walletCard, { backgroundColor: ac }, isThird && styles.walletCardLast]}
               >
                 <View style={styles.walletInner}>
                   <LinearGradient
-                    colors={[lighten(a.color, 0.16), a.color, darken(a.color, 0.06)]}
+                    colors={[lighten(ac, 0.16), ac, darken(ac, 0.06)]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={StyleSheet.absoluteFill}
@@ -354,14 +398,14 @@ export default function Home() {
                   <Ionicons
                     name={a.icon as any}
                     size={58}
-                    color="rgba(255,255,255,0.15)"
+                    color="rgba(255,255,255,0.12)"
                     style={styles.walletWatermark}
                   />
                   <View style={styles.walletTopRow}>
                     <View style={styles.walletIconBox}>
                       <Ionicons name={a.icon as any} size={14} color="#fff" />
                     </View>
-                    <View style={[styles.walletArrow, { backgroundColor: darken(a.color, 0.16) }]}>
+                    <View style={[styles.walletArrow, { backgroundColor: darken(ac, 0.16) }]}>
                       <Ionicons name="chevron-forward" size={12} color="#fff" />
                     </View>
                   </View>
@@ -635,7 +679,7 @@ export default function Home() {
             return active ? (
               <Pressable key={f.id} testID={`mr-filter-${f.id}`} onPress={() => setTxFilter(f.id)}>
                 <LinearGradient
-                  colors={[colors.brandPrimary, colors.brandSecondary]}
+                  colors={scheme === "dark" ? [colors.brandPrimary, colors.brandSecondary] : ["#16694A", "#146448"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.mrPill}
@@ -711,20 +755,20 @@ export default function Home() {
         {/* AI banner — taps through to the IA tab (same route as the mic in the bottom nav) */}
         <Pressable testID="ai-banner" onPress={() => router.push("/(tabs)/transactions")} style={{ marginTop: 8 }}>
           <LinearGradient
-            colors={[colors.brandPrimary + "1F", colors.statsPurple + "1F"]}
+            colors={scheme === "dark" ? [colors.brandPrimary + "1F", colors.statsPurple + "1F"] : ["#E5F1E7", "#E5F1E7"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.aiBanner}
           >
             <View style={styles.aiIcon}>
-              <Ionicons name="sparkles" size={17} color={colors.brandPrimary} />
+              <Ionicons name="sparkles" size={17} color={scheme === "dark" ? colors.brandPrimary : "#147450"} />
             </View>
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={styles.aiTitle} numberOfLines={1}>Registra un gasto más rápido</Text>
               <Text style={styles.aiSub} numberOfLines={1}>Usa el botón de IA o prueba con tu voz.</Text>
             </View>
             <View style={styles.aiChevron}>
-              <Ionicons name="chevron-forward" size={16} color={colors.brandPrimary} />
+              <Ionicons name="chevron-forward" size={16} color={scheme === "dark" ? colors.brandPrimary : "#126047"} />
             </View>
           </LinearGradient>
         </Pressable>
@@ -735,10 +779,20 @@ export default function Home() {
 }
 
 const useStyles = makeStyles((colors, scheme) => {
-  // Home-only surface refinement: warm greige (not pure white) for the main
-  // neutral cards in light mode, so they separate from the beige page
-  // background without harsh white contrast. Dark mode keeps its card color.
-  const cardSurface = scheme === "dark" ? colors.surfaceSecondary : "#F1EEE9";
+  // Home-only light palette (dark keeps its existing card color). Warm-white
+  // surfaces pop against the sage page background; text is dark green-black.
+  const isDark = scheme === "dark";
+  const cardSurface = isDark ? colors.surfaceSecondary : "#FCFCF8";
+  const wallText = isDark ? colors.onSurface : "#15251E";
+  const wallMuted = isDark ? colors.muted : "#68746D";
+  const wallSub = isDark ? colors.muted : "#8B958F";
+  const lineSoft = isDark ? colors.border : "rgba(39,71,56,0.10)";
+  const dividerSoft = isDark ? colors.divider : "#E4E7E2";
+  const tileGreen = isDark ? colors.brandPrimary + "1A" : "#DCE9DD";
+  const accentGreen = isDark ? colors.brandPrimary : "#126046";
+  const seePill = isDark ? colors.brandPrimary + "14" : "#DFEBDD";
+  const chipIdle = isDark ? colors.surfaceSecondary : "#FCFCF8";
+  const chipIdleBorder = isDark ? colors.border : "#D9DED8";
   return {
   header: {
     flexDirection: "row",
@@ -750,16 +804,16 @@ const useStyles = makeStyles((colors, scheme) => {
   sub: { fontSize: 13, color: colors.muted, marginTop: 2 },
   roundIcon: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: colors.border,
+    backgroundColor: cardSurface, alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: lineSoft,
   },
   avatar: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center",
+    backgroundColor: isDark ? colors.brandPrimary : "#0B5941", alignItems: "center", justifyContent: "center",
   },
   balanceIconTile: {
     width: 44, height: 44, borderRadius: 14,
-    backgroundColor: colors.brandPrimary + "1A",
+    backgroundColor: tileGreen,
     alignItems: "center", justifyContent: "center",
   },
   balanceBlock: {
@@ -773,7 +827,7 @@ const useStyles = makeStyles((colors, scheme) => {
     flexShrink: 1,
     fontSize: 30,
     fontWeight: "800",
-    color: colors.onSurface,
+    color: wallText,
     letterSpacing: -0.8,
   },
   growthRow: {
@@ -792,7 +846,7 @@ const useStyles = makeStyles((colors, scheme) => {
     height: 1,
     marginHorizontal: "15%",
     marginTop: spacing.md,
-    backgroundColor: colors.borderStrong,
+    backgroundColor: isDark ? colors.borderStrong : "rgba(39,71,56,0.12)",
     opacity: scheme === "dark" ? 0.5 : 0.6,
   },
   balanceCard: {
@@ -868,7 +922,7 @@ const useStyles = makeStyles((colors, scheme) => {
     width: 26,
     height: 26,
     borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.22)",
+    backgroundColor: "rgba(255,255,255,0.16)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -899,14 +953,14 @@ const useStyles = makeStyles((colors, scheme) => {
     backgroundColor: cardSurface,
     borderWidth: 2,
     borderStyle: "dashed",
-    borderColor: colors.brandPrimary,
+    borderColor: isDark ? colors.brandPrimary : "#0D684C",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 6,
   },
   walletAddText: {
-    color: colors.brandPrimary,
+    color: isDark ? colors.brandPrimary : "#0D684C",
     fontWeight: "800",
     fontSize: 11,
     lineHeight: 14,
@@ -935,28 +989,27 @@ const useStyles = makeStyles((colors, scheme) => {
     paddingVertical: 12,
     paddingHorizontal: 12,
     justifyContent: "center",
-    // Distinct warm greige surface — visibly separated from the beige page
-    // background and the whiter income/expense tints (not pure white).
-    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#EAE3D9",
-    borderColor: scheme === "dark" ? colors.border : "#E1D9CE",
+    // Warm-white distribution card — pops against the sage page background.
+    backgroundColor: isDark ? colors.surfaceSecondary : "#FCFCF8",
+    borderColor: lineSoft,
   },
   miniCard: {
     backgroundColor: cardSurface,
     borderRadius: radius.cardLg,
     padding: 12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: lineSoft,
     minHeight: 148,
   },
   cardIncome: {
-    backgroundColor: colors.incomeGreen + "14",
-    borderColor: colors.incomeGreen + "33",
+    backgroundColor: isDark ? colors.incomeGreen + "14" : "#ECF6F0",
+    borderColor: isDark ? colors.incomeGreen + "33" : "#BBDDCB",
     padding: 10,
     justifyContent: "space-between",
   },
   cardExpense: {
-    backgroundColor: colors.expenseRed + "14",
-    borderColor: colors.expenseRed + "33",
+    backgroundColor: isDark ? colors.expenseRed + "14" : "#F8ECE8",
+    borderColor: isDark ? colors.expenseRed + "33" : "#E7C7C0",
     padding: 10,
     justifyContent: "space-between",
   },
@@ -967,22 +1020,22 @@ const useStyles = makeStyles((colors, scheme) => {
     alignItems: "center",
     justifyContent: "center",
   },
-  miniLabel: { fontSize: 12, color: colors.muted, marginTop: 4, fontWeight: "700" },
+  miniLabel: { fontSize: 12, color: wallMuted, marginTop: 4, fontWeight: "700" },
   miniAmount: { fontSize: 14, fontWeight: "800", marginTop: 2 },
-  miniSub: { fontSize: 9, color: colors.muted, marginTop: 2, fontWeight: "600" },
+  miniSub: { fontSize: 9, color: wallMuted, marginTop: 2, fontWeight: "600" },
   mcTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   mcTopRight: { alignItems: "flex-end", gap: 3 },
   mcAvg: { marginTop: 2 },
-  mcAvgLabel: { fontSize: 9, color: colors.muted, fontWeight: "600" },
-  mcAvgVal: { fontSize: 13, fontWeight: "800", color: colors.onSurface, marginTop: 1 },
+  mcAvgLabel: { fontSize: 9, color: wallMuted, fontWeight: "600" },
+  mcAvgVal: { fontSize: 13, fontWeight: "800", color: wallText, marginTop: 1 },
   debtCard: {
     backgroundColor: cardSurface,
     borderRadius: radius.cardLg,
     padding: 13,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: lineSoft,
     overflow: "hidden",
-    shadowColor: "#000",
+    shadowColor: "#274738",
     shadowOpacity: 0.06,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
@@ -1031,12 +1084,12 @@ const useStyles = makeStyles((colors, scheme) => {
     alignItems: "center",
     justifyContent: "center",
   },
-  debtQuadLabel: { fontSize: 10, color: colors.muted, fontWeight: "500" },
+  debtQuadLabel: { fontSize: 10, color: wallMuted, fontWeight: "500" },
   debtQuadValue: { fontSize: 18, fontWeight: "800", marginTop: 2, letterSpacing: -0.5 },
-  debtQuadFoot: { fontSize: 8, color: colors.muted, marginTop: 2, fontWeight: "500" },
-  debtQuadDate: { fontSize: 10, color: colors.onSurface, fontWeight: "700", marginTop: 2 },
-  debtVDivider: { width: 1, backgroundColor: colors.divider, marginVertical: 4 },
-  debtHDivider: { height: 1, backgroundColor: colors.divider, marginTop: 11 },
+  debtQuadFoot: { fontSize: 8, color: wallSub, marginTop: 2, fontWeight: "500" },
+  debtQuadDate: { fontSize: 10, color: wallText, fontWeight: "700", marginTop: 2 },
+  debtVDivider: { width: 1, backgroundColor: dividerSoft, marginVertical: 4 },
+  debtHDivider: { height: 1, backgroundColor: dividerSoft, marginTop: 11 },
   debtLabel: { fontSize: 12, color: colors.muted, fontWeight: "400" },
   debtValue: { fontSize: 18, fontWeight: "600", marginTop: 4, letterSpacing: -0.3 },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
@@ -1061,19 +1114,19 @@ const useStyles = makeStyles((colors, scheme) => {
   mrHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
   mrIconTile: {
     width: 38, height: 38, borderRadius: 13,
-    backgroundColor: colors.brandPrimary + "1A",
+    backgroundColor: tileGreen,
     alignItems: "center", justifyContent: "center",
   },
-  mrTitle: { fontSize: 18, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.4 },
-  mrTitleAccent: { color: colors.brandPrimary, fontWeight: "800" },
-  mrSubtitle: { fontSize: 11.5, color: colors.muted, marginTop: 1 },
+  mrTitle: { fontSize: 18, fontWeight: "800", color: wallText, letterSpacing: -0.4 },
+  mrTitleAccent: { color: isDark ? colors.brandPrimary : "#168460", fontWeight: "800" },
+  mrSubtitle: { fontSize: 11.5, color: wallMuted, marginTop: 1 },
   seeAllBtn: {
     flexDirection: "row", alignItems: "center", gap: 2,
     paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: radius.pill,
-    backgroundColor: colors.brandPrimary + "14",
+    backgroundColor: seePill,
   },
-  seeAllText: { color: colors.brandPrimary, fontWeight: "800", fontSize: 12 },
+  seeAllText: { color: accentGreen, fontWeight: "800", fontSize: 12 },
   mrFilterRow: { flexDirection: "row", gap: 6, paddingVertical: 2, paddingRight: 4, marginBottom: 10 },
   mrPill: {
     flexDirection: "row", alignItems: "center", gap: 5,
@@ -1081,21 +1134,21 @@ const useStyles = makeStyles((colors, scheme) => {
     flexShrink: 0,
   },
   mrPillIdle: {
-    backgroundColor: colors.surfaceSecondary,
-    borderWidth: 1, borderColor: colors.border,
+    backgroundColor: chipIdle,
+    borderWidth: 1, borderColor: chipIdleBorder,
   },
-  mrPillText: { fontSize: 12, fontWeight: "700", color: colors.onSurface },
+  mrPillText: { fontSize: 12, fontWeight: "700", color: isDark ? colors.onSurface : "#26352E" },
   mrPillTextActive: { color: "#fff" },
   mrIconPill: {
     width: 32, height: 32, borderRadius: radius.pill,
     alignItems: "center", justifyContent: "center",
-    backgroundColor: colors.surfaceSecondary,
-    borderWidth: 1, borderColor: colors.border,
+    backgroundColor: chipIdle,
+    borderWidth: 1, borderColor: chipIdleBorder,
     flexShrink: 0,
   },
   mrIconPillActive: {
-    backgroundColor: colors.brandPrimary + "1A",
-    borderColor: colors.brandPrimary + "55",
+    backgroundColor: tileGreen,
+    borderColor: isDark ? colors.brandPrimary + "55" : "#BAD7C2",
   },
   mrCard: {
     backgroundColor: cardSurface,
@@ -1103,18 +1156,18 @@ const useStyles = makeStyles((colors, scheme) => {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: "#000",
+    borderColor: lineSoft,
+    shadowColor: "#274738",
     shadowOpacity: 0.05,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 5 },
     elevation: 3,
   },
   mrRow: { flexDirection: "row", alignItems: "center", paddingVertical: 9, paddingHorizontal: 4 },
-  mrDivider: { height: 1, backgroundColor: colors.divider, marginLeft: 50, marginRight: 4 },
-  mrName: { color: colors.onSurface, fontWeight: "800", fontSize: 13.5, letterSpacing: -0.2 },
+  mrDivider: { height: 1, backgroundColor: dividerSoft, marginLeft: 50, marginRight: 4 },
+  mrName: { color: wallText, fontWeight: "800", fontSize: 13.5, letterSpacing: -0.2 },
   mrTimeRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
-  mrTime: { color: colors.muted, fontSize: 11 },
+  mrTime: { color: wallMuted, fontSize: 11 },
   mrBadge: {
     paddingHorizontal: 8, paddingVertical: 3,
     borderRadius: radius.pill, marginHorizontal: 6, flexShrink: 1,
@@ -1124,18 +1177,18 @@ const useStyles = makeStyles((colors, scheme) => {
   aiBanner: {
     flexDirection: "row", alignItems: "center",
     padding: 10, borderRadius: radius.cardLg,
-    borderWidth: 1, borderColor: colors.brandPrimary + "3D",
+    borderWidth: 1, borderColor: isDark ? colors.brandPrimary + "3D" : "#BAD7C2",
   },
   aiIcon: {
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: colors.brandPrimary + "26",
+    backgroundColor: isDark ? colors.brandPrimary + "26" : "#CDE5D3",
     alignItems: "center", justifyContent: "center",
   },
-  aiTitle: { fontSize: 13.5, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.2 },
-  aiSub: { fontSize: 11.5, color: colors.muted, marginTop: 1 },
+  aiTitle: { fontSize: 13.5, fontWeight: "800", color: isDark ? colors.onSurface : "#193126", letterSpacing: -0.2 },
+  aiSub: { fontSize: 11.5, color: isDark ? colors.muted : "#738078", marginTop: 1 },
   aiChevron: {
     width: 32, height: 32, borderRadius: 16,
-    backgroundColor: colors.brandPrimary + "1F",
+    backgroundColor: isDark ? colors.brandPrimary + "1F" : "#CFE4D3",
     alignItems: "center", justifyContent: "center", marginLeft: 8,
   },
   };

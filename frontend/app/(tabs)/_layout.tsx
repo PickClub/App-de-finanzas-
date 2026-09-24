@@ -45,7 +45,8 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
                 testID="fab-add-btn"
                 accessibilityRole="button"
                 onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  // Same ultra-light selection "tick" as the other tabs.
+                  Haptics.selectionAsync().catch(() => {});
                   openMenu();
                 }}
                 style={({ pressed }) => [styles.centerBtn, pressed && { transform: [{ scale: 0.94 }] }]}
@@ -66,6 +67,9 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
         const tint = isFocused ? activeCol : inactiveCol;
 
         const onPress = () => {
+          // Ultra-light selection "tick" (softest supported haptic). Web/unsupported
+          // platforms reject silently via catch — navigation is unaffected.
+          Haptics.selectionAsync().catch(() => {});
           const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
           if (!isFocused && !event.defaultPrevented) {
             navigation.navigate(route.name);

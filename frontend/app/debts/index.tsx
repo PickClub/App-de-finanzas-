@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet } from "react-native";
+import React, { useState, useMemo, useRef } from "react";
+import { View, Text, ScrollView, Pressable, StyleSheet, Animated, Easing, Platform } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -106,6 +106,46 @@ export default function Debts() {
   const summary = useMemo(() => buildStat(debts), [debts]);
   const summaryPct = Math.round(summary.pct * 100);
 
+  // Back-side data (presentation only) — derived from the SAME real debt data.
+  const oweList = useMemo(() => debts.filter((d) => d.direction === "i_owe"), [debts]);
+  const lentList = useMemo(() => debts.filter((d) => d.direction === "they_owe"), [debts]);
+  const oweTotal = useMemo(() => oweList.reduce((s, d) => s + d.remaining_amount, 0), [oweList]);
+  const lentTotal = useMemo(() => lentList.reduce((s, d) => s + d.remaining_amount, 0), [lentList]);
+
+  // Safe in-place flip: single container, scaleX 1->0 (swap content at midpoint)
+  // ->0->1. Transforms do NOT affect layout, and the card height is locked to
+  // the front's measured height so nothing below can drift.
+  const [showBack, setShowBack] = useState(false);
+  const [lockH, setLockH] = useState<number | null>(null);
+  const scaleX = useRef(new Animated.Value(1)).current;
+  const animating = useRef(false);
+  const onCardLayout = (e: any) => {
+    if (lockH == null && !showBack) {
+      const h = e?.nativeEvent?.layout?.height;
+      if (h && h > 0) setLockH(h);
+    }
+  };
+  const flipCard = () => {
+    if (animating.current) return;
+    animating.current = true;
+    Animated.timing(scaleX, {
+      toValue: 0,
+      duration: 160,
+      easing: Easing.in(Easing.ease),
+      useNativeDriver: Platform.OS !== "web",
+    }).start(() => {
+      setShowBack((b) => !b);
+      Animated.timing(scaleX, {
+        toValue: 1,
+        duration: 160,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: Platform.OS !== "web",
+      }).start(() => {
+        animating.current = false;
+      });
+    });
+  };
+
   const filtered = useMemo(() => {
     if (tab === "all") return debts;
     if (tab === "active") return debts.filter((d) => d.status === "active");
@@ -139,31 +179,82 @@ export default function Debts() {
           </Pressable>
         </View>
 
-        {/* Summary card — circular progress (left) + metrics (right) */}
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryLeft}>
-            <ProgressRing size={116} stroke={11} progress={summary.pct} color={P.ring} trackColor={P.ringTrack}>
-              <Text style={styles.sumPct}>{summaryPct}%</Text>
-              <Text style={styles.sumPctSub}>Pagado</Text>
-            </ProgressRing>
-            <Text style={styles.sumCaption} numberOfLines={1}>
-              <Text style={{ color: P.green, fontWeight: "800" }}>{formatCurrencyInt(summary.paid)}</Text>
-              <Text style={{ color: P.muted }}> de {formatCurrencyInt(summary.original)}</Text>
-            </Text>
-          </View>
+        {/* Summary card — tap to flip. SINGLE container, scaleX flip, height
+            locked to the front's measured height so nothing below can drift.
+            Front is unchanged; back shows "A quién debo" / "Quién me debe". */}
+        <Pressable testID="debt-summary-flip" onPress={flipCard}>
+          <Animated.View
+            onLayout={onCardLayout}
+            style={[styles.summaryCard, lockH ? { height: lockH } : null, { transform: [{ scaleX }] }]}
+          >
+            {showBack ? (
+              <>
+                <View style={styles.backCol}>
+                  <View style={styles.backHead}>
+                    <View style={[styles.backHeadIcon, { backgroundColor: P.red + "22" }]}>
+                      <Ionicons name="arrow-up" size={12} color={P.red} />
+                    </View>
+                    <Text style={styles.backTitle} numberOfLines={1}>A quién debo</Text>
+                  </View>
+                  <Text style={[styles.backTotal, { color: P.red }]} numberOfLines={1}>{formatCurrencyInt(oweTotal)}</Text>
+                  {oweList.slice(0, 3).map((d) => (
+                    <View key={d.id} style={styles.backItem}>
+                      <Text style={styles.backItemLabel} numberOfLines={1}>{d.person || d.name}</Text>
+                      <Text style={[styles.backItemValue, { color: P.text }]} numberOfLines={1}>{formatCurrencyInt(d.remaining_amount)}</Text>
+                    </View>
+                  ))}
+                  {oweList.length > 3 && <Text style={styles.backMore}>+ {oweList.length - 3} más</Text>}
+                  {oweList.length === 0 && <Text style={styles.backEmpty}>Sin deudas</Text>}
+                </View>
 
-          <View style={styles.summaryDivider} />
+                <View style={styles.summaryDivider} />
 
-          <View style={styles.summaryRight}>
-            <MetricRow icon="people" tint={P.green} label="Total de deudas" value={String(summary.count)} valueColor={P.text} last={false} />
-            <View style={styles.metricDivider} />
-            <MetricRow icon="document-text" tint={P.red} label="Pendiente" value={formatCurrencyInt(summary.remaining)} valueColor={P.red} last={false} />
-            <View style={styles.metricDivider} />
-            <MetricRow icon="server" tint={P.green} label="Total" value={formatCurrencyInt(summary.original)} valueColor={P.text} last={false} />
-            <View style={styles.metricDivider} />
-            <MetricRow icon="checkmark-circle" tint={P.incomeGreen} label="Pagado" value={formatCurrencyInt(summary.paid)} valueColor={P.incomeGreen} last />
-          </View>
-        </View>
+                <View style={styles.backCol}>
+                  <View style={styles.backHead}>
+                    <View style={[styles.backHeadIcon, { backgroundColor: P.incomeGreen + "22" }]}>
+                      <Ionicons name="arrow-down" size={12} color={P.incomeGreen} />
+                    </View>
+                    <Text style={styles.backTitle} numberOfLines={1}>Quién me debe</Text>
+                  </View>
+                  <Text style={[styles.backTotal, { color: P.incomeGreen }]} numberOfLines={1}>{formatCurrencyInt(lentTotal)}</Text>
+                  {lentList.slice(0, 3).map((d) => (
+                    <View key={d.id} style={styles.backItem}>
+                      <Text style={styles.backItemLabel} numberOfLines={1}>{d.person || d.name}</Text>
+                      <Text style={[styles.backItemValue, { color: P.text }]} numberOfLines={1}>{formatCurrencyInt(d.remaining_amount)}</Text>
+                    </View>
+                  ))}
+                  {lentList.length > 3 && <Text style={styles.backMore}>+ {lentList.length - 3} más</Text>}
+                  {lentList.length === 0 && <Text style={styles.backEmpty}>Nadie te debe</Text>}
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.summaryLeft}>
+                  <ProgressRing size={116} stroke={11} progress={summary.pct} color={P.ring} trackColor={P.ringTrack}>
+                    <Text style={styles.sumPct}>{summaryPct}%</Text>
+                    <Text style={styles.sumPctSub}>Pagado</Text>
+                  </ProgressRing>
+                  <Text style={styles.sumCaption} numberOfLines={1}>
+                    <Text style={{ color: P.green, fontWeight: "800" }}>{formatCurrencyInt(summary.paid)}</Text>
+                    <Text style={{ color: P.muted }}> de {formatCurrencyInt(summary.original)}</Text>
+                  </Text>
+                </View>
+
+                <View style={styles.summaryDivider} />
+
+                <View style={styles.summaryRight}>
+                  <MetricRow icon="people" tint={P.green} label="Total de deudas" value={String(summary.count)} valueColor={P.text} last={false} />
+                  <View style={styles.metricDivider} />
+                  <MetricRow icon="document-text" tint={P.red} label="Pendiente" value={formatCurrencyInt(summary.remaining)} valueColor={P.red} last={false} />
+                  <View style={styles.metricDivider} />
+                  <MetricRow icon="server" tint={P.green} label="Total" value={formatCurrencyInt(summary.original)} valueColor={P.text} last={false} />
+                  <View style={styles.metricDivider} />
+                  <MetricRow icon="checkmark-circle" tint={P.incomeGreen} label="Pagado" value={formatCurrencyInt(summary.paid)} valueColor={P.incomeGreen} last />
+                </View>
+              </>
+            )}
+          </Animated.View>
+        </Pressable>
 
         {/* Filters */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
@@ -391,6 +482,18 @@ const useStyles = makeStyles((_c, scheme) => {
     metricLabel: { flex: 1, marginLeft: 10, fontSize: 12.5, color: P.muted },
     metricValue: { fontSize: 15, fontWeight: "800", letterSpacing: -0.3 },
     metricDivider: { height: 1, backgroundColor: P.divider, opacity: 0.7 },
+
+    /* summary back face (flip) — reuses the same card container + divider */
+    backCol: { flex: 1, alignSelf: "stretch", justifyContent: "flex-start" },
+    backHead: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+    backHeadIcon: { width: 22, height: 22, borderRadius: 7, alignItems: "center", justifyContent: "center" },
+    backTitle: { flexShrink: 1, fontSize: 12.5, fontWeight: "700", color: P.muted },
+    backTotal: { fontSize: 20, fontWeight: "800", letterSpacing: -0.4, marginBottom: 8 },
+    backItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingVertical: 3 },
+    backItemLabel: { flex: 1, fontSize: 12, color: P.muted },
+    backItemValue: { fontSize: 12.5, fontWeight: "700", letterSpacing: -0.2 },
+    backMore: { fontSize: 11, color: P.muted, fontWeight: "600", marginTop: 4 },
+    backEmpty: { fontSize: 12, color: P.muted, marginTop: 2 },
 
     /* filters */
     chipRow: { paddingHorizontal: spacing.lg, gap: 8, paddingVertical: spacing.md },

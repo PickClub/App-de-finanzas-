@@ -701,10 +701,10 @@ export default function Home() {
               {t("home.noMovements")}
             </Text>
           )}
-          {recent.map((t, idx) => {
-            const cat = catById[t.category_id];
-            const isIncome = t.type === "income" || t.type === "loan_received";
-            const isTransfer = t.type === "transfer";
+          {recent.map((item, idx) => {
+            const cat = catById[item.category_id];
+            const isIncome = item.type === "income" || item.type === "loan_received";
+            const isTransfer = item.type === "transfer";
             const color = isTransfer ? colors.accountsBlue : isIncome ? colors.incomeGreen : colors.expenseRed;
             const sign = isTransfer ? "" : isIncome ? "+" : "-";
             const iconName =
@@ -713,25 +713,25 @@ export default function Home() {
             const badgeLabel = cat?.name ? translateCategoryName(cat.name) : (isTransfer ? t("txType.transfer") : isIncome ? t("txType.income") : t("txType.expense"));
             const badgeColor = cat?.color || color;
             return (
-              <View key={t.id}>
+              <View key={item.id}>
                 {idx > 0 && <View style={styles.mrDivider} />}
                 <Pressable
-                  testID={`mr-tx-${t.id}`}
-                  onPress={guard(() => router.push(`/transactions/${t.id}`))}
+                  testID={`mr-tx-${item.id}`}
+                  onPress={guard(() => router.push(`/transactions/${item.id}`))}
                   style={styles.mrRow}
                 >
                   <IconTile icon={iconName} tint={tint} size={36} />
                   <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.mrName} numberOfLines={1}>{t.name}</Text>
+                    <Text style={styles.mrName} numberOfLines={1}>{item.name}</Text>
                     <View style={styles.mrTimeRow}>
                       <Ionicons name="time-outline" size={12} color={colors.muted} />
-                      <Text style={styles.mrTime} numberOfLines={1}>{formatDateTime(t.date)}</Text>
+                      <Text style={styles.mrTime} numberOfLines={1}>{formatDateTime(item.date)}</Text>
                     </View>
                   </View>
                   <View style={[styles.mrBadge, { backgroundColor: badgeColor + "1A" }]}>
                     <Text style={[styles.mrBadgeText, { color: badgeColor }]} numberOfLines={1}>{badgeLabel}</Text>
                   </View>
-                  <Text style={[styles.mrAmount, { color }]}>{sign}{formatCurrency(t.amount)}</Text>
+                  <Text style={[styles.mrAmount, { color }]}>{sign}{formatCurrency(item.amount)}</Text>
                   <Ionicons name="chevron-forward" size={15} color={colors.muted} style={{ marginLeft: 4 }} />
                 </Pressable>
               </View>

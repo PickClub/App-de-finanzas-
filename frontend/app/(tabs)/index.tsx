@@ -338,11 +338,11 @@ export default function Home() {
         <Pressable testID="notifications-btn" style={styles.roundIcon}>
           <Ionicons name="notifications-outline" size={22} color={colors.onSurface} />
         </Pressable>
-        <View style={styles.avatar}>
+        <Pressable testID="profile-more-btn" onPress={() => router.push("/more")} style={styles.avatar}>
           <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>
             {(user?.name || "U").slice(0, 1)}
           </Text>
-        </View>
+        </Pressable>
       </View>
 
       {/* Section divider — before Mis cuentas */}

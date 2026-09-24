@@ -14,7 +14,7 @@ const TAB_CONFIG: Record<string, { labelKey: string; icon: string }> = {
   index: { labelKey: "tabs.accounts", icon: "home" },
   transactions: { labelKey: "tabs.ai", icon: "mic" },
   reports: { labelKey: "tabs.reports", icon: "stats-chart" },
-  more: { labelKey: "tabs.more", icon: "grid" },
+  notes: { labelKey: "tabs.notes", icon: "document-text" },
 };
 
 // Custom bottom navigation bar. Keeps every existing route/action; only the
@@ -63,7 +63,10 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
         }
 
         const cfg = TAB_CONFIG[route.name];
-        if (!cfg) return <View key={route.key} style={styles.item} />;
+        // `more` is intentionally NOT in TAB_CONFIG: its content is now reached
+        // from the Home profile control, so it stays a registered route but is
+        // hidden from the bottom bar (returns null → no button rendered).
+        if (!cfg) return null;
         const tint = isFocused ? activeCol : inactiveCol;
 
         const onPress = () => {
@@ -162,6 +165,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="transactions" options={{ title: "IA" }} />
         <Tabs.Screen name="fab" options={{ title: "" }} />
         <Tabs.Screen name="reports" options={{ title: "Informes" }} />
+        <Tabs.Screen name="notes" options={{ title: "Notas" }} />
         <Tabs.Screen name="more" options={{ title: "Más" }} />
       </Tabs>
       <QuickMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />

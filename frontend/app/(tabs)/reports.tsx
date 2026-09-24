@@ -38,6 +38,10 @@ export default function Reports() {
   const { colors, scheme } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  // Reuse Home's premium dark-green accent for section-header icons (light mode);
+  // dark mode keeps the existing brand accent. No global token is modified.
+  const isDark = scheme === "dark";
+  const accent = isDark ? colors.brandPrimary : "#126046";
   const [range, setRange] = useState("30d");
   const [showAll, setShowAll] = useState(false);
 
@@ -102,7 +106,7 @@ export default function Reports() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#EFE3D2" }}
+      style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#E8EFE7" }}
       contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 120 }}
     >
       <View style={styles.screenHead}>
@@ -126,7 +130,7 @@ export default function Reports() {
               style={[styles.pill, active ? styles.pillActive : styles.pillInactive]}
               testID={`range-${r.id}`}
             >
-              <Text style={[styles.pillText, { color: active ? colors.onBrandPrimary : colors.onSurface }]}>
+              <Text style={[styles.pillText, active ? styles.pillTextActive : styles.pillTextInactive]}>
                 {r.pillLabel}
               </Text>
             </Pressable>
@@ -134,21 +138,20 @@ export default function Reports() {
         })}
       </ScrollView>
 
-      {/* Flujo de efectivo */}
-      <View style={styles.card}>
-        <View style={styles.cHead}>
-          <View style={styles.cHeadIcon}>
-            <Ionicons name="bar-chart" size={18} color={colors.brandPrimary} />
-          </View>
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <View style={styles.titleRow}>
-              <Text style={styles.cardTitle}>Flujo de efectivo</Text>
-              <Ionicons name="information-circle-outline" size={15} color={colors.muted} />
-            </View>
-            <Text style={styles.cardHeaderMeta}>Resumen de tu actividad en el período</Text>
-          </View>
+      {/* Flujo de efectivo — section header (outside the card, Home visual language) */}
+      <View style={styles.sectionHeader}>
+        <View style={styles.headIconTile}>
+          <Ionicons name="bar-chart" size={18} color={accent} />
         </View>
-
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <View style={styles.titleRow}>
+            <Text style={styles.headTitle} numberOfLines={1}>Flujo de efectivo</Text>
+            <Ionicons name="information-circle-outline" size={15} color={colors.muted} />
+          </View>
+          <Text style={styles.headSubtitle} numberOfLines={1}>Resumen de tu actividad en el período</Text>
+        </View>
+      </View>
+      <View style={styles.card}>
         {/* Cash-flow table */}
         <View style={styles.table}>
           <View style={[styles.tRow, styles.tHeaderRow]}>
@@ -187,22 +190,13 @@ export default function Reports() {
         </View>
 
         {/* Saldo neto del período — full visual calculation */}
-        <View
-          style={[
-            styles.netPanel,
-            {
-              backgroundColor: (balance >= 0 ? colors.incomeGreen : colors.expenseRed) + "12",
-              borderColor: (balance >= 0 ? colors.incomeGreen : colors.expenseRed) + "2E",
-            },
-          ]}
-          testID="balance-row"
-        >
+        <View style={styles.netPanel} testID="balance-row">
           <View style={[styles.netIcon, { backgroundColor: (balance >= 0 ? colors.incomeGreen : colors.expenseRed) + "1F" }]}>
             <Ionicons name="wallet-outline" size={20} color={balance >= 0 ? colors.incomeGreen : colors.expenseRed} />
           </View>
           <View style={styles.netTextWrap}>
             <Text style={styles.netTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Saldo neto del período</Text>
-            <Text style={styles.netSub} numberOfLines={1}>Ingresos menos gastos</Text>
+            <Text style={styles.netSub} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>Ingresos menos gastos</Text>
           </View>
           <View style={styles.netVDivider} />
           <View style={styles.netCalc}>
@@ -226,26 +220,25 @@ export default function Reports() {
         </View>
       </View>
 
-      {/* Gastos por categoría */}
-      <View style={styles.card}>
-        <View style={styles.cHead}>
-          <View style={styles.cHeadIcon}>
-            <Ionicons name="pie-chart" size={18} color={colors.brandPrimary} />
-          </View>
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={styles.cardTitle}>Gastos por categoría</Text>
-            <Text style={styles.cardHeaderMeta}>Tus principales categorías en este período</Text>
-          </View>
-          {byCategory.length > 0 && (
-            <Pressable onPress={() => setShowAll((v) => !v)} style={styles.topBadge} testID="toggle-cats">
-              <Text style={styles.topBadgeText}>{showAll ? "Todas" : "Top 5"}</Text>
-              <Ionicons name={showAll ? "chevron-up" : "chevron-down"} size={14} color={colors.muted} />
-            </Pressable>
-          )}
+      {/* Gastos por categoría — section header (outside the card, Home visual language) */}
+      <View style={styles.sectionHeader}>
+        <View style={styles.headIconTile}>
+          <Ionicons name="pie-chart" size={18} color={accent} />
         </View>
-
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text style={styles.headTitle} numberOfLines={1}>Gastos por categoría</Text>
+          <Text style={styles.headSubtitle} numberOfLines={1}>Tus principales categorías en este período</Text>
+        </View>
+        {byCategory.length > 0 && (
+          <Pressable onPress={() => setShowAll((v) => !v)} style={styles.topBadge} testID="toggle-cats">
+            <Text style={styles.topBadgeText}>{showAll ? "Todas" : "Top 5"}</Text>
+            <Ionicons name={showAll ? "chevron-up" : "chevron-down"} size={14} color={colors.muted} />
+          </Pressable>
+        )}
+      </View>
+      <View style={styles.card}>
         {byCategory.length > 0 ? (
-          <View style={{ marginTop: 12 }}>
+          <View>
             {shownCats.map((x, i) => {
               const pctOfTotal = expenseCatTotal > 0 ? (x.amount / expenseCatTotal) * 100 : 0;
               const barPct = maxCat > 0 ? (x.amount / maxCat) * 100 : 0;
@@ -284,7 +277,18 @@ export default function Reports() {
   );
 }
 
-const useStyles = makeStyles((colors, scheme) => ({
+const useStyles = makeStyles((colors, scheme) => {
+  const isDark = scheme === "dark";
+  // Light-mode values reused/derived from the existing Home screen palette so
+  // Reports visually matches Home. These are LOCAL to Reports — no global theme
+  // token is modified, so no other screen is affected.
+  const cardSurface = isDark ? colors.surfaceSecondary : "#FCFCF8"; // Home cardSurface
+  const lineSoft = isDark ? colors.border : "rgba(39,71,56,0.10)"; // Home lineSoft
+  const tileGreen = isDark ? colors.brandPrimary + "1A" : "#DCE9DD"; // Home soft mint icon tile
+  const headTitleColor = isDark ? colors.onSurface : "#15251E"; // Home wallText
+  const headSubColor = isDark ? colors.muted : "#68746D"; // Home wallMuted
+  const barTrackColor = isDark ? "#3A352F" : "#E5E9E3"; // Home account-bar track
+  return {
   screenHead: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -302,11 +306,26 @@ const useStyles = makeStyles((colors, scheme) => ({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: radius.pill,
-    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#F7F1E6",
+    backgroundColor: isDark ? colors.surfaceSecondary : "#DCE9DD",
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: isDark ? colors.border : "#BAD7C2",
   },
-  periodControlText: { fontSize: 12.5, fontWeight: "700", color: colors.onSurface, flexShrink: 1 },
+  periodControlText: { fontSize: 12.5, fontWeight: "700", color: isDark ? colors.onSurface : "#126046", flexShrink: 1 },
+  // --- Section header (outside the card) — mirrors Home's section headers ---
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    marginBottom: 8,
+  },
+  headIconTile: {
+    width: 38, height: 38, borderRadius: 13,
+    backgroundColor: tileGreen,
+    alignItems: "center", justifyContent: "center",
+  },
+  headTitle: { fontSize: 18, fontWeight: "800", color: headTitleColor, letterSpacing: -0.4, flexShrink: 1 },
+  headSubtitle: { fontSize: 11.5, color: headSubColor, marginTop: 1 },
   chipRow: { paddingHorizontal: spacing.lg, gap: 6, marginTop: 10, height: 40, alignItems: "center" },
   // Compact period pills (Reports-local, so no other screen is affected)
   pill: {
@@ -316,20 +335,25 @@ const useStyles = makeStyles((colors, scheme) => ({
     borderWidth: 1,
     justifyContent: "center",
   },
-  pillActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  pillActive: {
+    backgroundColor: isDark ? colors.brandPrimary : "#146448",
+    borderColor: isDark ? colors.brandPrimary : "#146448",
+  },
   pillInactive: {
-    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#F7F1E6",
-    borderColor: colors.border,
+    backgroundColor: isDark ? colors.surfaceSecondary : "#DCE9DD",
+    borderColor: isDark ? colors.border : "#BAD7C2",
   },
   pillText: { fontSize: 12, fontWeight: "700" },
+  pillTextActive: { color: isDark ? colors.onBrandPrimary : "#FFFFFF" },
+  pillTextInactive: { color: isDark ? colors.onSurface : "#126046" },
   card: {
     marginHorizontal: spacing.lg,
-    marginTop: 10,
-    backgroundColor: scheme === "dark" ? colors.surfaceSecondary : "#F7F1E6",
+    marginTop: 0,
+    backgroundColor: cardSurface,
     borderRadius: radius.lg,
     padding: 13,
     borderWidth: 1,
-    borderColor: scheme === "dark" ? colors.border : "#E9DFCE",
+    borderColor: lineSoft,
     shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -354,7 +378,7 @@ const useStyles = makeStyles((colors, scheme) => ({
   },
   tRow: { flexDirection: "row", alignItems: "center", minHeight: 46 },
   tHeaderRow: {
-    backgroundColor: scheme === "dark" ? colors.surfaceTertiary : "#EEE5D5",
+    backgroundColor: isDark ? colors.surfaceTertiary : "#EEF2EC",
     borderRadius: 10,
     minHeight: 40,
   },
@@ -388,6 +412,8 @@ const useStyles = makeStyles((colors, scheme) => ({
     borderWidth: 1,
     paddingVertical: 12,
     paddingHorizontal: 11,
+    backgroundColor: isDark ? colors.surfaceTertiary : "#FCFCF8",
+    borderColor: isDark ? colors.border : "rgba(39,71,56,0.12)",
   },
   netIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   netTextWrap: { marginLeft: 10, flex: 1, minWidth: 86 },
@@ -455,9 +481,9 @@ const useStyles = makeStyles((colors, scheme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: scheme === "dark" ? colors.surface : "#FCF6ED",
+    backgroundColor: cardSurface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: lineSoft,
     borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -470,7 +496,7 @@ const useStyles = makeStyles((colors, scheme) => ({
   barTrack: {
     height: 10,
     borderRadius: 5,
-    backgroundColor: scheme === "dark" ? "#3A352F" : "#DED6CB",
+    backgroundColor: barTrackColor,
     marginTop: 7,
     overflow: "hidden",
   },
@@ -487,9 +513,10 @@ const useStyles = makeStyles((colors, scheme) => ({
     paddingVertical: 11,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: scheme === "dark" ? colors.surface : "#FCF6ED",
+    borderColor: lineSoft,
+    backgroundColor: cardSurface,
   },
   verTodasText: { fontSize: 13.5, fontWeight: "800", color: colors.onSurface },
   emptyText: { color: colors.muted, textAlign: "center", padding: 16 },
-}));
+  };
+});

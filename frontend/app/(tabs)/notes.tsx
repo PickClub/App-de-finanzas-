@@ -403,11 +403,6 @@ const useStyles = makeStyles((colors, scheme) => {
       borderWidth: 1,
       borderColor: lineSoft,
       padding: 14,
-      shadowColor: "#274738",
-      shadowOpacity: 0.05,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 3 },
-      elevation: 2,
     },
     cardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
     cardIcon: {

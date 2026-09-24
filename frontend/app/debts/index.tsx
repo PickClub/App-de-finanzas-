@@ -112,12 +112,14 @@ export default function Debts() {
   const oweTotal = useMemo(() => oweList.reduce((s, d) => s + d.remaining_amount, 0), [oweList]);
   const lentTotal = useMemo(() => lentList.reduce((s, d) => s + d.remaining_amount, 0), [lentList]);
 
-  // Safe in-place flip: single container, scaleX 1->0 (swap content at midpoint)
-  // ->0->1. Transforms do NOT affect layout, and the card height is locked to
-  // the front's measured height so nothing below can drift.
+  // Safe in-place flip: ONE container. A single Animated value drives scaleX
+  // (1 -> ~0.04 -> 1) plus a subtle scaleY / translateX / opacity for a premium
+  // "card turning" feel. Content is swapped ONLY at the edge-on midpoint (no
+  // flash, never two contents at once). Transforms never affect layout, and the
+  // card height is locked to the front's measured height so nothing below drifts.
   const [showBack, setShowBack] = useState(false);
   const [lockH, setLockH] = useState<number | null>(null);
-  const scaleX = useRef(new Animated.Value(1)).current;
+  const anim = useRef(new Animated.Value(1)).current; // 1 = flat, 0 = edge-on
   const animating = useRef(false);
   const onCardLayout = (e: any) => {
     if (lockH == null && !showBack) {
@@ -126,25 +128,33 @@ export default function Debts() {
     }
   };
   const flipCard = () => {
-    if (animating.current) return;
+    if (animating.current) return; // reject taps while a flip is running
     animating.current = true;
-    Animated.timing(scaleX, {
+    Animated.timing(anim, {
       toValue: 0,
-      duration: 160,
-      easing: Easing.in(Easing.ease),
+      duration: 230,
+      easing: Easing.in(Easing.cubic),
       useNativeDriver: Platform.OS !== "web",
-    }).start(() => {
-      setShowBack((b) => !b);
-      Animated.timing(scaleX, {
+    }).start(({ finished }) => {
+      if (!finished) {
+        animating.current = false;
+        return;
+      }
+      setShowBack((b) => !b); // swap while edge-on
+      Animated.timing(anim, {
         toValue: 1,
-        duration: 160,
-        easing: Easing.out(Easing.ease),
+        duration: 230,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: Platform.OS !== "web",
       }).start(() => {
         animating.current = false;
       });
     });
   };
+  const cardScaleX = anim.interpolate({ inputRange: [0, 1], outputRange: [0.04, 1] });
+  const cardScaleY = anim.interpolate({ inputRange: [0, 1], outputRange: [0.985, 1] });
+  const cardTranslateX = anim.interpolate({ inputRange: [0, 1], outputRange: [6, 0] });
+  const cardOpacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] });
 
   const filtered = useMemo(() => {
     if (tab === "all") return debts;
@@ -185,47 +195,31 @@ export default function Debts() {
         <Pressable testID="debt-summary-flip" onPress={flipCard}>
           <Animated.View
             onLayout={onCardLayout}
-            style={[styles.summaryCard, lockH ? { height: lockH } : null, { transform: [{ scaleX }] }]}
+            style={[
+              styles.summaryCard,
+              lockH ? { height: lockH } : null,
+              { opacity: cardOpacity, transform: [{ translateX: cardTranslateX }, { scaleX: cardScaleX }, { scaleY: cardScaleY }] },
+            ]}
           >
             {showBack ? (
               <>
-                <View style={styles.backCol}>
-                  <View style={styles.backHead}>
-                    <View style={[styles.backHeadIcon, { backgroundColor: P.red + "22" }]}>
-                      <Ionicons name="arrow-up" size={12} color={P.red} />
-                    </View>
-                    <Text style={styles.backTitle} numberOfLines={1}>A quién debo</Text>
-                  </View>
-                  <Text style={[styles.backTotal, { color: P.red }]} numberOfLines={1}>{formatCurrencyInt(oweTotal)}</Text>
-                  {oweList.slice(0, 3).map((d) => (
-                    <View key={d.id} style={styles.backItem}>
-                      <Text style={styles.backItemLabel} numberOfLines={1}>{d.person || d.name}</Text>
-                      <Text style={[styles.backItemValue, { color: P.text }]} numberOfLines={1}>{formatCurrencyInt(d.remaining_amount)}</Text>
-                    </View>
-                  ))}
-                  {oweList.length > 3 && <Text style={styles.backMore}>+ {oweList.length - 3} más</Text>}
-                  {oweList.length === 0 && <Text style={styles.backEmpty}>Sin deudas</Text>}
-                </View>
-
+                <BackBlock
+                  icon="arrow-up"
+                  accent={P.red}
+                  title="A quién debo"
+                  total={formatCurrencyInt(oweTotal)}
+                  list={oweList}
+                  emptyText="Sin deudas"
+                />
                 <View style={styles.summaryDivider} />
-
-                <View style={styles.backCol}>
-                  <View style={styles.backHead}>
-                    <View style={[styles.backHeadIcon, { backgroundColor: P.incomeGreen + "22" }]}>
-                      <Ionicons name="arrow-down" size={12} color={P.incomeGreen} />
-                    </View>
-                    <Text style={styles.backTitle} numberOfLines={1}>Quién me debe</Text>
-                  </View>
-                  <Text style={[styles.backTotal, { color: P.incomeGreen }]} numberOfLines={1}>{formatCurrencyInt(lentTotal)}</Text>
-                  {lentList.slice(0, 3).map((d) => (
-                    <View key={d.id} style={styles.backItem}>
-                      <Text style={styles.backItemLabel} numberOfLines={1}>{d.person || d.name}</Text>
-                      <Text style={[styles.backItemValue, { color: P.text }]} numberOfLines={1}>{formatCurrencyInt(d.remaining_amount)}</Text>
-                    </View>
-                  ))}
-                  {lentList.length > 3 && <Text style={styles.backMore}>+ {lentList.length - 3} más</Text>}
-                  {lentList.length === 0 && <Text style={styles.backEmpty}>Nadie te debe</Text>}
-                </View>
+                <BackBlock
+                  icon="arrow-down"
+                  accent={P.incomeGreen}
+                  title="Quién me debe"
+                  total={formatCurrencyInt(lentTotal)}
+                  list={lentList}
+                  emptyText="Nadie te debe"
+                />
               </>
             ) : (
               <>
@@ -253,6 +247,11 @@ export default function Debts() {
                 </View>
               </>
             )}
+
+            {/* Flip indicator — subtle swap icon, both faces, inside card bounds */}
+            <View pointerEvents="none" style={styles.flipHint}>
+              <Ionicons name="swap-horizontal" size={15} color={P.muted} />
+            </View>
           </Animated.View>
         </Pressable>
 
@@ -419,6 +418,49 @@ function MetricRow({
   );
 }
 
+// Back-face block — ONE template used identically for both "A quién debo" and
+// "Quién me debe" (same icon/title/total/row structure; only data + accent
+// differ). Max 2 rows fit safely inside the locked card height; extras show
+// "+ N más". Real debt data only.
+function BackBlock({
+  icon,
+  accent,
+  title,
+  total,
+  list,
+  emptyText,
+}: {
+  icon: any;
+  accent: string;
+  title: string;
+  total: string;
+  list: any[];
+  emptyText: string;
+}) {
+  const { scheme } = useTheme();
+  const P = palette(scheme);
+  const styles = useStyles();
+  const rows = list.slice(0, 2);
+  const more = list.length - rows.length;
+  return (
+    <View style={styles.backBlock}>
+      <View style={[styles.backIcon, { backgroundColor: accent + "22" }]}>
+        <Ionicons name={icon} size={15} color={accent} />
+      </View>
+      <Text style={styles.backBlockTitle} numberOfLines={1}>{title}</Text>
+      <Text style={[styles.backBlockTotal, { color: accent }]} numberOfLines={1}>{total}</Text>
+      {rows.map((d) => (
+        <View key={d.id} style={styles.backRow}>
+          <Text style={styles.backRowLabel} numberOfLines={1}>{d.person || d.name}</Text>
+          <Text style={[styles.backRowValue, { color: P.text }]} numberOfLines={1}>{formatCurrencyInt(d.remaining_amount)}</Text>
+        </View>
+      ))}
+      {more > 0 && <Text style={styles.backMore}>+ {more} más</Text>}
+      {list.length === 0 && <Text style={styles.backEmpty}>{emptyText}</Text>}
+    </View>
+  );
+}
+
 const useStyles = makeStyles((_c, scheme) => {
   const P = palette(scheme);
   const shadow = scheme === "dark"
@@ -483,17 +525,17 @@ const useStyles = makeStyles((_c, scheme) => {
     metricValue: { fontSize: 15, fontWeight: "800", letterSpacing: -0.3 },
     metricDivider: { height: 1, backgroundColor: P.divider, opacity: 0.7 },
 
-    /* summary back face (flip) — reuses the same card container + divider */
-    backCol: { flex: 1, alignSelf: "stretch", justifyContent: "flex-start" },
-    backHead: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
-    backHeadIcon: { width: 22, height: 22, borderRadius: 7, alignItems: "center", justifyContent: "center" },
-    backTitle: { flexShrink: 1, fontSize: 12.5, fontWeight: "700", color: P.muted },
-    backTotal: { fontSize: 20, fontWeight: "800", letterSpacing: -0.4, marginBottom: 8 },
-    backItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingVertical: 3 },
-    backItemLabel: { flex: 1, fontSize: 12, color: P.muted },
-    backItemValue: { fontSize: 12.5, fontWeight: "700", letterSpacing: -0.2 },
-    backMore: { fontSize: 11, color: P.muted, fontWeight: "600", marginTop: 4 },
+    /* summary back face (flip) — ONE template reused for both blocks */
+    backBlock: { flex: 1, alignSelf: "stretch" },
+    backIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 8 },
+    backBlockTitle: { fontSize: 12.5, fontWeight: "700", color: P.muted, marginBottom: 4 },
+    backBlockTotal: { fontSize: 19, fontWeight: "800", letterSpacing: -0.4, marginBottom: 10 },
+    backRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingVertical: 3.5 },
+    backRowLabel: { flex: 1, fontSize: 11.5, color: P.muted },
+    backRowValue: { fontSize: 12, fontWeight: "700", letterSpacing: -0.2 },
+    backMore: { fontSize: 11, color: P.muted, fontWeight: "600", marginTop: 5 },
     backEmpty: { fontSize: 12, color: P.muted, marginTop: 2 },
+    flipHint: { position: "absolute", top: 8, right: 8 },
 
     /* filters */
     chipRow: { paddingHorizontal: spacing.lg, gap: 8, paddingVertical: spacing.md },

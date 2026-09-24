@@ -95,7 +95,6 @@ export default function Notes() {
   }, []);
 
   const tintOf = useCallback((c: string) => c + (isDark ? "22" : "14"), [isDark]);
-  const borderOf = useCallback((c: string) => c + (isDark ? "40" : "2E"), [isDark]);
 
   const openEditor = (note: Note | null) => {
     setEditing(note);
@@ -154,7 +153,7 @@ export default function Notes() {
       key={note.id}
       testID={`note-card-${note.id}`}
       onPress={() => openEditor(note)}
-      style={[styles.card, { backgroundColor: tintOf(note.color), borderColor: borderOf(note.color) }]}
+      style={[styles.card, { backgroundColor: tintOf(note.color) }]}
     >
       <View style={styles.cardTop}>
         <View style={[styles.cardIcon, { backgroundColor: note.color }]}>
@@ -402,6 +401,7 @@ const useStyles = makeStyles((colors, scheme) => {
     card: {
       borderRadius: radius.md,
       borderWidth: 1,
+      borderColor: lineSoft,
       padding: 14,
       shadowColor: "#274738",
       shadowOpacity: 0.05,

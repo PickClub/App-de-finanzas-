@@ -158,6 +158,9 @@ backend:
         - working: true
           agent: "testing"
           comment: "✅✅✅ 4TH VERIFICATION COMPLETE (after latest .env recreation). READ-ONLY testing against localhost:8001. Backend supervisor: RUNNING (pid 2419, uptime 0:01:28). /app/backend/.env exists with MONGO_URL and DB_NAME (no CORS_ORIGINS in this version). All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, id='default-user' ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, object with 5 keys ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs confirm documented transient 500 on first /api/user after cold boot (ObjectId serialization error: 'ObjectId' object is not iterable), followed by stable 200 responses. NO 502 errors. NO connection errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED. Port 8001 is listening. MongoDB connection working."
+        - working: true
+          agent: "testing"
+          comment: "✅✅✅ 5TH VERIFICATION COMPLETE (READ-ONLY after latest .env recreation). Backend supervisor: RUNNING (pid 790, uptime 0:03:15). Port 8001 listening confirmed (netstat shows tcp 0.0.0.0:8001 LISTEN). /app/backend/.env exists with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database, CORS_ORIGINS=*. All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, dict with keys: id, name, email, profile_photo, currency ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, dict with keys: total_balance, month_income, month_expense, debts, accounts_count ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs show NO KeyError for MONGO_URL or DB_NAME in current session (backend started Thu Sep 24 10:06:44 2026). Old KeyError traces in error log are from previous crash-loop sessions before .env was recreated. Current session shows only the documented transient ObjectId serialization error (HTTP 500 on first /api/user after cold boot: 'ObjectId' object is not iterable), followed by stable HTTP 200 responses. NO 502 Bad Gateway errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED."
 
 frontend:
   - task: "Tapping a transaction opens read-only Detail (from Home + Transactions list)"
@@ -430,6 +433,18 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+    - agent: "main"
+      message: |
+        502 BAD GATEWAY RE-FIX (recurrence — /app/backend/.env missing again, it is gitignored so lost on fresh import).
+        ROOT CAUSE: server.py reads os.environ["MONGO_URL"] and os.environ["DB_NAME"] at import (lines 14-15). With no .env, uvicorn crash-looped on KeyError('MONGO_URL') -> nothing listened on :8001 -> ingress 502.
+        FIX (minimal, this task ONLY): recreated ONLY /app/backend/.env with:
+          MONGO_URL=mongodb://localhost:27017
+          DB_NAME=moneyflow_database
+          CORS_ORIGINS=*
+        Restarted ONLY the backend service. Did NOT touch server.py, frontend, deps, git, or DB data. Did NOT run /api/seed. Did NOT create frontend/.env.
+        MANUAL CHECK: backend RUNNING (pid 790), uvicorn LISTENING on 0.0.0.0:8001. GET /api/user = HTTP 200 both DIRECT (localhost:8001, 3/3 tries) and via PROXY (port 3000). Backend log shows the known transient 500 on the very first cold-boot /api/user (ObjectId serialization), then stable 200 — per prior instruction this transient is NOT to be code-fixed here.
+        PLEASE VERIFY (READ-ONLY, GET only): /api/user stable 200 after first call, plus /api/accounts, /api/summary, /api/categories, /api/transactions, /api/budgets, /api/goals, /api/debts all 200 — directly on localhost:8001. DO NOT run /api/seed, DO NOT write/modify/delete any data.
+
     - agent: "testing"
       message: |
         ✅✅✅ DEBTS SUMMARY FLIP CARD V2 - ALL 7 ACCEPTANCE CRITERIA PASSED (PREMIUM ANIMATION + MATCHED BLOCKS + FLIP INDICATOR)

@@ -371,6 +371,21 @@ frontend:
           agent: "main"
           comment: "COLOR-ONLY redesign of Home (no layout/text/data/logic changes). Home-local light palette SHADOWS global tokens ONLY on Home in light mode (dark mode + other screens untouched). Wall #E8EFE7; warm-white #FCFCF8; text #15251E/#68746D; green accent #126046; tiles #DCE9DD; Ver todo #DFEBDD. Account cards use Home-only name->color map (Chase #0C5C46, Efectivo #C6952C, Ahorros #176F78, Cuenta 2 #678E58, Cuenta 6 #E2763E) fallback to real color; distribution bars reuse same per-account color. Ingresos #ECF6F0, Gastos #F8ECE8. Debt card white w/ semantic tiles. Active filter solid green #146448. AI banner #E5F1E7. Bottom nav (shared (tabs)/_layout.tsx) recolored dark green #0B513C LIGHT mode only, geometry unchanged (shows on all tabs since shared — flagged to user). Verified on WEB screenshot: renders, no layout shift, data intact, 'Cuenta 2' moss green confirms map. Dark mode preserved. Android to be verified by user."
 
+  - task: "Debts screen VISUAL redesign (remove fragile flip card, stable native layout per reference) — light+dark"
+    implemented: true
+    working: true
+    file: "app/debts/index.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "VISUAL/LAYOUT-ONLY redesign of ONLY app/debts/index.tsx. REMOVED the entire fragile flip-card summary (DebtSummaryFlip/SummaryFace/faceConfig/MetricRow/useFlipStyles that used rotateY+perspective+backfaceVisibility+absolute-overlapping faces+invisible sizer — the Android/Expo Go instability). REPLACED with ONE stable Flexbox summary card: LEFT = circular ProgressRing (deep premium emerald #0C6B4E light / #2CA079 dark, subtle track) with centered '{pct}% / Pagado' + '$paid de $original' caption; RIGHT = 4 MetricRows (Total de deudas=count, Pendiente=remaining[red], Total=original, Pagado=paid[green]). All values from real debt data via buildStat(debts) (aggregate of ALL debts). Header now compact with title 'Deudas y préstamos' + subtitle 'Tus deudas en un solo lugar' + existing LockToggle + green add button (testID add-debt preserved). Filters: local rounded pills (active=green gradient, idle=warm-white) — SAME TABS array + SAME filtering logic unchanged (all/active/paid/i_owe/they_owe). Debt cards: normal flexbox — IconTile + name + status pill + 'Yo debo/Me deben · person' + compact circular % ring; 3 info blocks (Pendiente/Pagado/Total); horizontal rounded gradient progress bar with % at right. Per-card accent = real d.color (Chase red, Auto purple) for icon/ring/bar (same accent family). Card wash = decorative absolute-fill tint (pointerEvents none, cannot affect layout). Added '+ Agregar nueva deuda o préstamo' dashed button (preserves router.push('/debts/new')). Adopted the Home/Accounts green light palette (page #E8EFE7, card #FCFCF8, text #15251E, green #126046) as a SCREEN-LOCAL override; dark mode uses warm-dark tokens. NO 3D transforms, NO rotateY/perspective, NO overlapping faces, NO negative margins for structure, NO absolute positioning for content. Did NOT touch backend, API, calculations, navigation architecture, global theme, bottom nav, or any other screen. PLEASE TEST (web + note Android intent): (a) /debts renders with new summary + cards, real data shown; (b) no text overlap/clipping, all values inside cards; (c) filters Todos/Activos/Pagados/Yo debo/Me deben switch the list; (d) tapping a debt card opens /debts/{id}; (e) add button (header + inline) opens /debts/new; (f) light AND dark both render; (g) NO flip/shift when tapping the summary or cards (there must be NO flip anymore)."
+        - working: true
+          agent: "testing"
+          comment: "✅✅✅ DEBTS SCREEN REDESIGN VERIFIED - ALL 8 ACCEPTANCE CRITERIA PASSED. Tested on WEB preview (http://localhost:3000/debts). CRITICAL FIX REQUIRED FIRST: Created missing /app/frontend/.env with EXPO_PUBLIC_BACKEND_URL=http://localhost:8001 (was causing empty data state). After fix, comprehensive testing completed. RESULTS: [1] RENDER ✅ PASS: Title 'Deudas y préstamos' present, subtitle 'Tus deudas en un solo lugar' present, lock toggle (testID='lock-debts') present, green '+' add button (testID='add-debt') present. Back chevron visible in screenshots but selector issue (minor). [2] SUMMARY CARD (NEW, NO FLIP) ✅ PASS: ONE stable summary card with LEFT circular progress ring showing 30% + 'Pagado' + caption '$4,600 de $15,500', RIGHT side has 4 metric rows: Total de deudas=3, Pendiente=$10,900 (red), Total=$15,500, Pagado=$4,600 (green). All values are REAL DATA from 3 seeded debts. AMOUNTS CONSISTENT: $10,900 + $4,600 = $15,500 ✓. [3] NO FLIP / NO SHIFT ✅✅✅ CRITICAL PASS: Tapped summary card, bounding box BEFORE (top:64, left:16, w:1888, h:190) and AFTER (top:64, left:16, w:1888, h:190) are IDENTICAL (0.00px diff). NO flip animation, NO position shift, NO layout change. Transform property = 'none' (no 3D rotation). Summary card is completely stable. [4] FILTERS ✅ PASS: All 5 pills present (testIDs: tab-all, tab-active, tab-paid, tab-i_owe, tab-they_owe). Active pill shows dark green gradient. Filter functionality works: 'Pagados' shows empty (expected, all debts active), 'Yo debo' shows Chase + Auto (2 debts), 'Me deben' shows Carlos (1 debt), 'Todos' shows all 3 debts. [5] DEBT CARDS ✅ PASS: 3 debt cards found. Tarjeta Chase (red/coral accent #D95345): icon tile, name, status pill 'Activa', subtitle 'Yo debo · Chase Bank', circular % ring (28%), 3 info blocks (Pendiente $1,800, Pagado $700, Total $2,500), horizontal progress bar with 28%. Préstamo automóvil (purple accent #8F5BE8): similar layout, 30% progress. Carlos me debe (yellow/gold accent): similar layout, 30% progress. NO text clipping or overlap. All values sit inside cards. Card amounts consistent: Chase $1,800+$700=$2,500 ✓, Auto $8,400+$3,600=$12,000 ✓, Carlos $700+$300=$1,000 ✓. [6] NAVIGATION ✅ PASS: Tapping Chase card navigates to /debts/{id} (detail screen). Header '+' button (testID='add-debt') navigates to /debts/new. Inline '+ Agregar nueva deuda o préstamo' button (testID='add-debt-inline') navigates to /debts/new. Back navigation works. [7] DARK MODE ✅ PASS: Switched theme to 'Dark' in Settings (APPEARANCE section, theme buttons are in English: Light/Dark/System). Debts screen renders correctly in dark mode: dark background (#141210), all elements visible and readable (title, subtitle, summary card, 3 debt cards with accents), green accents preserved, text readable. [8] NO REGRESSIONS ✅ PASS: No error messages, no red-box errors, no console fatal errors (only deprecation warnings for shadow props and pointerEvents, which are acceptable). App responsive, navigation stable. CONCLUSION: The redesigned Debts screen works perfectly. The flip card has been completely removed and replaced with a stable Flexbox layout. NO flip animation exists anymore. Tapping the summary card does nothing (as intended). All data is real and consistent. Both light and dark modes work correctly. All navigation and filtering work as expected."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
@@ -378,12 +393,123 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Debts screen VISUAL redesign (remove fragile flip card, stable native layout per reference) — light+dark"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+    - agent: "testing"
+      message: |
+        ✅✅✅ DEBTS SCREEN REDESIGN TESTING COMPLETE - ALL 8 ACCEPTANCE CRITERIA PASSED
+        
+        **CRITICAL ENVIRONMENT FIX REQUIRED FIRST:**
+        Created missing /app/frontend/.env with EXPO_PUBLIC_BACKEND_URL=http://localhost:8001
+        - Root cause: Frontend had no .env file, so BASE url in api.ts was empty string
+        - This caused all API calls to fail silently (relative paths like /api/debts instead of http://localhost:8001/api/debts)
+        - After creating .env and restarting expo service, all data loaded correctly
+        
+        **TEST PLATFORM:** WEB preview (http://localhost:3000/debts)
+        
+        **ACCEPTANCE CRITERIA RESULTS:**
+        
+        ✅ [1] RENDER: PASS
+        - Title "Deudas y préstamos" present ✓
+        - Subtitle "Tus deudas en un solo lugar" present ✓
+        - Lock toggle (testID="lock-debts") present ✓
+        - Green round "+" add button (testID="add-debt") present ✓
+        - Back chevron visible in screenshots (minor selector issue in automation, but element exists)
+        
+        ✅ [2] SUMMARY CARD (NEW, NO FLIP): PASS
+        - ONE stable summary card (no flip functionality)
+        - LEFT side: Circular progress ring showing 30% + "Pagado" label + caption "$4,600 de $15,500"
+        - RIGHT side: 4 metric rows with real data:
+          • Total de deudas: 3
+          • Pendiente: $10,900 (red)
+          • Total: $15,500
+          • Pagado: $4,600 (green)
+        - All values are REAL DATA from 3 seeded debts (not placeholders)
+        - AMOUNTS CONSISTENT: $10,900 (Pendiente) + $4,600 (Pagado) = $15,500 (Total) ✓
+        
+        ✅✅✅ [3] NO FLIP / NO SHIFT (CRITICAL): PASS
+        - Tapped summary card and measured bounding box before/after
+        - BEFORE: top=64.00px, left=16.00px, width=1888.00px, height=190.00px
+        - AFTER: top=64.00px, left=16.00px, width=1888.00px, height=190.00px
+        - Position differences: Δtop=0.00px, Δleft=0.00px, Δwidth=0.00px, Δheight=0.00px
+        - Transform property = "none" (NO 3D rotation, NO rotateY, NO perspective)
+        - Summary card is completely stable, NO flip animation, NO layout shift
+        - Content below (filter pills, debt cards) did NOT move
+        
+        ✅ [4] FILTERS: PASS
+        - All 5 filter pills present with correct testIDs:
+          • tab-all (Todos) ✓
+          • tab-active (Activos) ✓
+          • tab-paid (Pagados) ✓
+          • tab-i_owe (Yo debo) ✓
+          • tab-they_owe (Me deben) ✓
+        - Active pill shows dark green gradient ✓
+        - Filter functionality verified:
+          • "Pagados" → shows empty message (expected, all 3 debts are active) ✓
+          • "Yo debo" → shows Tarjeta Chase + Préstamo automóvil (2 debts) ✓
+          • "Me deben" → shows Carlos me debe (1 debt) ✓
+          • "Todos" → shows all 3 debts ✓
+        
+        ✅ [5] DEBT CARDS: PASS
+        - 3 debt cards found (testID="debt-{id}")
+        - Tarjeta Chase (red/coral accent #D95345):
+          • Icon tile ✓
+          • Name "Tarjeta Chase" ✓
+          • Status pill "Activa" ✓
+          • Subtitle "Yo debo · Chase Bank" ✓
+          • Small circular % ring (28%) ✓
+          • 3 info blocks: Pendiente $1,800, Pagado $700, Total $2,500 ✓
+          • Horizontal progress bar with 28% ✓
+          • Amounts consistent: $1,800 + $700 = $2,500 ✓
+        - Préstamo automóvil (purple/indigo accent #8F5BE8):
+          • Similar layout with 30% progress ✓
+          • Amounts consistent: $8,400 + $3,600 = $12,000 ✓
+        - Carlos me debe (yellow/gold accent):
+          • Similar layout with 30% progress ✓
+          • Amounts consistent: $700 + $300 = $1,000 ✓
+        - NO text clipping or overlap ✓
+        - All values sit inside cards ✓
+        - Red and purple accents verified ✓
+        
+        ✅ [6] NAVIGATION: PASS
+        - Tapping Tarjeta Chase card → navigates to /debts/{id} (detail screen) ✓
+        - Header "+" button (testID="add-debt") → navigates to /debts/new ✓
+        - Inline "+ Agregar nueva deuda o préstamo" button (testID="add-debt-inline") → navigates to /debts/new ✓
+        - Back navigation works correctly ✓
+        
+        ✅ [7] DARK MODE: PASS
+        - Theme selector found in Settings → APPEARANCE section
+        - Theme buttons are in ENGLISH (Light/Dark/System), not Spanish
+        - Clicked "Dark" button → theme switched successfully
+        - Debts screen renders correctly in dark mode:
+          • Dark background (#141210) ✓
+          • Title and subtitle readable ✓
+          • Summary card visible with dark theme colors ✓
+          • All 3 debt cards visible with proper accents ✓
+          • Green accents preserved ✓
+          • Text readable, no contrast issues ✓
+        
+        ✅ [8] NO REGRESSIONS / ERRORS: PASS
+        - No error messages on page ✓
+        - No red-box errors ✓
+        - No console fatal errors ✓
+        - Only deprecation warnings (shadow props, pointerEvents) which are acceptable ✓
+        - App responsive, navigation stable ✓
+        
+        **SUMMARY:**
+        The redesigned Debts screen works perfectly. The flip card has been COMPLETELY REMOVED and replaced with a stable Flexbox summary card. There is NO flip animation anymore. Tapping the summary card does nothing (as intended - it's just a View, not a Pressable). All data is real and amounts are mathematically consistent. Both light and dark modes work correctly. All navigation, filtering, and layout work as expected. NO text clipping, NO overlap, NO layout shifts.
+        
+        **SCREENSHOTS CAPTURED:**
+        - 20_debts_with_data.png: Main debts screen with all 3 debts (light mode)
+        - 21_summary_before_tap.png & 22_summary_after_tap.png: Proof of NO flip/shift
+        - 23-26: Filter functionality (Pagados/Yo debo/Me deben/Todos)
+        - 27_debt_cards_detail.png: Close-up of debt card layout
+        - 43_debts_dark_mode_final.png: Dark mode rendering
     - agent: "testing"
       message: |
         ⚠️⚠️⚠️ ANDROID SCROLL BUG FIX - TESTED ON WEB ONLY (ANDROID TESTING REQUIRED)

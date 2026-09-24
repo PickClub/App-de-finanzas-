@@ -45,8 +45,8 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
                 testID="fab-add-btn"
                 accessibilityRole="button"
                 onPress={() => {
-                  // Same single Heavy impact as the other tabs.
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+                  // Same single Rigid (dry, sharp) impact as the other tabs.
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid).catch(() => {});
                   openMenu();
                 }}
                 style={({ pressed }) => [styles.centerBtn, pressed && { transform: [{ scale: 0.94 }] }]}
@@ -67,9 +67,10 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
         const tint = isFocused ? activeCol : inactiveCol;
 
         const onPress = () => {
-          // Single short, very firm Heavy impact (one knock per tap). Web/unsupported
-          // platforms reject silently via catch — navigation is unaffected.
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+          // Single, strong yet DRY impact: Rigid = stiff, sharp knock with a very
+          // short decay / minimal trailing vibration (vs Heavy's longer rumble,
+          // especially on Android). Web/unsupported reject silently via catch.
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid).catch(() => {});
           const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
           if (!isFocused && !event.defaultPrevented) {
             navigation.navigate(route.name);

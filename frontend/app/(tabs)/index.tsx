@@ -1,11 +1,21 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { View, Text, ScrollView, Pressable, StyleSheet, RefreshControl } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  useAnimatedScrollHandler,
+  useAnimatedReaction,
+  withTiming,
+  interpolate,
+  Easing,
+  type SharedValue,
+} from "react-native-reanimated";
 import Svg, { Circle as SvgCircle, Path as SvgPath } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
 import { useQuery } from "@tanstack/react-query";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 
 import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing, type ThemeColors } from "@/src/theme";
@@ -177,6 +187,10 @@ function SectionHeader({
   onSeeAll,
   seeAllTestID,
   right,
+  scrollY,
+  viewportH,
+  sectionY,
+  focusId,
 }: {
   icon: string;
   title: string;
@@ -184,16 +198,59 @@ function SectionHeader({
   onSeeAll?: () => void;
   seeAllTestID?: string;
   right?: React.ReactNode;
+  // Optional one-time entrance-animation wiring (Home section icons only).
+  scrollY?: SharedValue<number>;
+  viewportH?: SharedValue<number>;
+  sectionY?: SharedValue<number>;
+  focusId?: SharedValue<number>;
 }) {
   const { colors: baseColors, scheme } = useTheme();
   const { t } = useTranslation();
   const colors = scheme === "dark" ? baseColors : ({ ...baseColors, ...HOME_LIGHT } as ThemeColors);
   const styles = useStyles();
+
+  // Entrance animation: 1 = at rest (final position). Starts/stays at 1 so the
+  // icon sits EXACTLY in its current position unless an entrance plays.
+  const progress = useSharedValue(1);
+  const played = useSharedValue(false);
+
+  // Detect when this section first enters the viewport (per Home visit) and
+  // play the icon entrance once. Everything runs on the UI thread → no React
+  // re-renders, no scroll lag, no card/title/layout movement.
+  useAnimatedReaction(
+    () => {
+      if (!scrollY || !viewportH || !sectionY || !focusId) return null;
+      const vp = viewportH.value;
+      const visible = vp > 0 && sectionY.value + 24 < scrollY.value + vp;
+      return { visible, focus: focusId.value };
+    },
+    (cur, prev) => {
+      if (cur == null) return;
+      // New Home visit (focus changed) → allow the entrance to play once more.
+      if (prev == null || cur.focus !== prev.focus) {
+        played.value = false;
+      }
+      if (cur.visible && !played.value) {
+        played.value = true;
+        progress.value = 0;
+        progress.value = withTiming(1, { duration: 560, easing: Easing.out(Easing.cubic) });
+      }
+    },
+  );
+
+  const iconAnimStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: interpolate(progress.value, [0, 1], [-7, 0]) },
+      { scale: interpolate(progress.value, [0, 1], [0.94, 1]) },
+      { rotate: `${interpolate(progress.value, [0, 1], [-3, 0])}deg` },
+    ],
+  }));
+
   return (
     <View style={styles.mrHeader}>
-      <View style={styles.mrIconTile}>
+      <Animated.View style={[styles.mrIconTile, iconAnimStyle]}>
         <Ionicons name={icon as any} size={18} color={colors.brandPrimary} />
-      </View>
+      </Animated.View>
       <View style={{ flex: 1, marginLeft: 10 }}>
         <Text style={styles.mrTitle} numberOfLines={1}>{title}</Text>
         <Text style={styles.mrSubtitle} numberOfLines={1}>{subtitle}</Text>
@@ -292,12 +349,42 @@ export default function Home() {
     { id: "transfer", label: t("home.filterTransfers"), icon: "swap-horizontal", color: colors.accountsBlue },
   ] as const;
 
+  // --- Section-icon entrance animation wiring (visual-only, UI thread) ------
+  // Shared values track scroll offset + viewport height + each section's Y so
+  // each icon can play its entrance once when its section first becomes
+  // visible. `focusId` bumps on every Home focus so the entrance can replay
+  // after the user leaves and returns (scrolling alone never replays it).
+  const scrollY = useSharedValue(0);
+  const viewportH = useSharedValue(0);
+  const accountsY = useSharedValue(0);
+  const summaryY = useSharedValue(0);
+  const debtsY = useSharedValue(0);
+  const focusId = useSharedValue(0);
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollY.value = e.contentOffset.y;
+    },
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      focusId.value = focusId.value + 1;
+      return () => {};
+    }, [focusId]),
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#E8EFE7" }}>
-    <ScrollView
+    <Animated.ScrollView
       testID="home-scroll"
       style={{ flex: 1, backgroundColor: "transparent" }}
       contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 120 }}
+      onScroll={scrollHandler}
+      scrollEventThrottle={16}
+      onLayout={(e) => {
+        viewportH.value = e.nativeEvent.layout.height;
+      }}
       refreshControl={
         <RefreshControl
           refreshing={summaryQ.isFetching}
@@ -349,7 +436,12 @@ export default function Home() {
       <View style={styles.sectionDivider} />
 
       {/* Mis cuentas */}
-      <View style={{ paddingTop: spacing.lg }}>
+      <View
+        style={{ paddingTop: spacing.lg }}
+        onLayout={(e) => {
+          accountsY.value = e.nativeEvent.layout.y;
+        }}
+      >
         <View style={{ paddingHorizontal: spacing.lg }}>
           <SectionHeader
             icon="wallet-outline"
@@ -357,6 +449,10 @@ export default function Home() {
             subtitle={t("home.myAccountsSubtitle")}
             onSeeAll={() => router.push("/accounts")}
             seeAllTestID="see-all-accounts"
+            scrollY={scrollY}
+            viewportH={viewportH}
+            sectionY={accountsY}
+            focusId={focusId}
             right={
               <Pressable testID="toggle-hide-btn" onPress={() => setHidden((h) => !h)} hitSlop={8}>
                 <Ionicons name={hidden ? "eye-off-outline" : "eye-outline"} size={20} color={colors.muted} />
@@ -421,13 +517,22 @@ export default function Home() {
       <View style={styles.sectionDivider} />
 
       {/* Resumen del mes */}
-      <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}>
+      <View
+        style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}
+        onLayout={(e) => {
+          summaryY.value = e.nativeEvent.layout.y;
+        }}
+      >
         <SectionHeader
           icon="stats-chart-outline"
           title={t("home.monthSummary")}
           subtitle={t("home.monthSummarySubtitle")}
           onSeeAll={() => router.push("/(tabs)/reports")}
           seeAllTestID="see-all-summary"
+          scrollY={scrollY}
+          viewportH={viewportH}
+          sectionY={summaryY}
+          focusId={focusId}
         />
       </View>
 
@@ -496,13 +601,22 @@ export default function Home() {
       <View style={styles.sectionDivider} />
 
       {/* Deudas */}
-      <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}>
+      <View
+        style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}
+        onLayout={(e) => {
+          debtsY.value = e.nativeEvent.layout.y;
+        }}
+      >
         <SectionHeader
           icon="wallet-outline"
           title={t("home.debts")}
           subtitle={t("home.debtsSubtitle")}
           onSeeAll={() => router.push("/debts")}
           seeAllTestID="see-all-debts"
+          scrollY={scrollY}
+          viewportH={viewportH}
+          sectionY={debtsY}
+          focusId={focusId}
         />
       </View>
 
@@ -760,7 +874,7 @@ export default function Home() {
           </LinearGradient>
         </Pressable>
       </View>
-    </ScrollView>
+    </Animated.ScrollView>
     </View>
   );
 }

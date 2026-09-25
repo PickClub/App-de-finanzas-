@@ -28,6 +28,8 @@ type Note = {
   color: string;
   createdAt: string; // ISO
   updatedAt: string; // ISO
+  icon?: string; // optional Ionicons name for the note tile
+  categories?: string[]; // optional labels shown as chips
 };
 
 // Colors drawn from the visual family already present on Home (account cards +
@@ -38,17 +40,39 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+// Parse a plain-text note body into individual items for a note-like
+// presentation. Splits on line breaks first; a single-line note is broken into
+// sentences. Never mutates or persists — purely a display transform, so the
+// existing plain-text data model is fully preserved.
+function toItems(content: string): string[] {
+  if (!content) return [];
+  const lines = content
+    .split("\n")
+    .map((s) => s.replace(/^[-•○\s]+/, "").trim())
+    .filter(Boolean);
+  if (lines.length > 1) return lines;
+  const parts = content.split(/([.!?])\s+/);
+  const sentences: string[] = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    const seg = (parts[i] || "").trim();
+    if (!seg) continue;
+    const punct = parts[i + 1] || "";
+    sentences.push((seg + punct).trim());
+  }
+  return sentences.length ? sentences : [content.trim()];
+}
+
 // First-run example notes so the screen demonstrates the design and both
 // sections. They are ordinary notes — fully editable / deletable by the user.
 function makeSeed(): Note[] {
   const now = Date.now();
   const iso = (minsAgo: number) => new Date(now - minsAgo * 60000).toISOString();
   return [
-    { id: genId(), title: "Ideas de ahorro", content: "Revisar suscripciones y cancelar las que ya no uso este mes.", pinned: true, color: NOTE_COLORS[0], createdAt: iso(2880), updatedAt: iso(120) },
-    { id: genId(), title: "Lista de compras", content: "Leche, pan, huevos, café y algo de fruta para la semana.", pinned: false, color: NOTE_COLORS[1], createdAt: iso(1440), updatedAt: iso(300) },
-    { id: genId(), title: "Metas del mes", content: "Reducir gastos en restaurantes y salir a caminar más seguido.", pinned: false, color: NOTE_COLORS[2], createdAt: iso(600), updatedAt: iso(600) },
-    { id: genId(), title: "Recordatorio", content: "Pagar la tarjeta antes del día 15 para evitar intereses.", pinned: false, color: NOTE_COLORS[3], createdAt: iso(240), updatedAt: iso(90) },
-    { id: genId(), title: "Presupuesto viaje", content: "Estimar transporte, hospedaje y comidas para el fin de semana.", pinned: false, color: NOTE_COLORS[4], createdAt: iso(60), updatedAt: iso(30) },
+    { id: genId(), title: "Ideas de ahorro", content: "Revisar suscripciones y cancelar las que ya no uso este mes.\nPreparar más comidas en casa.\nComparar precios antes de comprar.", pinned: true, color: NOTE_COLORS[0], icon: "bulb", categories: ["Finanzas", "Personal"], createdAt: iso(2880), updatedAt: iso(120) },
+    { id: genId(), title: "Lista de compras", content: "Leche\nPan\nHuevos\nCafé\nAlgo de fruta para la semana", pinned: false, color: NOTE_COLORS[1], icon: "cart", categories: ["Compras"], createdAt: iso(1440), updatedAt: iso(300) },
+    { id: genId(), title: "Metas del mes", content: "Reducir gastos en restaurantes.\nSalir a caminar más seguido.\nLeer al menos un libro.\nOrganizar mejor mi tiempo.", pinned: false, color: NOTE_COLORS[2], icon: "radio-button-on", categories: ["Metas", "Personal"], createdAt: iso(600), updatedAt: iso(600) },
+    { id: genId(), title: "Recordatorio", content: "Pagar la tarjeta antes del día 15 para evitar intereses.", pinned: false, color: NOTE_COLORS[3], icon: "alarm", categories: ["Recordatorio"], createdAt: iso(240), updatedAt: iso(90) },
+    { id: genId(), title: "Presupuesto viaje", content: "Estimar transporte, hospedaje y comidas para el fin de semana.", pinned: false, color: NOTE_COLORS[4], icon: "airplane", categories: ["Viaje"], createdAt: iso(60), updatedAt: iso(30) },
   ];
 }
 
@@ -59,9 +83,12 @@ export default function Notes() {
   const isDark = scheme === "dark";
   const accent = isDark ? colors.brandPrimary : "#126046";
   const subColor = isDark ? colors.muted : "#68746D";
+  const titleColor = isDark ? colors.onSurface : "#15251E";
 
   const [notes, setNotes] = useState<Note[]>([]);
   const [query, setQuery] = useState("");
+  const [sortNewest, setSortNewest] = useState(true);
+  const [menuNote, setMenuNote] = useState<Note | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Note | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
@@ -145,39 +172,85 @@ export default function Notes() {
     return notes.filter((n) => n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q));
   }, [notes, query]);
 
-  const pinned = filtered.filter((n) => n.pinned);
-  const others = filtered.filter((n) => !n.pinned);
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      const da = new Date(a.updatedAt).getTime();
+      const db = new Date(b.updatedAt).getTime();
+      return sortNewest ? db - da : da - db;
+    });
+    return arr;
+  }, [filtered, sortNewest]);
 
-  const renderCard = (note: Note) => (
-    <Pressable
-      key={note.id}
-      testID={`note-card-${note.id}`}
-      onPress={() => openEditor(note)}
-      style={[styles.card, { backgroundColor: tintOf(note.color) }]}
-    >
-      <View style={styles.cardTop}>
-        <View style={[styles.cardIcon, { backgroundColor: note.color }]}>
-          <Ionicons name="document-text" size={18} color="#FFFFFF" />
+  const pinned = sorted.filter((n) => n.pinned);
+  const others = sorted.filter((n) => !n.pinned);
+
+  const renderCard = (note: Note) => {
+    const items = toItems(note.content);
+    const checklist = !note.pinned; // pinned → filled bullets, others → check circles
+    const cats = note.categories || [];
+    const icon = note.icon || "document-text";
+    return (
+      <Pressable
+        key={note.id}
+        testID={`note-card-${note.id}`}
+        onPress={() => openEditor(note)}
+        style={[styles.card, { backgroundColor: tintOf(note.color) }]}
+      >
+        <View style={[styles.cardAccent, { backgroundColor: note.color }]} />
+        <View style={styles.cardBody}>
+          <View style={styles.cardTop}>
+            <View style={[styles.cardIcon, { backgroundColor: note.color }]}>
+              <Ionicons name={icon as any} size={20} color="#FFFFFF" />
+            </View>
+            <Text style={styles.cardTitle} numberOfLines={1}>{note.title}</Text>
+            <Pressable
+              testID={`note-menu-${note.id}`}
+              hitSlop={8}
+              onPress={() => setMenuNote(note)}
+              style={styles.menuBtn}
+            >
+              <Ionicons name="ellipsis-vertical" size={18} color={subColor} />
+            </Pressable>
+          </View>
+
+          {items.length > 0 && (
+            <View style={styles.itemList}>
+              {items.slice(0, 6).map((it, idx) => (
+                <View key={idx} style={styles.itemRow}>
+                  {checklist ? (
+                    <Ionicons name="ellipse-outline" size={16} color={note.color} style={styles.itemMark} />
+                  ) : (
+                    <View style={[styles.itemDot, { backgroundColor: note.color }]} />
+                  )}
+                  <Text style={styles.itemText} numberOfLines={2}>{it}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <View style={styles.cardFooter}>
+            <View style={styles.footerLeft}>
+              <Ionicons name="time-outline" size={13} color={subColor} />
+              <Text style={styles.cardDate}>{formatDateTime(note.updatedAt)}</Text>
+            </View>
+            {cats.length > 0 && (
+              <View style={styles.chips}>
+                {cats.slice(0, 2).map((c, i) => (
+                  <View
+                    key={c}
+                    style={[styles.chip, i === 0 ? { backgroundColor: note.color + (isDark ? "2E" : "1F") } : styles.chipNeutral]}
+                  >
+                    <Text style={[styles.chipText, i === 0 ? { color: note.color } : styles.chipTextNeutral]}>{c}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
         </View>
-        <Pressable
-          testID={`note-pin-${note.id}`}
-          hitSlop={8}
-          onPress={() => togglePin(note.id)}
-          style={styles.pinBtn}
-        >
-          <Ionicons name={note.pinned ? "pin" : "pin-outline"} size={18} color={note.pinned ? note.color : subColor} />
-        </Pressable>
-      </View>
-      <Text style={styles.cardTitle} numberOfLines={1}>{note.title}</Text>
-      {note.content ? (
-        <Text style={styles.cardPreview} numberOfLines={2}>{note.content}</Text>
-      ) : null}
-      <View style={styles.cardFooter}>
-        <Ionicons name="time-outline" size={13} color={subColor} />
-        <Text style={styles.cardDate}>{formatDateTime(note.updatedAt)}</Text>
-      </View>
-    </Pressable>
-  );
+      </Pressable>
+    );
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: isDark ? colors.surface : "#E8EFE7" }}>
@@ -190,21 +263,21 @@ export default function Notes() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headIconTile}>
-            <Ionicons name="document-text" size={20} color={accent} />
+            <Ionicons name="document-text" size={22} color={accent} />
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={styles.title}>Notas</Text>
-            <Text style={styles.subtitle} numberOfLines={2}>Tus notas personales, siempre a mano.</Text>
+            <Text style={styles.subtitle} numberOfLines={2}>Tus ideas, tareas y recuerdos en un solo lugar.</Text>
           </View>
           <Pressable testID="notes-new-btn" onPress={() => openEditor(null)} style={styles.newBtn}>
             <Ionicons name="add" size={18} color="#FFFFFF" />
-            <Text style={styles.newBtnText}>Nueva</Text>
+            <Text style={styles.newBtnText}>Nueva nota</Text>
           </Pressable>
         </View>
 
         {/* Search */}
         <View style={styles.searchBox}>
-          <Ionicons name="search" size={17} color={subColor} />
+          <Ionicons name="search" size={18} color={subColor} />
           <TextInput
             testID="notes-search"
             value={query}
@@ -215,9 +288,11 @@ export default function Notes() {
           />
           {query ? (
             <Pressable hitSlop={8} onPress={() => setQuery("")}>
-              <Ionicons name="close-circle" size={17} color={subColor} />
+              <Ionicons name="close-circle" size={18} color={subColor} />
             </Pressable>
-          ) : null}
+          ) : (
+            <Ionicons name="options-outline" size={18} color={subColor} />
+          )}
         </View>
 
         {notes.length === 0 ? (
@@ -242,6 +317,11 @@ export default function Notes() {
                   </View>
                   <Text style={styles.sectionTitle}>Notas fijadas</Text>
                   <Text style={styles.sectionCount}>{pinned.length}</Text>
+                  <View style={{ flex: 1 }} />
+                  <Pressable testID="notes-ver-todas" hitSlop={6} onPress={() => setQuery("")} style={styles.verTodas}>
+                    <Text style={styles.verTodasText}>Ver todas</Text>
+                    <Ionicons name="chevron-forward" size={14} color={subColor} />
+                  </Pressable>
                 </View>
                 <View style={styles.cardWrap}>{pinned.map(renderCard)}</View>
               </>
@@ -253,6 +333,11 @@ export default function Notes() {
               </View>
               <Text style={styles.sectionTitle}>Todas las notas</Text>
               <Text style={styles.sectionCount}>{others.length}</Text>
+              <View style={{ flex: 1 }} />
+              <Pressable testID="notes-sort" hitSlop={6} onPress={() => setSortNewest((s) => !s)} style={styles.sortPill}>
+                <Text style={styles.sortText}>{sortNewest ? "Más recientes" : "Más antiguas"}</Text>
+                <Ionicons name={sortNewest ? "chevron-down" : "chevron-up"} size={14} color={subColor} />
+              </Pressable>
             </View>
             {others.length > 0 ? (
               <View style={styles.cardWrap}>{others.map(renderCard)}</View>
@@ -262,6 +347,38 @@ export default function Notes() {
           </>
         )}
       </ScrollView>
+
+      {/* Card action menu (three-dot) */}
+      <Modal visible={!!menuNote} transparent animationType="fade" onRequestClose={() => setMenuNote(null)}>
+        <Pressable style={styles.menuBackdrop} onPress={() => setMenuNote(null)} />
+        <View style={[styles.menuSheet, { paddingBottom: insets.bottom + 12 }]}>
+          <View style={styles.sheetHandle} />
+          <Pressable
+            testID="note-menu-edit"
+            style={styles.menuItem}
+            onPress={() => { const n = menuNote; setMenuNote(null); if (n) openEditor(n); }}
+          >
+            <Ionicons name="create-outline" size={20} color={titleColor} />
+            <Text style={styles.menuItemText}>Editar</Text>
+          </Pressable>
+          <Pressable
+            testID="note-menu-pin"
+            style={styles.menuItem}
+            onPress={() => { const n = menuNote; setMenuNote(null); if (n) togglePin(n.id); }}
+          >
+            <Ionicons name={menuNote?.pinned ? "pin" : "pin-outline"} size={20} color={titleColor} />
+            <Text style={styles.menuItemText}>{menuNote?.pinned ? "Desfijar nota" : "Fijar nota"}</Text>
+          </Pressable>
+          <Pressable
+            testID="note-menu-delete"
+            style={styles.menuItem}
+            onPress={() => { const n = menuNote; setMenuNote(null); if (n) deleteNote(n.id); }}
+          >
+            <Ionicons name="trash-outline" size={20} color={colors.expenseRed} />
+            <Text style={[styles.menuItemText, { color: colors.expenseRed }]}>Eliminar</Text>
+          </Pressable>
+        </View>
+      </Modal>
 
       {/* Editor (create / edit) */}
       <Modal visible={editorOpen} transparent animationType="slide" onRequestClose={() => setEditorOpen(false)}>
@@ -367,17 +484,17 @@ const useStyles = makeStyles((colors, scheme) => {
 
     // Search
     searchBox: {
-      flexDirection: "row", alignItems: "center", gap: 8,
+      flexDirection: "row", alignItems: "center", gap: 10,
       marginHorizontal: spacing.lg,
       marginTop: spacing.lg,
-      paddingHorizontal: 12,
-      height: 44,
-      backgroundColor: cardSurface,
-      borderRadius: radius.md,
+      paddingHorizontal: 16,
+      height: 52,
+      backgroundColor: isDark ? colors.surfaceSecondary : "#FFFFFF",
+      borderRadius: 18,
       borderWidth: 1,
-      borderColor: lineSoft,
+      borderColor: isDark ? colors.border : "rgba(39,71,56,0.08)",
     },
-    searchInput: { flex: 1, fontSize: 14, color: titleColor, paddingVertical: 0 },
+    searchInput: { flex: 1, fontSize: 15, color: titleColor, paddingVertical: 0 },
 
     // Section labels (Home section-header language, compact)
     sectionLabel: {
@@ -395,28 +512,56 @@ const useStyles = makeStyles((colors, scheme) => {
     },
     sectionTitle: { fontSize: 16, fontWeight: "800", color: titleColor, letterSpacing: -0.3 },
     sectionCount: { fontSize: 12.5, fontWeight: "700", color: subColor, marginLeft: 2 },
+    verTodas: {
+      flexDirection: "row", alignItems: "center", gap: 2,
+      paddingHorizontal: 12, paddingVertical: 6,
+      borderRadius: radius.pill,
+      backgroundColor: isDark ? colors.surfaceSecondary : "#FFFFFF",
+      borderWidth: 1, borderColor: isDark ? colors.border : "rgba(39,71,56,0.08)",
+    },
+    verTodasText: { fontSize: 12.5, fontWeight: "700", color: subColor },
+    sortPill: {
+      flexDirection: "row", alignItems: "center", gap: 3,
+      paddingHorizontal: 12, paddingVertical: 6,
+      borderRadius: radius.pill,
+      backgroundColor: isDark ? colors.surfaceSecondary : "#FFFFFF",
+      borderWidth: 1, borderColor: isDark ? colors.border : "rgba(39,71,56,0.08)",
+    },
+    sortText: { fontSize: 12.5, fontWeight: "700", color: subColor },
 
-    // Note cards
-    cardWrap: { paddingHorizontal: spacing.lg, gap: 10 },
+    // Note cards — note-like pastel surface with a colored left accent strip.
+    cardWrap: { paddingHorizontal: spacing.lg, gap: 14 },
     card: {
-      borderRadius: radius.md,
-      borderWidth: 1,
-      borderColor: lineSoft,
-      padding: 14,
+      flexDirection: "row",
+      borderRadius: radius.lg,
+      overflow: "hidden",
+      backgroundColor: cardSurface,
     },
-    cardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    cardAccent: { width: 5, alignSelf: "stretch" },
+    cardBody: { flex: 1, paddingVertical: 14, paddingHorizontal: 14 },
+    cardTop: { flexDirection: "row", alignItems: "center", gap: 12 },
     cardIcon: {
-      width: 38, height: 38, borderRadius: 12,
+      width: 40, height: 40, borderRadius: 12,
       alignItems: "center", justifyContent: "center",
     },
-    pinBtn: {
-      width: 30, height: 30, borderRadius: 15,
+    cardTitle: { flex: 1, fontSize: 16.5, fontWeight: "800", color: titleColor, letterSpacing: -0.2 },
+    menuBtn: {
+      width: 28, height: 28, borderRadius: 14,
       alignItems: "center", justifyContent: "center",
     },
-    cardTitle: { fontSize: 15, fontWeight: "800", color: titleColor, letterSpacing: -0.2, marginTop: 10 },
-    cardPreview: { fontSize: 12.5, color: subColor, lineHeight: 17, marginTop: 3 },
-    cardFooter: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 10 },
-    cardDate: { fontSize: 11, color: subColor, fontWeight: "600" },
+    itemList: { marginTop: 12, gap: 7 },
+    itemRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+    itemDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6, marginLeft: 3 },
+    itemMark: { marginTop: 1 },
+    itemText: { flex: 1, fontSize: 14, color: titleColor, lineHeight: 20 },
+    cardFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14, gap: 8 },
+    footerLeft: { flexDirection: "row", alignItems: "center", gap: 5 },
+    cardDate: { fontSize: 12, color: subColor, fontWeight: "600" },
+    chips: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1, flexWrap: "wrap", justifyContent: "flex-end" },
+    chip: { paddingHorizontal: 11, paddingVertical: 5, borderRadius: radius.pill },
+    chipNeutral: { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(39,71,56,0.07)" },
+    chipText: { fontSize: 11.5, fontWeight: "700" },
+    chipTextNeutral: { color: subColor },
 
     mutedRow: { color: subColor, fontSize: 13, paddingHorizontal: spacing.lg, paddingVertical: 6 },
 
@@ -490,6 +635,22 @@ const useStyles = makeStyles((colors, scheme) => {
       borderRadius: radius.pill,
     },
     saveText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13.5 },
+
+    // Card action menu (three-dot)
+    menuBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },
+    menuSheet: {
+      position: "absolute", left: 0, right: 0, bottom: 0,
+      backgroundColor: isDark ? colors.surfaceSecondary : "#FCFCF8",
+      borderTopLeftRadius: radius.cardLg,
+      borderTopRightRadius: radius.cardLg,
+      paddingHorizontal: 12, paddingTop: 10,
+    },
+    menuItem: {
+      flexDirection: "row", alignItems: "center", gap: 14,
+      paddingHorizontal: 14, paddingVertical: 15,
+      borderRadius: radius.md,
+    },
+    menuItemText: { fontSize: 15.5, fontWeight: "700", color: titleColor },
     confirmRow: { flexDirection: "row", alignItems: "center", gap: 10 },
     confirmText: { flex: 1, fontSize: 13.5, fontWeight: "700", color: titleColor },
     confirmCancel: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: lineSoft },

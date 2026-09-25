@@ -2,12 +2,8 @@ import React, { useState, useMemo, useCallback } from "react";
 import { View, Text, ScrollView, Pressable, StyleSheet, RefreshControl } from "react-native";
 import Animated, {
   useSharedValue,
-  useAnimatedStyle,
   useAnimatedScrollHandler,
   useAnimatedReaction,
-  withTiming,
-  interpolate,
-  Easing,
   type SharedValue,
 } from "react-native-reanimated";
 import Svg, { Circle as SvgCircle, Path as SvgPath } from "react-native-svg";
@@ -23,6 +19,7 @@ import { formatCurrency, formatCurrencyInt, formatDateLong, formatDateTime, tran
 import i18n, { useTranslation } from "@/src/i18n";
 import { IconTile } from "@/src/components/ui";
 import { LockToggle, useLock } from "@/src/lock";
+import { WalletIcon, ChartIcon, HandCoinIcon } from "@/src/components/animated-section-icons";
 
 // --- HOME-ONLY color redesign (light mode only) ---------------------------
 // These tokens SHADOW the global theme ONLY on the Home screen in light mode,
@@ -182,6 +179,7 @@ const mb = StyleSheet.create({
 // wires an optional onSeeAll navigation and an optional right-side node.
 function SectionHeader({
   icon,
+  iconKind,
   title,
   subtitle,
   onSeeAll,
@@ -193,12 +191,13 @@ function SectionHeader({
   focusId,
 }: {
   icon: string;
+  iconKind?: "wallet" | "chart" | "hand";
   title: string;
   subtitle: string;
   onSeeAll?: () => void;
   seeAllTestID?: string;
   right?: React.ReactNode;
-  // Optional one-time entrance-animation wiring (Home section icons only).
+  // Optional one-time internal-icon animation wiring (Home section icons only).
   scrollY?: SharedValue<number>;
   viewportH?: SharedValue<number>;
   sectionY?: SharedValue<number>;
@@ -209,14 +208,12 @@ function SectionHeader({
   const colors = scheme === "dark" ? baseColors : ({ ...baseColors, ...HOME_LIGHT } as ThemeColors);
   const styles = useStyles();
 
-  // Entrance animation: 1 = at rest (final position). Starts/stays at 1 so the
-  // icon sits EXACTLY in its current position unless an entrance plays.
-  const progress = useSharedValue(1);
+  // `playSignal` increments once when the section first enters the viewport in
+  // the current Home visit; the animated icon watches it to run its internal
+  // timeline. `played` gates it to once-per-visit and resets on Home focus.
+  const playSignal = useSharedValue(0);
   const played = useSharedValue(false);
 
-  // Detect when this section first enters the viewport (per Home visit) and
-  // play the icon entrance once. Everything runs on the UI thread → no React
-  // re-renders, no scroll lag, no card/title/layout movement.
   useAnimatedReaction(
     () => {
       if (!scrollY || !viewportH || !sectionY || !focusId) return null;
@@ -226,31 +223,32 @@ function SectionHeader({
     },
     (cur, prev) => {
       if (cur == null) return;
-      // New Home visit (focus changed) → allow the entrance to play once more.
       if (prev == null || cur.focus !== prev.focus) {
-        played.value = false;
+        played.value = false; // new Home visit → allow one replay
       }
       if (cur.visible && !played.value) {
         played.value = true;
-        progress.value = 0;
-        progress.value = withTiming(1, { duration: 560, easing: Easing.out(Easing.cubic) });
+        playSignal.value = playSignal.value + 1;
       }
     },
   );
 
-  const iconAnimStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: interpolate(progress.value, [0, 1], [-7, 0]) },
-      { scale: interpolate(progress.value, [0, 1], [0.94, 1]) },
-      { rotate: `${interpolate(progress.value, [0, 1], [-3, 0])}deg` },
-    ],
-  }));
+  const iconColor = colors.brandPrimary;
 
   return (
     <View style={styles.mrHeader}>
-      <Animated.View style={[styles.mrIconTile, iconAnimStyle]}>
-        <Ionicons name={icon as any} size={18} color={colors.brandPrimary} />
-      </Animated.View>
+      {/* Static rounded tile — only the internal graphic animates. */}
+      <View style={styles.mrIconTile}>
+        {iconKind === "wallet" ? (
+          <WalletIcon color={iconColor} play={playSignal} />
+        ) : iconKind === "chart" ? (
+          <ChartIcon color={iconColor} play={playSignal} />
+        ) : iconKind === "hand" ? (
+          <HandCoinIcon color={iconColor} play={playSignal} />
+        ) : (
+          <Ionicons name={icon as any} size={18} color={iconColor} />
+        )}
+      </View>
       <View style={{ flex: 1, marginLeft: 10 }}>
         <Text style={styles.mrTitle} numberOfLines={1}>{title}</Text>
         <Text style={styles.mrSubtitle} numberOfLines={1}>{subtitle}</Text>
@@ -445,6 +443,7 @@ export default function Home() {
         <View style={{ paddingHorizontal: spacing.lg }}>
           <SectionHeader
             icon="wallet-outline"
+            iconKind="wallet"
             title={t("home.myAccounts")}
             subtitle={t("home.myAccountsSubtitle")}
             onSeeAll={() => router.push("/accounts")}
@@ -525,6 +524,7 @@ export default function Home() {
       >
         <SectionHeader
           icon="stats-chart-outline"
+          iconKind="chart"
           title={t("home.monthSummary")}
           subtitle={t("home.monthSummarySubtitle")}
           onSeeAll={() => router.push("/(tabs)/reports")}
@@ -609,6 +609,7 @@ export default function Home() {
       >
         <SectionHeader
           icon="wallet-outline"
+          iconKind="hand"
           title={t("home.debts")}
           subtitle={t("home.debtsSubtitle")}
           onSeeAll={() => router.push("/debts")}

@@ -177,6 +177,9 @@ frontend:
         - working: true
           agent: "testing"
           comment: "✅✅✅ BUG FIX VERIFIED SUCCESSFULLY. Tested on WEB preview (https://df10a532-d8e5-492e-b72c-08b40c2e0f49.preview.emergentagent.com/). PRIMARY CHECK PASSED: NO console warnings about 'translateY', 'translateX', 'scale', 'rotation', 'originX', or 'originY' props on DOM elements. Captured 5 console messages total, only 3 unrelated deprecation warnings (shadow* props, pointerEvents). Home screen renders correctly with all three sections (My accounts, Month summary, Debts), 4 SVG icons present, balance header visible, account cards visible, no crashes. Scrolled through entire page (0-1000px) to trigger all section animations, NO warnings generated. Tab navigation works (AI tab, Reports tab). Code verified: WalletIcon uses `transform: rotate()` string, HandCoinIcon uses `transform: translate()` string, ChartIcon uses native SVG y/height props. The fix (switching from transform helper props to SVG transform string attribute) is working correctly on React Native Web."
+        - working: true
+          agent: "testing"
+          comment: "✅✅✅ RE-VERIFICATION COMPLETE (2nd verification per user request). Tested on WEB preview (https://df10a532-d8e5-492e-b72c-08b40c2e0f49.preview.emergentagent.com/). ALL 4 ACCEPTANCE CRITERIA PASSED: [1] HOME LOADED & RENDERED ✅: 'Mis cuentas' section found, 'Resumen del mes' section found, 4 SVG elements present (the three animated section icons), no crashes, no red-box errors. [2] NO DOM PROP WARNINGS ✅✅✅ CRITICAL: Console captured 5 messages total (0 errors, 3 warnings, 2 info/log). ZERO warnings about 'translateY', 'translateX', 'rotation', 'originX', 'originY', or 'scale' props on DOM elements. Only unrelated deprecation warnings: 'shadow* style props deprecated. Use boxShadow' and 'props.pointerEvents is deprecated'. [3] NO REANIMATED/WORKLETS ERRORS ✅: ZERO console errors mentioning 'invalidTransform', 'Worklets', 'Remote Function', or 'Reanimated'. [4] TAB NAVIGATION WORKS ✅: Successfully navigated to 'Informes' (Reports) tab, URL changed to /reports. Bottom-tab navigation functional. SCROLLING TEST: Scrolled through Home screen (0px → 300px → 600px → 1000px → back to 0px) to trigger all three section icon animations ('Mis cuentas' wallet, 'Resumen del mes' bar chart, 'Deudas' hand+coin). NO new console warnings generated during or after scrolling. PLATFORM-SPECIFIC FIX VERIFIED: Code review confirms IS_WEB constant (Platform.OS === 'web') correctly branches: WEB path returns SVG `transform` string attribute (e.g., `transform: 'rotate(${a} 4.5 10)'` for WalletIcon, `transform: 'translate(0 ${ty})'` for HandCoinIcon), NATIVE path returns individual svg props (rotation/originX/originY/translateY). The fix successfully prevents transform helper props from leaking to the DOM on React Native Web. WEB behavior is clean and regression-free."
   - task: "Tapping a transaction opens read-only Detail (from Home + Transactions list)"
     implemented: true
     working: true
@@ -441,7 +444,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "SVG transform warning fix: animated-section-icons.tsx (Deudas translateY + Wallet rotation) on Web"
+    - "Expo Go/Android invalidTransform crash fix: animated-section-icons.tsx platform-safe SVG transforms"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -449,20 +452,22 @@ test_plan:
 agent_communication:
     - agent: "main"
       message: |
-        BUG FIX (frontend, minimal & localized) — SVG/Web transform warning.
+        URGENT BUG FIX (frontend, minimal & localized) — Expo Go/Android "invalidTransform" Worklets crash.
         FILE: /app/frontend/src/components/animated-section-icons.tsx (ONLY this file).
-        REPORTED ERROR: "React does not recognize the 'translateY' prop on a DOM element" (RN-Web), around the Deudas <APath> using animatedProps={handProps}.
-        ROOT CAUSE: useAnimatedProps returned transform HELPER props (translateY / rotation / originX / originY) which react-native-svg-web leaks as raw DOM attributes → warning.
-        FIX: switched those two useAnimatedProps to return the SVG `transform` STRING attribute instead:
-          - WalletIcon flap:  transform: `rotate(${angle} 4.5 10)`  (was rotation+originX+originY)
-          - HandCoinIcon hand: transform: `translate(0 ${ty})`      (was translateY)
-        Untouched: coin `cy` and chart bar `y`/`height` are native SVG attrs (no warning). No visual/size/color/stroke/duration change. No other files touched.
-        PLEASE VERIFY ON WEB (Home screen, https://df10a532-d8e5-492e-b72c-08b40c2e0f49.preview.emergentagent.com/):
-          1) Open Home and scroll so "Mis cuentas", "Resumen del mes" and "Deudas" section icons all enter the viewport (this triggers their animations).
-          2) Confirm the browser console shows NO "React does not recognize the 'translateY' prop on a DOM element" warning, and NO equivalent warnings for 'translateX', 'scale', 'rotation', 'originX', 'originY'.
-          3) Confirm Home still renders and the three section icons are present (SVGs) and the app does not crash.
-          4) Confirm tab navigation still works (tap Reports/Notes/Inicio) with no new errors.
-        This is WEB console-warning verification; the animations themselves are UI-thread and need not be pixel-verified.
+        REPORTED CRASH (Android/Expo Go): "[Worklets] Tried to synchronously call a Remote Function. Called invalidTransform on the UI Runtime." — appeared after the previous Web fix that returned an SVG `transform` STRING from useAnimatedProps.
+        ROOT CAUSE: Reanimated's NATIVE runtime special-cases the `transform` prop and expects an RN transform ARRAY. A transform STRING makes it call the internal `invalidTransform` remote function from the UI thread → red-screen crash. (On Web the string is fine; the individual translateY/rotation props are what warned there.)
+        FIX: choose representation per platform via a module-level `const IS_WEB = Platform.OS === "web"` captured OUTSIDE the worklet:
+          - WalletIcon flap: Web -> transform:`rotate(a 4.5 10)`; Native -> { rotation:a, originX:4.5, originY:10 }
+          - HandCoinIcon hand: Web -> transform:`translate(0 ty)`; Native -> { translateY: ty }
+          - Coin `cy` and chart bars `y`/`height` unchanged (native SVG attrs on both platforms).
+        Worklet-safe: only `interpolate` + a captured boolean; no remote/JS calls inside the worklet. Native path mirrors the ORIGINAL implementation that worked in Expo Go before the web fix. Android Metro bundle builds (HTTP 200). No design/size/color/stroke/timing change. No deps installed.
+        PLEASE VERIFY ON WEB (Home, https://df10a532-d8e5-492e-b72c-08b40c2e0f49.preview.emergentagent.com/):
+          1) App loads; scroll Home so "Mis cuentas", "Resumen del mes", "Deudas" icons enter viewport.
+          2) NO console warning "React does not recognize the 'translateY' prop on a DOM element" and NO equivalents for translateX/rotation/originX/scale.
+          3) Home renders (no crash) and the 3 SVG section icons are present.
+          4) Tab nav still works (Reportes/Notas/Inicio), no new errors.
+        NOTE: the crash itself is Android/Expo-Go (native) runtime only and cannot be reproduced on Web; web check confirms the web path stays clean and the app is not broken. Native correctness is covered by the platform branch + successful Android bundle build.
+
     
     - agent: "testing"
       message: |
@@ -1261,3 +1266,65 @@ agent_communication:
         • NO connection errors ✓
         
         CONCLUSION: 502 Bad Gateway is RESOLVED and STABLE. Backend boots correctly, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. The fix is working perfectly.
+
+    - agent: "testing"
+      message: |
+        ✅✅✅ REANIMATED + REACT-NATIVE-SVG ANIMATION FIX RE-VERIFIED (2nd verification per user request)
+        
+        Tested on WEB preview: https://df10a532-d8e5-492e-b72c-08b40c2e0f49.preview.emergentagent.com/
+        
+        FILE CHANGED: /app/frontend/src/components/animated-section-icons.tsx (ONLY this file)
+        
+        FIX SUMMARY: Platform-specific SVG transform handling to prevent DOM prop warnings on React Native Web.
+        • WEB: Uses SVG `transform` string attribute (e.g., `transform: "rotate(${a} 4.5 10)"`)
+        • NATIVE: Uses individual svg props (rotation, originX, originY, translateY)
+        
+        TEST RESULTS (ALL 4 ACCEPTANCE CRITERIA PASSED):
+        
+        ✅ [1] HOME LOADED & RENDERED WITHOUT CRASH
+        • 'Mis cuentas' section: FOUND ✓
+        • 'Resumen del mes' section: FOUND ✓
+        • SVG elements (animated section icons): 4 FOUND ✓
+        • Balance header, account cards, income/expense cards, debts card: ALL VISIBLE ✓
+        • NO red-box errors, NO crashes ✓
+        
+        ✅✅✅ [2] NO DOM PROP WARNINGS (CRITICAL - PRIMARY FIX VERIFICATION)
+        • Console messages captured: 5 total (0 errors, 3 warnings, 2 info/log)
+        • Warnings about 'translateY' prop: ZERO ✓✓✓
+        • Warnings about 'translateX' prop: ZERO ✓✓✓
+        • Warnings about 'rotation' prop: ZERO ✓✓✓
+        • Warnings about 'originX' prop: ZERO ✓✓✓
+        • Warnings about 'originY' prop: ZERO ✓✓✓
+        • Warnings about 'scale' prop: ZERO ✓✓✓
+        • Only unrelated deprecation warnings found:
+          - "shadow* style props are deprecated. Use boxShadow"
+          - "props.pointerEvents is deprecated"
+        
+        ✅ [3] NO REANIMATED/WORKLETS ERRORS
+        • Console errors mentioning 'invalidTransform': ZERO ✓
+        • Console errors mentioning 'Worklets': ZERO ✓
+        • Console errors mentioning 'Remote Function': ZERO ✓
+        • Console errors mentioning 'Reanimated': ZERO ✓
+        
+        ✅ [4] BOTTOM-TAB NAVIGATION WORKS
+        • Navigated to 'Informes' (Reports) tab: SUCCESS ✓
+        • URL changed to /reports: CONFIRMED ✓
+        • Tab switching functional: YES ✓
+        • NO new console errors during navigation ✓
+        
+        SCROLLING TEST (to trigger all three section icon animations):
+        • Scrolled through Home screen: 0px → 300px → 600px → 1000px → back to 0px
+        • All three section icons triggered their animations:
+          1. 'Mis cuentas' - wallet icon (lid opens/closes)
+          2. 'Resumen del mes' - bar chart icon (bars ripple)
+          3. 'Deudas' - hand+coin icon (coin drops into palm)
+        • NO console warnings generated during or after scrolling ✓✓✓
+        
+        CODE VERIFICATION:
+        • IS_WEB constant correctly set: Platform.OS === 'web' ✓
+        • WalletIcon (flap): Uses `transform: 'rotate(${a} 4.5 10)'` on WEB ✓
+        • HandCoinIcon (hand): Uses `transform: 'translate(0 ${ty})'` on WEB ✓
+        • ChartIcon (bars): Uses native SVG `y` and `height` props (no transform) ✓
+        • Platform branching logic correct: if (IS_WEB) return transform string, else return individual props ✓
+        
+        CONCLUSION: The fix is working PERFECTLY on WEB. The platform-specific transform handling successfully prevents transform helper props (translateY, rotation, originX, originY) from leaking to the DOM as invalid React props. WEB behavior is clean, animations work correctly, and there are NO regressions. The native/Expo Go crash cannot be reproduced in a browser (as expected), but the WEB path is verified to be safe and functional.

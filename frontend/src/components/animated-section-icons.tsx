@@ -1,4 +1,5 @@
 import React from "react";
+import { Platform } from "react-native";
 import Svg, { Rect, G, Circle, Path } from "react-native-svg";
 import Animated, {
   useSharedValue,
@@ -9,6 +10,14 @@ import Animated, {
   Easing,
   type SharedValue,
 } from "react-native-reanimated";
+
+// Reanimated's NATIVE runtime special-cases the `transform` key and expects an
+// RN transform ARRAY — passing an SVG `transform` STRING there triggers the
+// "invalidTransform" Remote-Function crash on Android / Expo Go. On Web the
+// opposite is true: the individual `translateY`/`rotation`/`originX` props leak
+// to the DOM and warn. So we pick the representation per platform (decided
+// OUTSIDE the worklet — a plain captured boolean is worklet-safe).
+const IS_WEB = Platform.OS === "web";
 
 // Animated SVG primitives. These custom icons intentionally mirror the existing
 // Ionicons outline language (fine line stroke, brand-green color, minimalist
@@ -56,12 +65,16 @@ export function WalletIcon({ color, play }: IconProps) {
   const t = usePlayTimeline(play, 2150);
   const stops = [0, 0.14, 0.3, 0.44, 0.6, 0.76, 1];
   const angles = [0, -58, -58, 0, -40, 0, 0];
-  const flapProps = useAnimatedProps(() => ({
-    // Use the SVG `transform` attribute (string) rather than the transform
-    // helper props so react-native-svg + RN-Web don't leak `rotation`/`originX`
-    // as DOM attributes. `rotate(angle cx cy)` == rotation about (4.5, 10).
-    transform: `rotate(${interpolate(t.value, stops, angles)} 4.5 10)`,
-  }));
+  const flapProps = useAnimatedProps(() => {
+    const a = interpolate(t.value, stops, angles);
+    // Web: SVG transform string attribute. Native: individual svg transform
+    // props (Reanimated passes these through; it does NOT parse them as a
+    // transform array, so no "invalidTransform" crash).
+    if (IS_WEB) {
+      return { transform: `rotate(${a} 4.5 10)` } as any;
+    }
+    return { rotation: a, originX: 4.5, originY: 10 } as any;
+  });
   return (
     <Svg width={SIZE} height={SIZE} viewBox="0 0 24 24" fill="none">
       {/* wallet body */}
@@ -138,12 +151,15 @@ export function HandCoinIcon({ color, play }: IconProps) {
 
   const coinOuterProps = useAnimatedProps(() => ({ cy: interpolate(t.value, coinStops, coinCy) }));
   const coinInnerProps = useAnimatedProps(() => ({ cy: interpolate(t.value, coinStops, coinCy) }));
-  // Use the SVG `transform` attribute (string) instead of the `translateY`
-  // helper prop — otherwise RN-Web warns "React does not recognize the
-  // 'translateY' prop on a DOM element". `translate(0 ty)` == translateY by ty.
-  const handProps = useAnimatedProps(() => ({
-    transform: `translate(0 ${interpolate(t.value, handStops, handTy)})`,
-  }));
+  // Web: SVG transform string attribute. Native: individual `translateY` svg
+  // prop (avoids the transform-array parsing / "invalidTransform" crash).
+  const handProps = useAnimatedProps(() => {
+    const ty = interpolate(t.value, handStops, handTy);
+    if (IS_WEB) {
+      return { transform: `translate(0 ${ty})` } as any;
+    }
+    return { translateY: ty } as any;
+  });
 
   return (
     <Svg width={SIZE} height={SIZE} viewBox="0 0 24 24" fill="none">

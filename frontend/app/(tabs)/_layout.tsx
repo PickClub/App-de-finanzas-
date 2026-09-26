@@ -1,6 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Tabs, useRouter } from "expo-router";
 import { Pressable, View, Text, Modal, TouchableOpacity, Easing } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  withSequence,
+  Easing as ReEasing,
+} from "react-native-reanimated";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +28,67 @@ const TAB_CONFIG: Record<string, { labelKey: string; icon: string }> = {
 // Custom bottom navigation bar. Keeps every existing route/action; only the
 // visual presentation is redefined (rounded top, cream surface, compact
 // height, integrated wallet+ center button, discreet coral selection dot).
+// A single bottom-navigation tab. Owns a subtle icon scale micro-interaction
+// that fires ONLY when the tab becomes active (runs on the UI thread). Column
+// layout (icon, label, dot slot), colors, labels and testIDs are unchanged.
+function TabButton({
+  routeName,
+  icon,
+  label,
+  isFocused,
+  activeCol,
+  inactiveCol,
+  onPress,
+  onLayout,
+  styles,
+}: {
+  routeName: string;
+  icon: string;
+  label: string;
+  isFocused: boolean;
+  activeCol: string;
+  inactiveCol: string;
+  onPress: () => void;
+  onLayout: (e: any) => void;
+  styles: any;
+}) {
+  const scale = useSharedValue(1);
+  const wasFocused = useRef(isFocused);
+
+  useEffect(() => {
+    if (isFocused && !wasFocused.current) {
+      // Subtle pop: 1.00 → 1.07 → 1.00 (spring settle, minimal overshoot).
+      scale.value = withSequence(
+        withTiming(1.07, { duration: 130, easing: ReEasing.out(ReEasing.quad) }),
+        withSpring(1, { stiffness: 240, damping: 18, mass: 1 }),
+      );
+    }
+    wasFocused.current = isFocused;
+  }, [isFocused, scale]);
+
+  const iconStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const tint = isFocused ? activeCol : inactiveCol;
+
+  return (
+    <Pressable
+      testID={`tab-${routeName}`}
+      accessibilityRole="button"
+      accessibilityState={isFocused ? { selected: true } : {}}
+      onPress={onPress}
+      onLayout={onLayout}
+      style={styles.item}
+    >
+      <Animated.View style={iconStyle}>
+        <Ionicons name={icon as any} size={22} color={tint} />
+      </Animated.View>
+      <Text style={[styles.label, { color: tint }]} numberOfLines={1}>{label}</Text>
+      {/* Transparent placeholder preserves the exact column height; the visible
+          active dot is the single shared sliding indicator (rendered below). */}
+      <View style={[styles.dot, { backgroundColor: "transparent" }]} />
+    </Pressable>
+  );
+}
+
 function CustomTabBar({ state, navigation, openMenu }: any) {
   const { colors, scheme } = useTheme();
   const { t } = useTranslation();
@@ -30,6 +99,63 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
   const activeCol = scheme === "dark" ? colors.brandPrimary : "#FFFFFF";
   const inactiveCol = scheme === "dark" ? colors.muted : "#DCE5DF";
   const centerIconCol = scheme === "dark" ? colors.brandPrimary : "#0D5A43";
+
+  // --- Shared sliding active indicator ------------------------------------
+  // One continuous dot that springs from the previous tab to the new one,
+  // instead of five independent dots flashing on/off. Position is measured
+  // from the real item layouts so it always lands exactly where the original
+  // per-item dot used to sit.
+  const indicatorX = useSharedValue(0); // center-x of the active tab
+  const indicatorY = useSharedValue(0); // constant y of the dot row
+  const indicatorOpacity = useSharedValue(0);
+  const centers = useRef<Record<string, number>>({});
+  const dotY = useRef(0);
+  const didInit = useRef(false);
+
+  const activeName = state.routes[state.index]?.name;
+
+  const moveIndicator = useCallback(
+    (animated: boolean) => {
+      const cx = centers.current[activeName];
+      // No dot for routes without a bottom-bar button (e.g. "more").
+      if (cx == null || !TAB_CONFIG[activeName]) {
+        indicatorOpacity.value = withTiming(0, { duration: 140 });
+        return;
+      }
+      indicatorY.value = dotY.current;
+      if (animated && didInit.current) {
+        // Quick, controlled, minimal overshoot — appropriate for a finance app.
+        indicatorX.value = withSpring(cx, { stiffness: 200, damping: 24, mass: 1 });
+      } else {
+        indicatorX.value = cx; // initial placement — no travel
+      }
+      indicatorOpacity.value = withTiming(1, { duration: 140 });
+      didInit.current = true;
+    },
+    [activeName, indicatorX, indicatorY, indicatorOpacity],
+  );
+
+  useEffect(() => {
+    moveIndicator(true);
+  }, [activeName, moveIndicator]);
+
+  const handleItemLayout = useCallback(
+    (name: string, e: any) => {
+      const { x, width, y, height } = e.nativeEvent.layout;
+      centers.current[name] = x + width / 2;
+      dotY.current = y + height - 5; // dot sits at the very bottom of the column
+      if (name === activeName) moveIndicator(false);
+    },
+    [activeName, moveIndicator],
+  );
+
+  const indicatorStyle = useAnimatedStyle(() => ({
+    opacity: indicatorOpacity.value,
+    transform: [
+      { translateX: indicatorX.value - 2.5 },
+      { translateY: indicatorY.value },
+    ],
+  }));
 
   return (
     <View style={[styles.bar, { backgroundColor: barBg, paddingBottom: Math.max(insets.bottom, 6) }]}>
@@ -63,16 +189,12 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
         }
 
         const cfg = TAB_CONFIG[route.name];
-        // `more` is intentionally NOT in TAB_CONFIG: its content is now reached
-        // from the Home profile control, so it stays a registered route but is
-        // hidden from the bottom bar (returns null → no button rendered).
+        // `more` is intentionally NOT in TAB_CONFIG: it stays a registered
+        // route but is hidden from the bottom bar (returns null → no button).
         if (!cfg) return null;
-        const tint = isFocused ? activeCol : inactiveCol;
 
         const onPress = () => {
-          // Single, strong yet DRY impact: Rigid = stiff, sharp knock with a very
-          // short decay / minimal trailing vibration (vs Heavy's longer rumble,
-          // especially on Android). Web/unsupported reject silently via catch.
+          // Single, strong yet DRY impact (existing haptic — not duplicated).
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid).catch(() => {});
           const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
           if (!isFocused && !event.defaultPrevented) {
@@ -81,20 +203,26 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
         };
 
         return (
-          <Pressable
+          <TabButton
             key={route.key}
-            testID={`tab-${route.name}`}
-            accessibilityRole="button"
-            accessibilityState={isFocused ? { selected: true } : {}}
+            routeName={route.name}
+            icon={cfg.icon}
+            label={t(cfg.labelKey)}
+            isFocused={isFocused}
+            activeCol={activeCol}
+            inactiveCol={inactiveCol}
             onPress={onPress}
-            style={styles.item}
-          >
-            <Ionicons name={cfg.icon as any} size={22} color={tint} />
-            <Text style={[styles.label, { color: tint }]} numberOfLines={1}>{t(cfg.labelKey)}</Text>
-            <View style={[styles.dot, { backgroundColor: isFocused ? activeCol : "transparent" }]} />
-          </Pressable>
+            onLayout={(e: any) => handleItemLayout(route.name, e)}
+            styles={styles}
+          />
         );
       })}
+
+      {/* Single shared active indicator — slides between tabs on the UI thread. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.dotIndicator, { backgroundColor: activeCol }, indicatorStyle]}
+      />
     </View>
   );
 }
@@ -192,6 +320,9 @@ const useStyles = makeStyles((colors, scheme) => ({
   item: { flex: 1, alignItems: "center", justifyContent: "flex-start" },
   label: { fontSize: 11, fontWeight: "600", marginTop: 3 },
   dot: { width: 5, height: 5, borderRadius: 2.5, marginTop: 3 },
+  // Single shared active indicator — identical 5×5 dot, absolutely positioned
+  // so it can slide between tabs without affecting the row layout.
+  dotIndicator: { position: "absolute", top: 0, left: 0, width: 5, height: 5, borderRadius: 2.5 },
   // Center wallet+ button — integrated, slightly emphasized, not a big FAB.
   centerBtn: { alignItems: "center", justifyContent: "center" },
   centerCircle: {

@@ -163,6 +163,20 @@ backend:
           comment: "✅✅✅ 5TH VERIFICATION COMPLETE (READ-ONLY after latest .env recreation). Backend supervisor: RUNNING (pid 790, uptime 0:03:15). Port 8001 listening confirmed (netstat shows tcp 0.0.0.0:8001 LISTEN). /app/backend/.env exists with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database, CORS_ORIGINS=*. All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, dict with keys: id, name, email, profile_photo, currency ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, dict with keys: total_balance, month_income, month_expense, debts, accounts_count ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs show NO KeyError for MONGO_URL or DB_NAME in current session (backend started Thu Sep 24 10:06:44 2026). Old KeyError traces in error log are from previous crash-loop sessions before .env was recreated. Current session shows only the documented transient ObjectId serialization error (HTTP 500 on first /api/user after cold boot: 'ObjectId' object is not iterable), followed by stable HTTP 200 responses. NO 502 Bad Gateway errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED."
 
 frontend:
+  - task: "Fix React Native Web console warning: animated section icons (translateY/rotation DOM props)"
+    implemented: true
+    working: true
+    file: "src/components/animated-section-icons.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "BUG FIX (frontend, minimal & localized) — SVG/Web transform warning. FILE: /app/frontend/src/components/animated-section-icons.tsx (ONLY this file). REPORTED ERROR: 'React does not recognize the translateY prop on a DOM element' (RN-Web), around the Deudas <APath> using animatedProps={handProps}. ROOT CAUSE: useAnimatedProps returned transform HELPER props (translateY / rotation / originX / originY) which react-native-svg-web leaks as raw DOM attributes → warning. FIX: switched those two useAnimatedProps to return the SVG `transform` STRING attribute instead: WalletIcon flap: transform: `rotate(${angle} 4.5 10)` (was rotation+originX+originY), HandCoinIcon hand: transform: `translate(0 ${ty})` (was translateY). Untouched: coin `cy` and chart bar `y`/`height` are native SVG attrs (no warning). No visual/size/color/stroke/duration change. No other files touched."
+        - working: true
+          agent: "testing"
+          comment: "✅✅✅ BUG FIX VERIFIED SUCCESSFULLY. Tested on WEB preview (https://df10a532-d8e5-492e-b72c-08b40c2e0f49.preview.emergentagent.com/). PRIMARY CHECK PASSED: NO console warnings about 'translateY', 'translateX', 'scale', 'rotation', 'originX', or 'originY' props on DOM elements. Captured 5 console messages total, only 3 unrelated deprecation warnings (shadow* props, pointerEvents). Home screen renders correctly with all three sections (My accounts, Month summary, Debts), 4 SVG icons present, balance header visible, account cards visible, no crashes. Scrolled through entire page (0-1000px) to trigger all section animations, NO warnings generated. Tab navigation works (AI tab, Reports tab). Code verified: WalletIcon uses `transform: rotate()` string, HandCoinIcon uses `transform: translate()` string, ChartIcon uses native SVG y/height props. The fix (switching from transform helper props to SVG transform string attribute) is working correctly on React Native Web."
   - task: "Tapping a transaction opens read-only Detail (from Home + Transactions list)"
     implemented: true
     working: true
@@ -427,12 +441,88 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Debts summary card flip v2: premium animation + matched back blocks + flip indicator"
+    - "SVG transform warning fix: animated-section-icons.tsx (Deudas translateY + Wallet rotation) on Web"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+    - agent: "main"
+      message: |
+        BUG FIX (frontend, minimal & localized) — SVG/Web transform warning.
+        FILE: /app/frontend/src/components/animated-section-icons.tsx (ONLY this file).
+        REPORTED ERROR: "React does not recognize the 'translateY' prop on a DOM element" (RN-Web), around the Deudas <APath> using animatedProps={handProps}.
+        ROOT CAUSE: useAnimatedProps returned transform HELPER props (translateY / rotation / originX / originY) which react-native-svg-web leaks as raw DOM attributes → warning.
+        FIX: switched those two useAnimatedProps to return the SVG `transform` STRING attribute instead:
+          - WalletIcon flap:  transform: `rotate(${angle} 4.5 10)`  (was rotation+originX+originY)
+          - HandCoinIcon hand: transform: `translate(0 ${ty})`      (was translateY)
+        Untouched: coin `cy` and chart bar `y`/`height` are native SVG attrs (no warning). No visual/size/color/stroke/duration change. No other files touched.
+        PLEASE VERIFY ON WEB (Home screen, https://df10a532-d8e5-492e-b72c-08b40c2e0f49.preview.emergentagent.com/):
+          1) Open Home and scroll so "Mis cuentas", "Resumen del mes" and "Deudas" section icons all enter the viewport (this triggers their animations).
+          2) Confirm the browser console shows NO "React does not recognize the 'translateY' prop on a DOM element" warning, and NO equivalent warnings for 'translateX', 'scale', 'rotation', 'originX', 'originY'.
+          3) Confirm Home still renders and the three section icons are present (SVGs) and the app does not crash.
+          4) Confirm tab navigation still works (tap Reports/Notes/Inicio) with no new errors.
+        This is WEB console-warning verification; the animations themselves are UI-thread and need not be pixel-verified.
+    
+    - agent: "testing"
+      message: |
+        ✅✅✅ SVG TRANSFORM WARNING BUG FIX VERIFIED SUCCESSFULLY - ALL 4 ACCEPTANCE CRITERIA PASSED
+        
+        **TEST PLATFORM:** WEB preview (https://df10a532-d8e5-492e-b72c-08b40c2e0f49.preview.emergentagent.com/)
+        **TEST DATE:** 2026-09-26
+        **FILE TESTED:** /app/frontend/src/components/animated-section-icons.tsx
+        
+        **COMPREHENSIVE TEST RESULTS:**
+        
+        ✅✅✅ [1] PRIMARY CHECK - NO DOM PROP WARNINGS (CRITICAL): PASS
+        - ✅ NO "React does not recognize the 'translateY' prop on a DOM element" warning
+        - ✅ NO "React does not recognize the 'translateX' prop on a DOM element" warning
+        - ✅ NO "React does not recognize the 'scale' prop on a DOM element" warning
+        - ✅ NO "React does not recognize the 'rotation' prop on a DOM element" warning
+        - ✅ NO "React does not recognize the 'originX' prop on a DOM element" warning
+        - ✅ NO "React does not recognize the 'originY' prop on a DOM element" warning
+        - Total console messages captured: 5
+        - Console warnings found: 3 (all unrelated deprecation warnings)
+          1. "shadow*" style props are deprecated. Use "boxShadow" (2x)
+          2. props.pointerEvents is deprecated
+        - Console errors: 0
+        
+        ✅ [2] HOME SCREEN RENDERING: PASS
+        - Page loaded successfully without crashes
+        - All three section headers found: "My accounts", "Month summary", "Debts"
+        - SVG elements present: 4 SVG icons detected on page
+        - Balance header visible: $22,500 +2.1%
+        - Account cards visible: cuenta 1, Cuenta 2, Cuenta 3, cuenta 4, Cuenta 5, Add account
+        - Income/Expense cards visible with mini bar charts
+        - Debts card visible with financial data
+        - Recent movements section visible
+        - No red-box errors, no crash, no blank screen
+        
+        ✅ [3] SECTION ICONS ANIMATION TRIGGER: PASS
+        - Scrolled through entire Home screen (0px → 1000px in increments)
+        - All three sections scrolled into viewport to trigger animations:
+          • "My accounts" section with wallet icon
+          • "Month summary" section with chart icon
+          • "Debts" section with hand+coin icon
+        - Waited 1 second at each scroll position for animations to trigger
+        - NO console warnings generated during or after scrolling
+        
+        ✅ [4] BOTTOM TAB NAVIGATION: PASS
+        - Successfully clicked "AI" tab → navigated to AI screen
+        - Successfully clicked "Reports" tab → navigated to Reports screen (Informes)
+        - Tab switching works without crashes
+        - No new console errors during navigation
+        - App remains responsive
+        
+        **CODE VERIFICATION:**
+        - WalletIcon (line 59-64): Uses `transform: \`rotate(${angle} 4.5 10)\`` ✓ (SVG transform string)
+        - HandCoinIcon (line 144-146): Uses `transform: \`translate(0 ${ty})\`` ✓ (SVG transform string)
+        - ChartIcon (line 99-102): Uses native SVG `y` and `height` props ✓ (no transform needed)
+        - NO usage of translateY, translateX, scale, rotation, originX, originY helper props ✓
+        
+        **CONCLUSION:**
+        The bug fix is VERIFIED SUCCESSFUL. The React Native Web console warning "React does not recognize the 'translateY' prop on a DOM element" has been completely eliminated. The fix (switching from transform helper props to SVG transform string attribute) is working correctly on React Native Web. All three animated section icons render correctly, animations trigger on scroll, and the app functions normally with no crashes or errors.
+
     - agent: "main"
       message: |
         502 BAD GATEWAY RE-FIX (recurrence — /app/backend/.env missing again, it is gitignored so lost on fresh import).

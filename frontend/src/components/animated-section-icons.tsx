@@ -57,9 +57,10 @@ export function WalletIcon({ color, play }: IconProps) {
   const stops = [0, 0.14, 0.3, 0.44, 0.6, 0.76, 1];
   const angles = [0, -58, -58, 0, -40, 0, 0];
   const flapProps = useAnimatedProps(() => ({
-    rotation: interpolate(t.value, stops, angles),
-    originX: 4.5,
-    originY: 10,
+    // Use the SVG `transform` attribute (string) rather than the transform
+    // helper props so react-native-svg + RN-Web don't leak `rotation`/`originX`
+    // as DOM attributes. `rotate(angle cx cy)` == rotation about (4.5, 10).
+    transform: `rotate(${interpolate(t.value, stops, angles)} 4.5 10)`,
   }));
   return (
     <Svg width={SIZE} height={SIZE} viewBox="0 0 24 24" fill="none">
@@ -137,7 +138,12 @@ export function HandCoinIcon({ color, play }: IconProps) {
 
   const coinOuterProps = useAnimatedProps(() => ({ cy: interpolate(t.value, coinStops, coinCy) }));
   const coinInnerProps = useAnimatedProps(() => ({ cy: interpolate(t.value, coinStops, coinCy) }));
-  const handProps = useAnimatedProps(() => ({ translateY: interpolate(t.value, handStops, handTy) }));
+  // Use the SVG `transform` attribute (string) instead of the `translateY`
+  // helper prop — otherwise RN-Web warns "React does not recognize the
+  // 'translateY' prop on a DOM element". `translate(0 ty)` == translateY by ty.
+  const handProps = useAnimatedProps(() => ({
+    transform: `translate(0 ${interpolate(t.value, handStops, handTy)})`,
+  }));
 
   return (
     <Svg width={SIZE} height={SIZE} viewBox="0 0 24 24" fill="none">

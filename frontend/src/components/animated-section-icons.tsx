@@ -26,8 +26,6 @@ const IS_WEB = Platform.OS === "web";
 // tile container stays perfectly static.
 const ARect = Animated.createAnimatedComponent(Rect);
 const AG = Animated.createAnimatedComponent(G);
-const ACircle = Animated.createAnimatedComponent(Circle);
-const APath = Animated.createAnimatedComponent(Path);
 
 const SW = 1.7; // stroke width — matches the outline Ionicons weight
 const SIZE = 20; // rendered inside the 38px tile, ~ the old size-18 icon
@@ -62,28 +60,32 @@ function usePlayTimeline(play: SharedValue<number>, duration: number) {
 // 1) MIS CUENTAS — wallet whose lid opens & closes twice, then rests closed.
 // ---------------------------------------------------------------------------
 export function WalletIcon({ color, play }: IconProps) {
-  const t = usePlayTimeline(play, 2150);
-  const stops = [0, 0.14, 0.3, 0.44, 0.6, 0.76, 1];
-  const angles = [0, -58, -58, 0, -40, 0, 0];
+  const t = usePlayTimeline(play, 1800);
+  // Single, smooth open → close of the fold-over flap. Many keyframes on a
+  // linear master give an eased-in / eased-out swing (rest → open → rest); both
+  // ends sit at the closed pose so the wallet always finishes shut.
+  const stops = [0, 0.1, 0.22, 0.36, 0.5, 0.64, 0.78, 0.9, 1];
+  const angles = [0, 0, -24, -42, -46, -42, -24, 0, 0];
   const flapProps = useAnimatedProps(() => {
     const a = interpolate(t.value, stops, angles);
     // Web: SVG transform string attribute. Native: individual svg transform
     // props (Reanimated passes these through; it does NOT parse them as a
-    // transform array, so no "invalidTransform" crash).
+    // transform array, so no "invalidTransform" crash). Hinge at the flap's
+    // bottom-left so only the flap swings — the wallet body stays anchored.
     if (IS_WEB) {
-      return { transform: `rotate(${a} 4.5 10)` } as any;
+      return { transform: `rotate(${a} 4.4 10.6)` } as any;
     }
-    return { rotation: a, originX: 4.5, originY: 10 } as any;
+    return { rotation: a, originX: 4.4, originY: 10.6 } as any;
   });
   return (
     <Svg width={SIZE} height={SIZE} viewBox="0 0 24 24" fill="none">
-      {/* wallet body */}
-      <Rect x={3.5} y={8.5} width={17} height={11} rx={3} stroke={color} strokeWidth={SW} fill="none" />
-      {/* clasp button */}
-      <Circle cx={15.6} cy={14} r={1.15} fill={color} />
-      {/* lid / flap — hinged on the left, swings open then closed */}
+      {/* wallet body / pocket — stationary */}
+      <Rect x={3.5} y={9} width={17} height={10.8} rx={2.8} stroke={color} strokeWidth={SW} fill="none" />
+      {/* clasp / snap button on the wallet face */}
+      <Circle cx={16.2} cy={14.4} r={1.15} fill={color} />
+      {/* fold-over flap — hinged bottom-left, opens then closes once */}
       <AG animatedProps={flapProps as any}>
-        <Rect x={3.5} y={4.6} width={17} height={5.6} rx={2.6} stroke={color} strokeWidth={SW} fill="none" />
+        <Rect x={3.5} y={5.2} width={17} height={5.4} rx={2.4} stroke={color} strokeWidth={SW} fill="none" />
       </AG>
     </Svg>
   );
@@ -136,54 +138,45 @@ export function ChartIcon({ color, play }: IconProps) {
 }
 
 // ---------------------------------------------------------------------------
-// 3) DEUDAS — an open (cupped) hand receiving a coin. The coin hovers, drops
-//    into the palm, softly settles, lifts and drops once more, then rests.
+// 3) DEUDAS — a financial coin that spins once around its VERTICAL axis, then
+//    rests full-face. Exported name kept (`HandCoinIcon`) so its call site is
+//    untouched. The coin's centre stays perfectly anchored; only its internal
+//    graphic scales horizontally (edge-on ↔ full-face), mirroring on the back.
 // ---------------------------------------------------------------------------
 export function HandCoinIcon({ color, play }: IconProps) {
-  const t = usePlayTimeline(play, 2350);
-
-  // Coin vertical position: resting pose = hovering just above the palm.
-  const coinStops = [0, 0.14, 0.2, 0.26, 0.46, 0.52, 0.58, 0.8, 1];
-  const coinCy = [7, 11.5, 12.6, 11.5, 7, 11.5, 12.4, 11.5, 7];
-  // Subtle palm "receive" dip as the coin lands.
-  const handStops = [0, 0.2, 0.26, 0.34, 0.52, 0.58, 0.66, 1];
-  const handTy = [0, 0, 0.8, 0, 0, 0.8, 0, 0];
-
-  const coinOuterProps = useAnimatedProps(() => ({ cy: interpolate(t.value, coinStops, coinCy) }));
-  const coinInnerProps = useAnimatedProps(() => ({ cy: interpolate(t.value, coinStops, coinCy) }));
-  // Web: SVG transform string attribute. Native: individual `translateY` svg
-  // prop (avoids the transform-array parsing / "invalidTransform" crash).
-  const handProps = useAnimatedProps(() => {
-    const ty = interpolate(t.value, handStops, handTy);
+  const t = usePlayTimeline(play, 1800);
+  // One full 360° turn: scaleX follows cos(angle) → 1 → 0 → -1 → 0 → 1, i.e.
+  // full-face → narrow edge → opposite (mirrored) face → narrow edge →
+  // full-face. Magnitude is clamped to 0.12 so the coin never vanishes.
+  const spinProps = useAnimatedProps(() => {
+    const angle = t.value * Math.PI * 2;
+    const c = Math.cos(angle);
+    const s = c >= 0 ? Math.max(c, 0.12) : Math.min(c, -0.12);
     if (IS_WEB) {
-      return { transform: `translate(0 ${ty})` } as any;
+      // SVG transform string, centred so the spin has no horizontal drift.
+      return { transform: `translate(12 12) scale(${s} 1) translate(-12 -12)` } as any;
     }
-    return { translateY: ty } as any;
+    // Native: individual svg transform props (no transform-array parsing).
+    return { scaleX: s, originX: 12, originY: 12 } as any;
   });
 
   return (
     <Svg width={SIZE} height={SIZE} viewBox="0 0 24 24" fill="none">
-      {/* coin (outline ring + tiny inner mark) */}
-      <ACircle animatedProps={coinOuterProps as any} cx={12} r={3} stroke={color} strokeWidth={SW} fill="none" />
-      <ACircle animatedProps={coinInnerProps as any} cx={12} r={1.25} stroke={color} strokeWidth={1.1} fill="none" />
-      {/* cupped hand receiving */}
-      <APath
-        animatedProps={handProps as any}
-        d="M4.4 12.6 q0 6.6 7.6 6.6 q7.6 0 7.6 -6.6"
-        stroke={color}
-        strokeWidth={SW}
-        strokeLinecap="round"
-        fill="none"
-      />
-      {/* small thumb hint to read clearly as a hand */}
-      <APath
-        animatedProps={handProps as any}
-        d="M4.4 12.6 q-1.4 -1.2 -0.3 -3"
-        stroke={color}
-        strokeWidth={SW}
-        strokeLinecap="round"
-        fill="none"
-      />
+      <AG animatedProps={spinProps as any}>
+        {/* coin outline */}
+        <Circle cx={12} cy={12} r={6.4} stroke={color} strokeWidth={SW} fill="none" />
+        {/* subtle inner ring detail */}
+        <Circle cx={12} cy={12} r={4.5} stroke={color} strokeWidth={0.9} fill="none" />
+        {/* currency ($) mark */}
+        <Path d="M12 8 V16" stroke={color} strokeWidth={1.2} strokeLinecap="round" fill="none" />
+        <Path
+          d="M13.9 9.5 C13.9 8.5 10.1 8.5 10.1 10.2 C10.1 11.6 13.9 11.6 13.9 13.4 C13.9 15.1 10.1 15.1 10.1 14.1"
+          stroke={color}
+          strokeWidth={1.2}
+          strokeLinecap="round"
+          fill="none"
+        />
+      </AG>
     </Svg>
   );
 }

@@ -4,6 +4,7 @@ import Svg, { Rect, G, Circle, Path } from "react-native-svg";
 import Animated, {
   useSharedValue,
   useAnimatedProps,
+  useAnimatedStyle,
   useAnimatedReaction,
   withTiming,
   interpolate,
@@ -65,7 +66,7 @@ export function WalletIcon({ color, play }: IconProps) {
   // linear master give an eased-in / eased-out swing (rest → open → rest); both
   // ends sit at the closed pose so the wallet always finishes shut.
   const stops = [0, 0.1, 0.22, 0.36, 0.5, 0.64, 0.78, 0.9, 1];
-  const angles = [0, 0, -24, -42, -46, -42, -24, 0, 0];
+  const angles = [0, 0, -26, -46, -52, -46, -26, 0, 0];
   const flapProps = useAnimatedProps(() => {
     const a = interpolate(t.value, stops, angles);
     // Web: SVG transform string attribute. Native: individual svg transform
@@ -73,19 +74,27 @@ export function WalletIcon({ color, play }: IconProps) {
     // transform array, so no "invalidTransform" crash). Hinge at the flap's
     // bottom-left so only the flap swings — the wallet body stays anchored.
     if (IS_WEB) {
-      return { transform: `rotate(${a} 4.4 10.6)` } as any;
+      return { transform: `rotate(${a} 4.6 11)` } as any;
     }
-    return { rotation: a, originX: 4.4, originY: 10.6 } as any;
+    return { rotation: a, originX: 4.6, originY: 11 } as any;
   });
   return (
     <Svg width={SIZE} height={SIZE} viewBox="0 0 24 24" fill="none">
-      {/* wallet body / pocket — stationary */}
-      <Rect x={3.5} y={9} width={17} height={10.8} rx={2.8} stroke={color} strokeWidth={SW} fill="none" />
-      {/* clasp / snap button on the wallet face */}
-      <Circle cx={16.2} cy={14.4} r={1.15} fill={color} />
+      {/* wallet body / billfold — stationary */}
+      <Rect x={3.5} y={7.5} width={17} height={12} rx={2.8} stroke={color} strokeWidth={SW} fill="none" />
+      {/* card-slot line, gives it a clear billfold read */}
+      <Path d="M3.5 11 H20.5" stroke={color} strokeWidth={1.1} strokeLinecap="round" />
+      {/* clasp / snap button on the front pocket */}
+      <Circle cx={15.7} cy={15.2} r={1.25} fill={color} />
       {/* fold-over flap — hinged bottom-left, opens then closes once */}
       <AG animatedProps={flapProps as any}>
-        <Rect x={3.5} y={5.2} width={17} height={5.4} rx={2.4} stroke={color} strokeWidth={SW} fill="none" />
+        <Path
+          d="M4.6 11 V6.6 a2.4 2.4 0 0 1 2.4 -2.4 H17 a2.4 2.4 0 0 1 2.4 2.4 V11 Z"
+          stroke={color}
+          strokeWidth={SW}
+          strokeLinejoin="round"
+          fill="none"
+        />
       </AG>
     </Svg>
   );
@@ -145,24 +154,22 @@ export function ChartIcon({ color, play }: IconProps) {
 // ---------------------------------------------------------------------------
 export function HandCoinIcon({ color, play }: IconProps) {
   const t = usePlayTimeline(play, 1800);
-  // One full 360° turn: scaleX follows cos(angle) → 1 → 0 → -1 → 0 → 1, i.e.
-  // full-face → narrow edge → opposite (mirrored) face → narrow edge →
-  // full-face. Magnitude is clamped to 0.12 so the coin never vanishes.
-  const spinProps = useAnimatedProps(() => {
+  // One full 360° turn about the vertical axis. scaleX follows cos(angle):
+  // 1 → 0 → -1 → 0 → 1 = full-face → edge → opposite (mirrored) face → edge →
+  // full-face. Magnitude clamped to 0.12 so the coin never fully vanishes.
+  // Applied on an OUTER Animated.View (standard RN transform) so it animates
+  // reliably on native/Android — not an SVG-only transform prop. The View
+  // scales about its own centre, so the coin's centre stays perfectly fixed.
+  const spinStyle = useAnimatedStyle(() => {
     const angle = t.value * Math.PI * 2;
     const c = Math.cos(angle);
     const s = c >= 0 ? Math.max(c, 0.12) : Math.min(c, -0.12);
-    if (IS_WEB) {
-      // SVG transform string, centred so the spin has no horizontal drift.
-      return { transform: `translate(12 12) scale(${s} 1) translate(-12 -12)` } as any;
-    }
-    // Native: individual svg transform props (no transform-array parsing).
-    return { scaleX: s, originX: 12, originY: 12 } as any;
+    return { transform: [{ scaleX: s }] };
   });
 
   return (
-    <Svg width={SIZE} height={SIZE} viewBox="0 0 24 24" fill="none">
-      <AG animatedProps={spinProps as any}>
+    <Animated.View style={spinStyle}>
+      <Svg width={SIZE} height={SIZE} viewBox="0 0 24 24" fill="none">
         {/* coin outline */}
         <Circle cx={12} cy={12} r={6.4} stroke={color} strokeWidth={SW} fill="none" />
         {/* subtle inner ring detail */}
@@ -176,7 +183,7 @@ export function HandCoinIcon({ color, play }: IconProps) {
           strokeLinecap="round"
           fill="none"
         />
-      </AG>
-    </Svg>
+      </Svg>
+    </Animated.View>
   );
 }

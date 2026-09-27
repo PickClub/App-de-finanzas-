@@ -223,8 +223,13 @@ function SectionHeader({
     },
     (cur, prev) => {
       if (cur == null) return;
-      if (prev == null || cur.focus !== prev.focus) {
-        played.value = false; // new Home visit → allow one replay
+      const focusChanged = prev == null || cur.focus !== prev.focus;
+      if (focusChanged) {
+        // New Home visit → play the entrance once immediately, so it fires when
+        // Home is entered (not only after the section is scrolled into view).
+        played.value = true;
+        playSignal.value = playSignal.value + 1;
+        return;
       }
       if (cur.visible && !played.value) {
         played.value = true;

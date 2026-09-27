@@ -173,6 +173,42 @@ const mb = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "flex-end", height: 34, gap: 3, marginTop: 2 },
 });
 
+// Smooth wave / line chart used inside the Gastos card. Mirrors MiniBars'
+// sparse-data fallback so it always renders as a clean wave rather than a flat
+// line, and fills a soft tinted area under the curve.
+function MiniWave({ data, color }: { data: number[]; color: string }) {
+  const max = Math.max(...data, 0);
+  const nonZero = data.filter((v) => v > 0).length;
+  const pattern = [0.35, 0.55, 0.4, 0.72, 0.5, 0.85, 0.6];
+  const usePattern = nonZero < 3;
+  const W = 100;
+  const H = 34;
+  const n = data.length;
+  const pts = data.map((v, i) => {
+    const ratio = usePattern ? pattern[i % pattern.length] : max > 0 ? v / max : 0;
+    const x = n > 1 ? (i / (n - 1)) * W : W / 2;
+    const y = H - 4 - ratio * (H - 9);
+    return { x, y };
+  });
+  let line = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const xMid = (pts[i].x + pts[i + 1].x) / 2;
+    const yMid = (pts[i].y + pts[i + 1].y) / 2;
+    line += ` Q ${pts[i].x.toFixed(1)} ${pts[i].y.toFixed(1)} ${xMid.toFixed(1)} ${yMid.toFixed(1)}`;
+  }
+  line += ` T ${pts[n - 1].x.toFixed(1)} ${pts[n - 1].y.toFixed(1)}`;
+  const area = `${line} L ${W} ${H} L 0 ${H} Z`;
+  return (
+    <View style={mb.row}>
+      <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        <SvgPath d={area} fill={color + "22"} />
+        <SvgPath d={line} stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    </View>
+  );
+}
+
+
 // Reusable external section header — same visual style as the "Movimientos
 // recientes" header (soft coral icon tile on the left, title + subtitle, and a
 // compact very-light-coral "Ver todo >" pill on the right). Visual-only; it
@@ -547,7 +583,7 @@ export default function Home() {
           <View style={[styles.miniCard, styles.miniHalfLeft, styles.cardIncome]}>
             <View style={styles.mcTop}>
               <View style={[styles.miniPill, { backgroundColor: colors.incomeGreen }]}>
-                <Ionicons name="arrow-up" size={14} color="#fff" />
+                <Ionicons name="trending-up" size={16} color="#fff" />
               </View>
               <View style={styles.mcTopRight}>
                 <Text style={styles.miniSub}>{t("home.thisMonth")}</Text>
@@ -564,15 +600,18 @@ export default function Home() {
               +{money(summary?.month_income || 0)}
             </Text>
             <MiniBars data={stats.incBars} color={colors.incomeGreen} />
-            <View style={styles.mcAvg}>
-              <Text style={styles.mcAvgLabel}>{t("home.dailyAverage")}</Text>
-              <Text style={styles.mcAvgVal}>{money(stats.avgIncome)}</Text>
+            <View style={styles.mcFooter}>
+              <Ionicons name="calendar-outline" size={13} color={colors.incomeGreen} />
+              <View style={styles.mcFooterCol}>
+                <Text style={styles.mcAvgLabel}>{t("home.dailyAverage")}</Text>
+                <Text style={styles.mcAvgVal}>{money(stats.avgIncome)}</Text>
+              </View>
             </View>
           </View>
           <View style={[styles.miniCard, styles.miniHalfRight, styles.cardExpense]}>
             <View style={styles.mcTop}>
               <View style={[styles.miniPill, { backgroundColor: colors.expenseRed }]}>
-                <Ionicons name="arrow-down" size={14} color="#fff" />
+                <Ionicons name="trending-down" size={16} color="#fff" />
               </View>
               <View style={styles.mcTopRight}>
                 <Text style={styles.miniSub}>{t("home.thisMonth")}</Text>
@@ -588,10 +627,13 @@ export default function Home() {
             >
               -{money(summary?.month_expense || 0)}
             </Text>
-            <MiniBars data={stats.expBars} color={colors.expenseRed} />
-            <View style={styles.mcAvg}>
-              <Text style={styles.mcAvgLabel}>{t("home.dailyAverage")}</Text>
-              <Text style={styles.mcAvgVal}>{money(stats.avgExpense)}</Text>
+            <MiniWave data={stats.expBars} color={colors.expenseRed} />
+            <View style={styles.mcFooter}>
+              <Ionicons name="calendar-outline" size={13} color={colors.expenseRed} />
+              <View style={styles.mcFooterCol}>
+                <Text style={styles.mcAvgLabel}>{t("home.dailyAverage")}</Text>
+                <Text style={styles.mcAvgVal}>{money(stats.avgExpense)}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -1121,9 +1163,9 @@ const useStyles = makeStyles((colors, scheme) => {
     justifyContent: "space-between",
   },
   miniPill: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1132,7 +1174,17 @@ const useStyles = makeStyles((colors, scheme) => {
   miniSub: { fontSize: 9, color: wallMuted, marginTop: 2, fontWeight: "600" },
   mcTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   mcTopRight: { alignItems: "flex-end", gap: 3 },
-  mcAvg: { marginTop: 2 },
+  mcFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.62)",
+  },
+  mcFooterCol: { flex: 1 },
   mcAvgLabel: { fontSize: 9, color: wallMuted, fontWeight: "600" },
   mcAvgVal: { fontSize: 13, fontWeight: "800", color: wallText, marginTop: 1 },
   debtCard: {

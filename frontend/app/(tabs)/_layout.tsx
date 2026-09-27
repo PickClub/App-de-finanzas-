@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Tabs, useRouter } from "expo-router";
-import { Pressable, View, Text, Modal, TouchableOpacity, Easing } from "react-native";
+import { Pressable, View, Text, Easing, BackHandler } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
   withTiming,
   withSequence,
+  interpolate,
+  Extrapolation,
   Easing as ReEasing,
 } from "react-native-reanimated";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -89,7 +91,7 @@ function TabButton({
   );
 }
 
-function CustomTabBar({ state, navigation, openMenu }: any) {
+function CustomTabBar({ state, navigation, toggleMenu }: any) {
   const { colors, scheme } = useTheme();
   const { t } = useTranslation();
   const styles = useStyles();
@@ -173,7 +175,7 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
                 onPress={() => {
                   // Same single Rigid (dry, sharp) impact as the other tabs.
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid).catch(() => {});
-                  openMenu();
+                  toggleMenu();
                 }}
                 style={({ pressed }) => [styles.centerBtn, pressed && { transform: [{ scale: 0.94 }] }]}
               >
@@ -227,11 +229,71 @@ function CustomTabBar({ state, navigation, openMenu }: any) {
   );
 }
 
+// A single option row inside the floating list. Its subtle entrance is derived
+// from the shared `panel` value on the UI thread (micro-stagger), so the whole
+// list still reads as ONE object rising from the bottom. Memoized + static
+// content → no re-render churn while the menu animates.
+const MenuRow = React.memo(function MenuRow({
+  item,
+  index,
+  panel,
+  onSelect,
+  isLast,
+  muted,
+  styles,
+}: {
+  item: { icon: string; label: string; color: string; route: string };
+  index: number;
+  panel: Animated.SharedValue<number>;
+  onSelect: (route: string) => void;
+  isLast: boolean;
+  muted: string;
+  styles: any;
+}) {
+  const rowStyle = useAnimatedStyle(() => {
+    // Tiny per-item trail (~50ms-equivalent at these durations) that reverses
+    // automatically on close. Runs entirely on the UI thread.
+    const start = index * 0.05;
+    const local = interpolate(panel.value, [start, start + 0.55], [0, 1], Extrapolation.CLAMP);
+    return {
+      opacity: local,
+      transform: [{ translateY: (1 - local) * 10 }, { scale: 0.985 + local * 0.015 }],
+    };
+  });
+
+  return (
+    <Animated.View style={rowStyle}>
+      <Pressable
+        testID={`quick-${item.label}`}
+        accessibilityRole="button"
+        onPress={() => onSelect(item.route)}
+        style={({ pressed }) => [styles.row, !isLast && styles.rowDivider, pressed && styles.rowPressed]}
+      >
+        <View style={[styles.rowIcon, { backgroundColor: item.color + "22" }]}>
+          <Ionicons name={item.icon as any} size={22} color={item.color} />
+        </View>
+        <Text style={styles.rowLabel} numberOfLines={1}>{item.label}</Text>
+        <Ionicons name="chevron-forward" size={18} color={muted} />
+      </Pressable>
+    </Animated.View>
+  );
+});
+
+// Premium floating quick-add list. Opens by rapidly sliding upward from below
+// the bottom navigation and settling just above it; closes by sinking back
+// down. All motion is transform/opacity on the UI thread (time-based, no JS
+// frame loop, no overshoot). Same actions/labels/icons/routes as before.
 function QuickMenu({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const styles = useStyles();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+
+  // Approximate height of the existing bottom bar (content + safe-area). Derived
+  // synchronously from insets, so there is no async reposition/jump.
+  const navH = Math.max(insets.bottom, 6) + 60;
+
   const items = [
     { icon: "trending-down-outline", label: t("quickAdd.expense"), color: colors.expenseRed, route: "/transactions/new?type=expense" },
     { icon: "trending-up-outline", label: t("quickAdd.income"), color: colors.incomeGreen, route: "/transactions/new?type=income" },
@@ -240,33 +302,94 @@ function QuickMenu({ visible, onClose }: { visible: boolean; onClose: () => void
     { icon: "hand-left-outline", label: t("quickAdd.registerLoan"), color: colors.loansYellow, route: "/debts/new?direction=they_owe" },
     { icon: "cash-outline", label: t("quickAdd.debtPayment"), color: colors.brandPrimary, route: "/debts" },
   ];
+
+  // Master timeline: 0 = fully hidden below the bar, 1 = open & settled.
+  const panel = useSharedValue(0);
+  // Exact off-screen travel distance; refined once the panel is measured so the
+  // list appears to emerge from just beneath the navigation bar.
+  const fromY = useSharedValue(800);
+
+  useEffect(() => {
+    if (visible) {
+      // Fast, decelerating rise (accelerate away immediately → smooth settle,
+      // no bounce/overshoot). Time-based so it honours the native refresh rate.
+      panel.value = withTiming(1, { duration: 220, easing: ReEasing.out(ReEasing.cubic) });
+    } else {
+      // Slightly quicker, accelerating sink back into the bottom of the screen.
+      panel.value = withTiming(0, { duration: 170, easing: ReEasing.in(ReEasing.cubic) });
+    }
+  }, [visible, panel]);
+
+  // Android hardware back closes the menu instead of leaving the screen.
+  useEffect(() => {
+    if (!visible) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      onClose();
+      return true;
+    });
+    return () => sub.remove();
+  }, [visible, onClose]);
+
+  const onPanelLayout = useCallback(
+    (e: any) => {
+      const h = e.nativeEvent.layout.height;
+      if (h > 0) fromY.value = h + navH + 24; // guarantee fully off-screen when closed
+    },
+    [navH, fromY],
+  );
+
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(panel.value, [0, 1], [0, 0.38], Extrapolation.CLAMP),
+  }));
+
+  const panelStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(panel.value, [0, 0.4], [0, 1], Extrapolation.CLAMP),
+    transform: [
+      { translateY: (1 - panel.value) * fromY.value },
+      { scale: 0.985 + panel.value * 0.015 },
+    ],
+  }));
+
+  const handleSelect = useCallback(
+    (route: string) => {
+      onClose();
+      // Preserve the original navigation timing/behaviour exactly.
+      setTimeout(() => router.push(route as any), 100);
+    },
+    [onClose, router],
+  );
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
-          <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>{t("quickAdd.title")}</Text>
-          <View style={styles.grid}>
-            {items.map((it) => (
-              <TouchableOpacity
-                key={it.label}
-                testID={`quick-${it.label}`}
-                style={styles.gridItem}
-                onPress={() => {
-                  onClose();
-                  setTimeout(() => router.push(it.route as any), 100);
-                }}
-              >
-                <View style={[styles.gridIcon, { backgroundColor: it.color + "22" }]}>
-                  <Ionicons name={it.icon as any} size={26} color={it.color} />
-                </View>
-                <Text style={styles.gridLabel}>{it.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    // box-none root: when closed, children are pointerEvents:none → the app is
+    // fully interactive and the menu leaves ZERO visual/touch footprint.
+    <View style={styles.overlay} pointerEvents="box-none">
+      <Animated.View
+        style={[styles.backdrop, { bottom: navH }, backdropStyle]}
+        pointerEvents={visible ? "auto" : "none"}
+      >
+        <Pressable style={styles.backdropPress} onPress={onClose} />
+      </Animated.View>
+
+      <Animated.View
+        style={[styles.panel, { bottom: navH + 8 }, panelStyle]}
+        pointerEvents={visible ? "auto" : "none"}
+        onLayout={onPanelLayout}
+      >
+        <View style={styles.handle} />
+        {items.map((it, i) => (
+          <MenuRow
+            key={it.label}
+            item={it}
+            index={i}
+            panel={panel}
+            onSelect={handleSelect}
+            isLast={i === items.length - 1}
+            muted={colors.muted}
+            styles={styles}
+          />
+        ))}
+      </Animated.View>
+    </View>
   );
 }
 
@@ -277,7 +400,9 @@ export default function TabsLayout() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <Tabs
-        tabBar={(props) => <CustomTabBar {...props} openMenu={() => setMenuOpen(true)} />}
+        tabBar={(props) => (
+          <CustomTabBar {...props} menuOpen={menuOpen} toggleMenu={() => setMenuOpen((o) => !o)} />
+        )}
         screenOptions={{
           headerShown: false,
           // Bottom-tab switching stays near-instant: only a very subtle
@@ -349,19 +474,31 @@ const useStyles = makeStyles((colors, scheme) => ({
     borderWidth: 1.5,
     borderColor: scheme === "dark" ? colors.surfaceSecondary : "#0B513C",
   },
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" },
-  sheet: {
+  // --- Floating quick-add list (only visible while the menu is open) ---
+  overlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+  backdrop: { position: "absolute", top: 0, left: 0, right: 0, backgroundColor: "#000" },
+  backdropPress: { flex: 1 },
+  panel: {
+    position: "absolute",
+    left: 12,
+    right: 12,
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.cardLg,
-    borderTopRightRadius: radius.cardLg,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 32,
+    borderRadius: radius.cardLg,
+    paddingHorizontal: 6,
+    paddingBottom: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    // Soft lift off the content; static (never animated per frame).
+    shadowColor: "#000",
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 14,
   },
-  sheetHandle: { alignSelf: "center", width: 44, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 12 },
-  sheetTitle: { fontSize: 18, fontWeight: "700", color: colors.onSurface, marginBottom: 16 },
-  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
-  gridItem: { width: "31%", alignItems: "center", marginBottom: 20 },
-  gridIcon: { width: 60, height: 60, borderRadius: 20, alignItems: "center", justifyContent: "center", marginBottom: 8 },
-  gridLabel: { fontSize: 12, fontWeight: "600", color: colors.onSurface, textAlign: "center" },
+  handle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginTop: 8, marginBottom: 4 },
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 10, borderRadius: 16 },
+  rowDivider: { borderBottomWidth: 1, borderBottomColor: colors.divider },
+  rowPressed: { backgroundColor: colors.surfaceTertiary },
+  rowIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", marginRight: 14 },
+  rowLabel: { flex: 1, fontSize: 16, fontWeight: "700", color: colors.onSurface },
 }));

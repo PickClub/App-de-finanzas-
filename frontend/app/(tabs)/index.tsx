@@ -1123,7 +1123,7 @@ const useStyles = makeStyles((colors, scheme) => {
   miniLeft: {
     flex: 3, // ~60%
     flexDirection: "row",
-    marginRight: 8,
+    marginRight: 3,
   },
   miniHalfLeft: {
     flex: 1,

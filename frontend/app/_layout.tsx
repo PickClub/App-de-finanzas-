@@ -57,6 +57,11 @@ function ThemedApp() {
                 screenOptions={{
                   headerShown: false,
                   contentStyle: { backgroundColor: colors.surface },
+                  // Keep the DEFAULT transition style; only shorten its
+                  // duration for snappier navigation. animationDuration is an
+                  // officially supported native-stack prop (honored on Android;
+                  // iOS keeps its native default duration for the default anim).
+                  animationDuration: 100,
                   gestureEnabled: true,
                   fullScreenGestureEnabled: false,
                 }}

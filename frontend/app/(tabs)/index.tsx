@@ -579,8 +579,7 @@ export default function Home() {
 
       {/* Income / Expense / Accounts distribution */}
       <View style={styles.miniRow}>
-        <View style={styles.miniLeft}>
-          <View style={[styles.miniCard, styles.miniHalfLeft, styles.cardIncome]}>
+        <View style={[styles.miniCard, styles.miniHalfLeft, styles.cardIncome]}>
             <View style={styles.mcTop}>
               <View style={[styles.miniPill, { backgroundColor: colors.incomeGreen }]}>
                 <Ionicons name="trending-up" size={16} color="#fff" />
@@ -636,7 +635,6 @@ export default function Home() {
               </View>
             </View>
           </View>
-        </View>
         <View style={[styles.miniCard, styles.miniAccounts]}>
           <View testID="cuentas-scroll" style={{ gap: 6 }}>
             {accountBars(accounts, summary?.total_balance || 0, colors, scheme)}
@@ -1119,21 +1117,22 @@ const useStyles = makeStyles((colors, scheme) => {
     paddingHorizontal: spacing.lg,
     marginTop: spacing.md,
     alignItems: "stretch",
-    gap: 8, // equal gap between Gastos ↔ Porcentajes
-  },
-  miniLeft: {
-    flex: 3, // ~60% (Ingresos + Gastos)
-    flexDirection: "row",
-    gap: 8, // equal gap between Ingresos ↔ Gastos
+    gap: 8, // equal gap between all three cards
   },
   miniHalfLeft: {
-    flex: 1,
+    flex: 3, // Ingresos 30%
+    minWidth: 0,
+    flexShrink: 1,
   },
   miniHalfRight: {
-    flex: 1,
+    flex: 3, // Gastos 30%
+    minWidth: 0,
+    flexShrink: 1,
   },
   miniAccounts: {
-    flex: 2, // ~40%
+    flex: 4, // Porcentajes 40%
+    minWidth: 0,
+    flexShrink: 1,
     paddingVertical: 12,
     paddingHorizontal: 12,
     justifyContent: "center",

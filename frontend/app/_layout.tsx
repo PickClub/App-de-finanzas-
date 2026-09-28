@@ -58,7 +58,6 @@ function ThemedApp() {
                   headerShown: false,
                   contentStyle: { backgroundColor: colors.surface },
                   animation: "slide_from_right",
-                  animationDuration: 220,
                   gestureEnabled: true,
                   fullScreenGestureEnabled: false,
                 }}

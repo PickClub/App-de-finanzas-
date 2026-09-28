@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { Tabs, useRouter } from "expo-router";
-import { Pressable, View, Text, Easing, BackHandler } from "react-native";
+import { Pressable, View, Text, BackHandler, StyleSheet } from "react-native";
 import Animated, {
   useSharedValue,
+  runOnJS,
+  cancelAnimation,
   useAnimatedStyle,
   withSpring,
   withTiming,
@@ -16,6 +18,7 @@ import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, makeStyles, radius } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
+import { TabTransitionContext, useTabTransition } from "@/src/tab-transition";
 
 // Bottom-bar tab definitions (icons keep the app's existing solid Ionicons
 // language). Order is fixed: Cuentas · IA · (centro) · Informes · Más.
@@ -91,7 +94,9 @@ function TabButton({
   );
 }
 
-function CustomTabBar({ state, navigation, toggleMenu }: any) {
+function CustomTabBar({ state, navigation, toggleMenu, onState, onBarLayout }: any) {
+  const transition = useTabTransition();
+  useLayoutEffect(() => { onState(state, navigation); }, [state, navigation, onState]);
   const { colors, scheme } = useTheme();
   const { t } = useTranslation();
   const styles = useStyles();
@@ -160,7 +165,7 @@ function CustomTabBar({ state, navigation, toggleMenu }: any) {
   }));
 
   return (
-    <View style={[styles.bar, { backgroundColor: barBg, paddingBottom: Math.max(insets.bottom, 6) }]}>
+    <View onLayout={onBarLayout} style={[styles.bar, { backgroundColor: barBg, paddingBottom: Math.max(insets.bottom, 6) }]}>
       {state.routes.map((route: any, index: number) => {
         const isFocused = state.index === index;
 
@@ -200,7 +205,7 @@ function CustomTabBar({ state, navigation, toggleMenu }: any) {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid).catch(() => {});
           const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
           if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name);
+            transition.navigate(route.name);
           }
         };
 
@@ -283,11 +288,25 @@ const MenuRow = React.memo(function MenuRow({
 // the bottom navigation and settling just above it; closes by sinking back
 // down. All motion is transform/opacity on the UI thread (time-based, no JS
 // frame loop, no overshoot). Same actions/labels/icons/routes as before.
-function QuickMenu({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+function QuickMenu({ visible, closing: menuClosing, onClose, onClosed }: {
+  visible: boolean;
+  closing: boolean;
+  onClose: () => void;
+  onClosed: () => void;
+}) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const styles = useStyles();
   const router = useRouter();
+  const pendingRoute = useRef<string | null>(null);
+  const closing = useRef(false);
+  const finishClose = useCallback(() => {
+    closing.current = false;
+    onClosed();
+    const route = pendingRoute.current;
+    pendingRoute.current = null;
+    if (route) router.push(route as any);
+  }, [router, onClosed]);
   const insets = useSafeAreaInsets();
 
   // Approximate height of the existing bottom bar (content + safe-area). Derived
@@ -316,9 +335,16 @@ function QuickMenu({ visible, onClose }: { visible: boolean; onClose: () => void
       panel.value = withTiming(1, { duration: 220, easing: ReEasing.out(ReEasing.cubic) });
     } else {
       // Slightly quicker, accelerating sink back into the bottom of the screen.
-      panel.value = withTiming(0, { duration: 170, easing: ReEasing.in(ReEasing.cubic) });
+      panel.value = withTiming(0, { duration: 170, easing: ReEasing.in(ReEasing.cubic) }, (finished) => {
+        if (finished) runOnJS(finishClose)();
+      });
     }
-  }, [visible, panel]);
+  }, [visible, panel, finishClose]);
+
+  useEffect(() => () => {
+    pendingRoute.current = null;
+    cancelAnimation(panel);
+  }, [panel]);
 
   // Android hardware back closes the menu instead of leaving the screen.
   useEffect(() => {
@@ -352,11 +378,12 @@ function QuickMenu({ visible, onClose }: { visible: boolean; onClose: () => void
 
   const handleSelect = useCallback(
     (route: string) => {
+      if (closing.current) return;
+      closing.current = true;
+      pendingRoute.current = route;
       onClose();
-      // Preserve the original navigation timing/behaviour exactly.
-      setTimeout(() => router.push(route as any), 100);
     },
-    [onClose, router],
+    [onClose],
   );
 
   return (
@@ -365,14 +392,14 @@ function QuickMenu({ visible, onClose }: { visible: boolean; onClose: () => void
     <View style={styles.overlay} pointerEvents="box-none">
       <Animated.View
         style={[styles.backdrop, { bottom: navH }, backdropStyle]}
-        pointerEvents={visible ? "auto" : "none"}
+        pointerEvents={visible || menuClosing ? "auto" : "none"}
       >
         <Pressable style={styles.backdropPress} onPress={onClose} />
       </Animated.View>
 
       <Animated.View
         style={[styles.panel, { bottom: navH + 8 }, panelStyle]}
-        pointerEvents={visible ? "auto" : "none"}
+        pointerEvents={visible || menuClosing ? "auto" : "none"}
         onLayout={onPanelLayout}
       >
         <View style={styles.handle} />
@@ -393,36 +420,189 @@ function QuickMenu({ visible, onClose }: { visible: boolean; onClose: () => void
   );
 }
 
+// One wrapper per existing scene, without copying or animating its content.
+// Native layout readiness keeps a cold/lazy screen covered until it is mounted.
+function TabScene({ children, routeKey, onReady }: {
+  children: React.ReactNode;
+  routeKey: string;
+  onReady: (key: string, ready: boolean) => void;
+}) {
+  const laidOut = useRef(false);
+  useEffect(() => {
+    if (laidOut.current) onReady(routeKey, true);
+    return () => onReady(routeKey, false);
+  }, [routeKey, onReady]);
+  return <View collapsable={false} style={{ flex: 1 }} onLayout={() => {
+    laidOut.current = true;
+    onReady(routeKey, true);
+  }}>{children}</View>;
+}
+
 export default function TabsLayout() {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuClosing, setMenuClosing] = useState(false);
+  const menuClosingRef = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [barHeight, setBarHeight] = useState(0);
+  const [coverColor, setCoverColor] = useState(colors.surface);
+  const opacity = useSharedValue(0);
+  const phase = useRef<"idle" | "cover" | "switch" | "reveal">("idle");
+  const navigator = useRef<any>(null);
+  const tabState = useRef<any>(null);
+  const pending = useRef<{ name: string; key: string } | null>(null);
+  const readyScenes = useRef(new Set<string>());
+  const frame = useRef<number | null>(null);
+  const alive = useRef(true);
+  const completionListeners = useRef(new Set<() => void>());
+
+  const afterTransition = useCallback((callback: () => void) => {
+    if (phase.current === "idle") {
+      callback();
+      return () => {};
+    }
+    completionListeners.current.add(callback);
+    return () => { completionListeners.current.delete(callback); };
+  }, []);
+
+  const finish = useCallback(() => {
+    if (!alive.current) return;
+    pending.current = null;
+    phase.current = "idle";
+    setBusy(false);
+    const listeners = [...completionListeners.current];
+    completionListeners.current.clear();
+    listeners.forEach((callback) => callback());
+  }, []);
+
+  const revealWhenReady = useCallback(() => {
+    const target = pending.current;
+    const state = tabState.current;
+    if (phase.current !== "switch" || !target ||
+        state?.routes[state.index]?.key !== target.key || !readyScenes.current.has(target.key)) return;
+    phase.current = "reveal";
+    // Leave a paint boundary after the navigation commit/native layout event.
+    // Under load, hold the opaque cover longer instead of exposing a partial scene.
+    frame.current = requestAnimationFrame(() => {
+      frame.current = requestAnimationFrame(() => {
+        frame.current = null;
+        opacity.value = withTiming(0, { duration: 80, easing: ReEasing.out(ReEasing.quad) }, (finished) => {
+          if (finished) runOnJS(finish)();
+        });
+      });
+    });
+  }, [opacity, finish]);
+
+  const onReady = useCallback((key: string, ready: boolean) => {
+    if (ready) readyScenes.current.add(key);
+    else readyScenes.current.delete(key);
+    revealWhenReady();
+  }, [revealWhenReady]);
+
+  const onState = useCallback((state: any, navigation: any) => {
+    tabState.current = state;
+    navigator.current = navigation;
+    revealWhenReady();
+  }, [revealWhenReady]);
+
+  const switchCovered = useCallback(() => {
+    if (!alive.current || phase.current !== "cover" || !pending.current) return;
+    phase.current = "switch";
+    navigator.current.navigate(pending.current.name);
+  }, []);
+
+  const navigate = useCallback((name: string) => {
+    const state = tabState.current;
+    const current = state?.routes[state.index];
+    const target = state?.routes.find((route: any) => route.name === name);
+    if (phase.current !== "idle" || menuOpen || menuClosingRef.current || !barHeight || !target || target === current) return;
+    // Ignore rapid taps synchronously, even before React commits busy=true.
+    phase.current = "cover";
+    pending.current = { name, key: target.key };
+    setCoverColor(scheme === "dark" || current.name === "more" ? colors.surface : "#E8EFE7");
+    setBusy(true);
+  }, [menuOpen, barHeight, scheme, colors.surface]);
+
+  useEffect(() => {
+    if (busy && phase.current === "cover") {
+      // Start only after the cover color and touch shield have committed.
+      opacity.value = withTiming(1, { duration: 60, easing: ReEasing.in(ReEasing.quad) }, (finished) => {
+        if (finished) runOnJS(switchCovered)();
+      });
+    }
+  }, [busy, opacity, switchCovered]);
+
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      completionListeners.current.clear();
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+      cancelAnimation(opacity);
+    };
+  }, [opacity]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (!navigator.current?.isFocused()) return false; // Root-stack Back stays native.
+      if (phase.current !== "idle" || menuClosingRef.current) return true;
+      if (menuOpen) return false; // QuickMenu owns Back while open.
+      const state = tabState.current;
+      const previous = state?.history?.filter((entry: any) => entry.type === "route").at(-2);
+      const target = state?.routes.find((route: any) => route.key === previous?.key);
+      if (!target) return false;
+      navigate(target.name);
+      return true;
+    });
+    return () => sub.remove();
+  }, [navigate, menuOpen]);
+
+  const coverStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  // Stable across cover/reveal: Home need not rerender just to wait for completion.
+  const transition = useMemo(() => ({ navigate, afterTransition }), [navigate, afterTransition]);
+  const closeMenu = useCallback(() => {
+    menuClosingRef.current = true;
+    setMenuClosing(true);
+    setMenuOpen(false);
+  }, []);
+  const menuClosed = useCallback(() => {
+    menuClosingRef.current = false;
+    setMenuClosing(false);
+  }, []);
+  const toggleMenu = useCallback(() => {
+    if (phase.current !== "idle" || menuClosingRef.current) return;
+    if (menuOpen) closeMenu();
+    else setMenuOpen(true);
+  }, [menuOpen, closeMenu]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <Tabs
-        tabBar={(props) => (
-          <CustomTabBar {...props} menuOpen={menuOpen} toggleMenu={() => setMenuOpen((o) => !o)} />
-        )}
-        screenOptions={{
-          headerShown: false,
-          // Bottom-tab switching stays near-instant: only a very subtle
-          // cross-fade (~140ms). No horizontal screen slide between tabs.
-          animation: "fade",
-          transitionSpec: {
-            animation: "timing",
-            config: { duration: 140, easing: Easing.out(Easing.ease) },
-          },
-        }}
-      >
-        <Tabs.Screen name="index" options={{ title: "Cuentas" }} />
-        <Tabs.Screen name="transactions" options={{ title: "IA" }} />
-        <Tabs.Screen name="fab" options={{ title: "" }} />
-        <Tabs.Screen name="reports" options={{ title: "Informes" }} />
-        <Tabs.Screen name="notes" options={{ title: "Notas" }} />
-        <Tabs.Screen name="more" options={{ title: "Más" }} />
-      </Tabs>
-      <QuickMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
-    </View>
+    <TabTransitionContext.Provider value={transition}>
+      <View style={{ flex: 1, backgroundColor: colors.surface }}>
+        <Tabs
+          tabBar={(props) => (
+            <CustomTabBar {...props} toggleMenu={toggleMenu} onState={onState}
+              onBarLayout={(event: any) => setBarHeight(event.nativeEvent.layout.height)} />
+          )}
+          screenLayout={({ children, route }) => <TabScene routeKey={route.key} onReady={onReady}>{children}</TabScene>}
+          screenOptions={{ headerShown: false, animation: "none" }}
+        >
+          <Tabs.Screen name="index" options={{ title: "Cuentas" }} />
+          <Tabs.Screen name="transactions" options={{ title: "IA" }} />
+          <Tabs.Screen name="fab" options={{ title: "" }} />
+          <Tabs.Screen name="reports" options={{ title: "Informes" }} />
+          <Tabs.Screen name="notes" options={{ title: "Notas" }} />
+          <Tabs.Screen name="more" options={{ title: "Más" }} />
+        </Tabs>
+        <Animated.View
+          testID="tab-transition-cover"
+          pointerEvents={busy ? "auto" : "none"}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[StyleSheet.absoluteFillObject, { bottom: barHeight, backgroundColor: coverColor, zIndex: 1 }, coverStyle]}
+        />
+        <QuickMenu visible={menuOpen} closing={menuClosing} onClose={closeMenu} onClosed={menuClosed} />
+      </View>
+    </TabTransitionContext.Provider>
   );
 }
 

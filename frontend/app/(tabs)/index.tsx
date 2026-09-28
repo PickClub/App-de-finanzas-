@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 
 import { api } from "@/src/api";
+import { useTabTransition } from "@/src/tab-transition";
 import { useTheme, makeStyles, radius, spacing, type ThemeColors } from "@/src/theme";
 import { formatCurrency, formatCurrencyInt, formatDateLong, formatDateTime, translateCategoryName } from "@/src/format";
 import i18n, { useTranslation } from "@/src/i18n";
@@ -258,7 +259,7 @@ function SectionHeader({
       return { visible, focus: focusId.value };
     },
     (cur, prev) => {
-      if (cur == null) return;
+      if (cur == null || cur.focus === 0) return;
       const focusChanged = prev == null || cur.focus !== prev.focus;
       if (focusChanged) {
         // New Home visit → play the entrance once immediately, so it fires when
@@ -318,6 +319,7 @@ export default function Home() {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const tabTransition = useTabTransition();
   const { guard } = useLock();
   const [hidden, setHidden] = useState(false);
   const [txFilter, setTxFilter] = useState("all");
@@ -408,9 +410,10 @@ export default function Home() {
 
   useFocusEffect(
     useCallback(() => {
-      focusId.value = focusId.value + 1;
-      return () => {};
-    }, [focusId]),
+      return tabTransition.afterTransition(() => {
+        focusId.value = focusId.value + 1;
+      });
+    }, [focusId, tabTransition.afterTransition]),
   );
 
   return (
@@ -464,7 +467,7 @@ export default function Home() {
         <Pressable testID="notifications-btn" style={styles.roundIcon}>
           <Ionicons name="notifications-outline" size={22} color={colors.onSurface} />
         </Pressable>
-        <Pressable testID="profile-more-btn" onPress={() => router.push("/more")} style={styles.avatar}>
+        <Pressable testID="profile-more-btn" onPress={() => tabTransition.navigate("more")} style={styles.avatar}>
           <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>
             {(user?.name || "U").slice(0, 1)}
           </Text>
@@ -568,7 +571,7 @@ export default function Home() {
           iconKind="chart"
           title={t("home.monthSummary")}
           subtitle={t("home.monthSummarySubtitle")}
-          onSeeAll={() => router.push("/(tabs)/reports")}
+          onSeeAll={() => tabTransition.navigate("reports")}
           seeAllTestID="see-all-summary"
           scrollY={scrollY}
           viewportH={viewportH}
@@ -804,7 +807,7 @@ export default function Home() {
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <LockToggle testID="lock-home" compact />
-            <Pressable testID="see-all-tx" onPress={() => router.push("/(tabs)/transactions")} style={styles.seeAllBtn}>
+            <Pressable testID="see-all-tx" onPress={() => tabTransition.navigate("transactions")} style={styles.seeAllBtn}>
               <Text style={styles.seeAllText}>{t("common.seeAll")}</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
             </Pressable>
@@ -902,7 +905,7 @@ export default function Home() {
         </View>
 
         {/* AI banner — taps through to the IA tab (same route as the mic in the bottom nav) */}
-        <Pressable testID="ai-banner" onPress={() => router.push("/(tabs)/transactions")} style={{ marginTop: 8 }}>
+        <Pressable testID="ai-banner" onPress={() => tabTransition.navigate("transactions")} style={{ marginTop: 8 }}>
           <LinearGradient
             colors={scheme === "dark" ? [colors.brandPrimary + "1F", colors.statsPurple + "1F"] : ["#E5F1E7", "#E5F1E7"]}
             start={{ x: 0, y: 0 }}

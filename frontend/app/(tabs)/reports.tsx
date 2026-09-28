@@ -16,6 +16,30 @@ const RANGES = [
   { id: "all", label: "Todo", pillLabel: "Todo", days: 99999, periodLabel: "Histórico" },
 ];
 
+// Cache membership until the moving cutoff crosses an actual transaction date.
+// This retains the original Date.now() semantics without filtering on every render.
+function createDateFilter(transactions: any[]) {
+  const dated = transactions.map((transaction) => ({ transaction, time: new Date(transaction.date).getTime() }));
+  let lower = -Infinity;
+  let upper = Infinity;
+  let cached: any[] | null = null;
+  return (cutoff: number) => {
+    if (cached && cutoff > lower && cutoff <= upper) return cached;
+    lower = -Infinity;
+    upper = Infinity;
+    cached = [];
+    for (const { transaction, time } of dated) {
+      if (time >= cutoff) {
+        cached.push(transaction);
+        upper = Math.min(upper, time);
+      } else if (Number.isFinite(time)) {
+        lower = Math.max(lower, time);
+      }
+    }
+    return cached;
+  };
+}
+
 // Solid colored circular icon (white glyph) — colors come from the theme tokens.
 function CircleIcon({ icon, color, size = 42 }: { icon: string; color: string; size?: number }) {
   return (
@@ -52,25 +76,28 @@ export default function Reports() {
   const days = rangeDef.days;
   const now = Date.now();
   const cutoff = now - days * 86400000;
-  const cats: any[] = catQ.data || [];
-  const catById = Object.fromEntries(cats.map((c) => [c.id, c]));
+  const catById = useMemo(() => Object.fromEntries((catQ.data || []).map((c: any) => [c.id, c])), [catQ.data]);
+  const selectByDate = useMemo(() => createDateFilter(txQ.data || []), [txQ.data]);
+  const filtered = selectByDate(cutoff);
+  const { totalIncome, totalExpense, incomeCount, expenseCount, expenseCatTotal, earliest } = useMemo(() => {
+    const income = filtered.filter((t: any) => t.type === "income");
+    const expense = filtered.filter((t: any) => t.type === "expense" || t.type === "debt_payment");
+    return {
+      totalIncome: income.reduce((a: number, t: any) => a + t.amount, 0),
+      totalExpense: expense.reduce((a: number, t: any) => a + t.amount, 0),
+      incomeCount: income.length,
+      expenseCount: expense.length,
+      expenseCatTotal: filtered.filter((t: any) => t.type === "expense").reduce((a: number, t: any) => a + t.amount, 0),
+      earliest: filtered.length
+        ? filtered.reduce((first: number, t: any) => Math.min(first, new Date(t.date).getTime()), Infinity)
+        : null,
+    };
+  }, [filtered]);
 
-  const allTx: any[] = txQ.data || [];
-  const isExpenseType = (t: any) => t.type === "expense" || t.type === "debt_payment";
-
-  const filtered = allTx.filter((t: any) => new Date(t.date).getTime() >= cutoff);
-  const totalIncome = filtered.filter((t: any) => t.type === "income").reduce((a: number, t: any) => a + t.amount, 0);
-  const totalExpense = filtered.filter(isExpenseType).reduce((a: number, t: any) => a + t.amount, 0);
-  const incomeCount = filtered.filter((t: any) => t.type === "income").length;
-  const expenseCount = filtered.filter(isExpenseType).length;
-
-  // Effective number of days covered by the current window (bounded for "Todo").
-  let effDays = days;
-  if (range === "all") {
-    const times = filtered.map((t: any) => new Date(t.date).getTime());
-    const earliest = times.length ? Math.min(...times) : now;
-    effDays = Math.max(1, Math.round((now - earliest) / 86400000));
-  }
+  // Keep the original rolling-time and empty-history calculations.
+  const effDays = range === "all"
+    ? Math.max(1, Math.round((now - (earliest ?? now)) / 86400000))
+    : days;
 
   const balance = totalIncome - totalExpense;
   const incomeDaily = effDays > 0 ? totalIncome / effDays : 0;
@@ -87,7 +114,6 @@ export default function Reports() {
   ];
 
   // Expense-by-category (only expenses that have a category).
-  const expenseCatTotal = filtered.filter((t: any) => t.type === "expense").reduce((a: number, t: any) => a + t.amount, 0);
   const byCategory = useMemo(() => {
     const map: Record<string, number> = {};
     filtered.forEach((t: any) => {

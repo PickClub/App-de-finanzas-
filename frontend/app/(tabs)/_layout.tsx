@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Tabs, useRouter } from "expo-router";
-import { Pressable, View, Text, BackHandler } from "react-native";
+import { Pressable, View, Text, Easing, BackHandler } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -405,6 +405,17 @@ export default function TabsLayout() {
         )}
         screenOptions={{
           headerShown: false,
+          // Fast, smooth CROSS-FADE between bottom tabs (opacity only, no
+          // movement): outgoing screen fades out while incoming fades in.
+          // ~150ms native framework transition (no custom Reanimated layer).
+          animation: "fade",
+          transitionSpec: {
+            animation: "timing",
+            config: {
+              duration: 150,
+              easing: Easing.inOut(Easing.ease),
+            },
+          },
         }}
       >
         <Tabs.Screen name="index" options={{ title: "Cuentas" }} />

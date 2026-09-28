@@ -1119,19 +1119,18 @@ const useStyles = makeStyles((colors, scheme) => {
     paddingHorizontal: spacing.lg,
     marginTop: spacing.md,
     alignItems: "stretch",
+    gap: 8, // equal gap between Gastos ↔ Porcentajes
   },
   miniLeft: {
-    flex: 3, // ~60%
+    flex: 3, // ~60% (Ingresos + Gastos)
     flexDirection: "row",
-    marginRight: 3,
+    gap: 8, // equal gap between Ingresos ↔ Gastos
   },
   miniHalfLeft: {
     flex: 1,
-    marginRight: 4,
   },
   miniHalfRight: {
     flex: 1,
-    marginLeft: 4,
   },
   miniAccounts: {
     flex: 2, // ~40%

@@ -58,7 +58,11 @@ function ThemedApp() {
                   headerShown: false,
                   contentStyle: { backgroundColor: colors.surface },
                   animation: "slide_from_right",
-                  animationDuration: 220,
+                  // Faster, still-smooth horizontal slide (~180ms on Android;
+                  // iOS drives slide_from_right natively). The opaque
+                  // contentStyle above guarantees the outgoing screen is fully
+                  // covered — no ghost of the previous screen remains.
+                  animationDuration: 180,
                   gestureEnabled: true,
                   fullScreenGestureEnabled: false,
                 }}

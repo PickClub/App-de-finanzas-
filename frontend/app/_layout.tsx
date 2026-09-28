@@ -59,7 +59,10 @@ function ThemedApp() {
                   contentStyle: { backgroundColor: colors.surface },
                   // Native Expo Router Stack transition: pushed screens rise
                   // subtly from the bottom and fade in (Android/Expo Go native).
+                  // ~230ms keeps it quick/polished (animationDuration is
+                  // officially supported for fade_from_bottom).
                   animation: "fade_from_bottom",
+                  animationDuration: 230,
                   gestureEnabled: true,
                   fullScreenGestureEnabled: false,
                 }}

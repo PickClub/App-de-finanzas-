@@ -57,12 +57,9 @@ function ThemedApp() {
                 screenOptions={{
                   headerShown: false,
                   contentStyle: { backgroundColor: colors.surface },
-                  animation: "slide_from_right",
-                  // Faster, still-smooth horizontal slide (~180ms on Android;
-                  // iOS drives slide_from_right natively). The opaque
-                  // contentStyle above guarantees the outgoing screen is fully
-                  // covered — no ghost of the previous screen remains.
-                  animationDuration: 180,
+                  // Native Expo Router Stack transition: pushed screens rise
+                  // subtly from the bottom and fade in (Android/Expo Go native).
+                  animation: "fade_from_bottom",
                   gestureEnabled: true,
                   fullScreenGestureEnabled: false,
                 }}

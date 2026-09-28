@@ -515,6 +515,16 @@ test_plan:
 agent_communication:
     - agent: "main"
       message: |
+        NAVIGATION TRANSITIONS RESET TO NATIVE/DEFAULT (strictly scoped cleanup).
+        Per user request (persistent Android ghost-card during transitions), REMOVED all CUSTOM screen/route transitions to establish a clean framework-default baseline. Did NOT set animation:"none" and did NOT create any replacement transition.
+        FILES (2): 
+          - frontend/app/_layout.tsx (root Stack): removed `animation: "slide_from_right"` and `animationDuration: 180`. Kept headerShown:false, contentStyle background (not a transition; backgrounds must not change), gestureEnabled:true, fullScreenGestureEnabled:false (gesture settings, not visual transitions). Root stack now uses the native default stack transition.
+          - frontend/app/(tabs)/_layout.tsx (Tabs): removed the custom `transitionSpec` (timing 150ms) and `sceneStyleInterpolator` (fade-through). Removed now-unused RN `Easing` import. Tabs now use the framework default (bottom-tabs default = no scene animation). Kept headerShown:false.
+        PRESERVED (Group B, untouched): all internal UI animations — Home animated section icons + mini bar charts, wallet/coin, debt flip, progress/account bars, charts; and the tab-bar micro-interactions (icon pop, sliding active-dot indicator, center wallet+ button, QuickMenu, haptics). Routes/hierarchy/params/logic/backend/deps unchanged.
+        VALIDATION: ESLint clean on both files. Re-audit of app/ shows NO custom nav-transition keywords remain. 3 tsc errors exist but are PRE-EXISTING and unrelated (MenuRow SharedValue typing at line 247, transactions/[id].tsx implicit any, sheets.tsx absoluteFillObject) — not in the code I edited. Verified on web preview: Home renders unchanged; tapping Reports switches cleanly with NO ghost/leftover content; active dot moves.
+        Please retest navigation (tabs + pushed screens Accounts/Debts + back) to confirm default transitions and absence of ghost content on the preview.
+    - agent: "main"
+      message: |
         FRONTEND NAVIGATION-TRANSITION FIX — please verify (design must remain unchanged).
         SCOPE (2 files only): frontend/app/_layout.tsx (root Stack slide 220->180ms) and frontend/app/(tabs)/_layout.tsx (bottom tabs: replaced symmetric cross-fade with a fast fade-through sceneStyleInterpolator @150ms).
         GOAL: transitions stay visible + fast, but the reported GHOST CARDS (previous tab/screen content lingering or two screens superimposed) must be GONE.

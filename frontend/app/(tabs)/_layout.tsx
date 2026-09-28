@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Tabs, useRouter } from "expo-router";
-import { Pressable, View, Text, Easing, BackHandler } from "react-native";
+import { Pressable, View, Text, BackHandler } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -405,26 +405,6 @@ export default function TabsLayout() {
         )}
         screenOptions={{
           headerShown: false,
-          // Bottom-tab switching uses a fast "fade-through" instead of a
-          // symmetric cross-fade. The OUTGOING tab fades fully out before the
-          // INCOMING tab fades in, so the two screens are NEVER simultaneously
-          // visible — this removes the ghost/duplicate-card effect while
-          // keeping a subtle, native-feeling fade (~150ms, native driver).
-          transitionSpec: {
-            animation: "timing",
-            config: { duration: 150, easing: Easing.out(Easing.ease) },
-          },
-          sceneStyleInterpolator: ({ current }) => ({
-            sceneStyle: {
-              // progress: 0 = focused (opacity 1); ±0.5..±1 = fully hidden.
-              // Outgoing goes 0→±1 (out by the midpoint); incoming goes ±1→0
-              // (starts appearing only after the midpoint). No overlap.
-              opacity: current.progress.interpolate({
-                inputRange: [-1, -0.5, 0, 0.5, 1],
-                outputRange: [0, 0, 1, 0, 0],
-              }),
-            },
-          }),
         }}
       >
         <Tabs.Screen name="index" options={{ title: "Cuentas" }} />

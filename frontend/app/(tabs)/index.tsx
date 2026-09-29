@@ -1103,8 +1103,8 @@ const useStyles = makeStyles((colors, scheme) => {
   walletCardLast: {
     marginRight: 0,
   },
-  walletName: { color: "#464C54", fontSize: 12.5, fontWeight: "600", letterSpacing: 0.1 },
-  walletBalance: { color: "#464C54", fontSize: 12.5, fontWeight: "600" },
+  walletName: { color: "#F4F1E8", fontSize: 12.5, fontWeight: "600", letterSpacing: 0.1 },
+  walletBalance: { color: "#F4F1E8", fontSize: 12.5, fontWeight: "600" },
   // Compact color-matched balance pill: "$" in a thin outlined circle + amount.
   balancePill: {
     flexDirection: "row",
@@ -1122,13 +1122,13 @@ const useStyles = makeStyles((colors, scheme) => {
     height: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(70,76,84,0.45)",
+    borderColor: "rgba(244,241,232,0.55)",
     backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
   },
   dollarSymbol: {
-    color: "#464C54",
+    color: "#F4F1E8",
     fontSize: 9,
     fontWeight: "800",
     lineHeight: 11,

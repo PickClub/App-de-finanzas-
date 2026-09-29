@@ -163,6 +163,24 @@ backend:
           comment: "✅✅✅ 5TH VERIFICATION COMPLETE (READ-ONLY after latest .env recreation). Backend supervisor: RUNNING (pid 790, uptime 0:03:15). Port 8001 listening confirmed (netstat shows tcp 0.0.0.0:8001 LISTEN). /app/backend/.env exists with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database, CORS_ORIGINS=*. All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, dict with keys: id, name, email, profile_photo, currency ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, dict with keys: total_balance, month_income, month_expense, debts, accounts_count ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs show NO KeyError for MONGO_URL or DB_NAME in current session (backend started Thu Sep 24 10:06:44 2026). Old KeyError traces in error log are from previous crash-loop sessions before .env was recreated. Current session shows only the documented transient ObjectId serialization error (HTTP 500 on first /api/user after cold boot: 'ObjectId' object is not iterable), followed by stable HTTP 200 responses. NO 502 Bad Gateway errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED."
 
 frontend:
+  - task: "Notes editor: minimal tools (checklist + ordered list) and note color selection"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(tabs)/notes.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Added to the existing Edit Note bottom sheet ONLY (no redesign, no navigation/theme/global changes):
+            1) "Herramientas" section with exactly two compact rounded tools: "Lista de checks" (checkbox icon) and "Lista ordenada" (custom 1/2/3 glyph). Mutually exclusive toggles.
+            2) Checklist mode: content lines become editable checkable items (checkbox + text + add/remove); checked state persisted inline as "[x]/[ ]" inside the existing plain-text `content` field. Card preview shows checkboxes with a subtle completed (strikethrough) state.
+            3) Ordered mode: content lines auto-numbered (1. 2. 3.) in editor and card preview.
+            4) "Color de nota" row: 6 pastel circular swatches (green default, cream, pale yellow, soft blue, lavender, coral) adapted to the app palette, with a subtle green selection ring + check and a ~180ms reanimated scale pop.
+            Data model: added two OPTIONAL fields to the local Note type: `listMode?: "check"|"ordered"` and `palette?`. Fully backward compatible — existing notes with no palette/listMode render exactly as before. Notes are stored locally (AsyncStorage/localStorage), NO backend change.
+            Editor fields wrapped in a bounded ScrollView (sheet maxHeight 90%) so it stays compact. ESLint clean. Bundles with no errors.
   - task: "Navigation transitions: fast slide (root stack) + fade-through tabs to remove ghost cards"
     implemented: true
     working: true
@@ -507,12 +525,18 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Navigation transitions: fast slide (root stack) + fade-through tabs to remove ghost cards"
+    - "Notes editor: minimal tools (checklist + ordered list) and note color selection"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+    - agent: "main"
+      message: |
+        NOTES EDITOR ENHANCEMENT (scoped to frontend/app/(tabs)/notes.tsx ONLY).
+        Added inside the existing "Editar nota" bottom sheet: a "Herramientas" section with exactly two tools (Lista de checks, Lista ordenada) and a "Color de nota" pastel swatch row. Checklist supports check/uncheck + add/continue items; ordered list auto-numbers; note color changes only that note's card background/accent. Backward compatible (new optional Note fields listMode/palette). Local storage only — NO backend change.
+        NOTE: The lightweight screenshot_tool renders blank for this app (root layout gates on a variable-font load that stalls in that headless env) — this affects even untouched screens (Home), so it is an environment quirk, not a code issue. The app boots cleanly ("Running application main", no JS errors) and ESLint/bundle are clean.
+        Please test on WEB (mobile viewport) the Notes tab → open a note → verify: (a) two tools appear under Contenido and toggle correctly (checklist shows checkboxes you can check/uncheck and add items; ordered shows 1./2./3.), (b) "Color de nota" shows 6 pastel swatches with a green selection ring and changing it updates that note's card color after Guardar, (c) existing notes still render, (d) Eliminar/Guardar work, (e) no other screen/nav/theme changed.
     - agent: "main"
       message: |
         NAVIGATION TRANSITIONS RESET TO NATIVE/DEFAULT (strictly scoped cleanup).

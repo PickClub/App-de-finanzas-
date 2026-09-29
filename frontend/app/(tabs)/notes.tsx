@@ -10,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
+import Animated, { useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatDateTime } from "@/src/format";
@@ -19,6 +20,9 @@ import { storage } from "@/src/utils/storage";
 // (AsyncStorage on native / localStorage on web). Values must be primitives, so
 // the note list is stored as a JSON string. No backend / no financial data.
 const STORAGE_KEY = "moneyflow.notes.v1";
+
+type ListMode = "plain" | "check" | "ordered";
+type PaletteKey = "green" | "cream" | "yellow" | "blue" | "lavender" | "coral";
 
 type Note = {
   id: string;
@@ -30,11 +34,28 @@ type Note = {
   updatedAt: string; // ISO
   icon?: string; // optional Ionicons name for the note tile
   categories?: string[]; // optional labels shown as chips
+  listMode?: ListMode; // optional: renders content as a checklist / numbered list
+  palette?: PaletteKey; // optional: subtle per-note card color (background + accent)
 };
 
 // Colors drawn from the visual family already present on Home (account cards +
 // module accents): green, blue, coral, purple, orange, gold, teal.
 const NOTE_COLORS = ["#126046", "#377FC4", "#D84D45", "#7546D7", "#E2763E", "#C6952C", "#176F78"];
+
+// Subtle per-note palette adapted to the existing app identity (forest green +
+// cream surfaces). `bg` tints ONLY the card background; `accent` reuses the
+// existing note accent family for the left strip / icon tile. Both are scheme
+// aware so dark mode stays subtle. Notes without a `palette` keep their
+// original appearance untouched (full backward compatibility).
+const NOTE_PALETTES: Record<PaletteKey, { accentLight: string; accentDark: string; bgLight: string; bgDark: string }> = {
+  green: { accentLight: "#146448", accentDark: "#37C08D", bgLight: "#DCE9DD", bgDark: "#1B2A22" },
+  cream: { accentLight: "#B98A34", accentDark: "#D8B25A", bgLight: "#F0E6D2", bgDark: "#2A2620" },
+  yellow: { accentLight: "#C6952C", accentDark: "#E7C766", bgLight: "#F5EAC2", bgDark: "#2B2717" },
+  blue: { accentLight: "#377FC4", accentDark: "#6D9BFF", bgLight: "#DAE6F3", bgDark: "#1B2432" },
+  lavender: { accentLight: "#7546D7", accentDark: "#A57DFF", bgLight: "#E4DDF3", bgDark: "#241F33" },
+  coral: { accentLight: "#D84D45", accentDark: "#EB6D5F", bgLight: "#F4DDD8", bgDark: "#2E1F1D" },
+};
+const PALETTE_ORDER: PaletteKey[] = ["green", "cream", "yellow", "blue", "lavender", "coral"];
 
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -62,6 +83,95 @@ function toItems(content: string): string[] {
   return sentences.length ? sentences : [content.trim()];
 }
 
+type ListItem = { id?: string; text: string; checked: boolean };
+
+// Parse a note body into structured items for checklist / ordered rendering.
+// Checklist lines carry an inline "[x] " / "[ ] " marker so the plain-text
+// `content` field keeps holding everything (smallest safe model change).
+function parseListItems(content: string, mode: ListMode): ListItem[] {
+  const lines = (content || "").split("\n");
+  return lines.map((raw) => {
+    let line = raw.trim();
+    let checked = false;
+    if (mode === "check") {
+      const m = line.match(/^\[( |x|X)\]\s?(.*)$/);
+      if (m) {
+        checked = m[1].toLowerCase() === "x";
+        line = m[2];
+      }
+    } else if (mode === "ordered") {
+      line = line.replace(/^\d+[.)]\s*/, "");
+    }
+    return { text: line, checked };
+  });
+}
+
+// Serialize editor items back into the plain-text `content` string.
+function serializeItems(items: ListItem[], mode: ListMode): string {
+  const clean = items.map((i) => ({ ...i, text: i.text.trim() })).filter((i) => i.text.length > 0);
+  if (mode === "check") return clean.map((i) => `${i.checked ? "[x]" : "[ ]"} ${i.text}`).join("\n");
+  return clean.map((i) => i.text).join("\n");
+}
+
+// Compact "1 / 2 / 3" glyph for the ordered-list tool (Ionicons has no
+// numbered-list icon, so we compose one from the existing type system).
+function OrderedGlyph({ color }: { color: string }) {
+  return (
+    <View style={{ width: 20 }}>
+      {[1, 2, 3].map((n) => (
+        <View key={n} style={{ flexDirection: "row", alignItems: "center", marginVertical: 1 }}>
+          <Text style={{ fontSize: 8, fontWeight: "800", color, width: 7 }}>{n}</Text>
+          <View style={{ height: 2, flex: 1, borderRadius: 1, backgroundColor: color, marginLeft: 2 }} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// Circular note-color swatch with a subtle scale pop on selection (reanimated —
+// the project's existing animation system; ~180ms, no bounce).
+function ColorSwatch({
+  bg,
+  border,
+  selected,
+  ring,
+  onPress,
+}: {
+  bg: string;
+  border: string;
+  selected: boolean;
+  ring: string;
+  onPress: () => void;
+}) {
+  const s = useSharedValue(selected ? 1 : 0);
+  useEffect(() => {
+    s.value = withTiming(selected ? 1 : 0, { duration: 180 });
+  }, [selected, s]);
+  const aStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + s.value * 0.06 }] }));
+  return (
+    <Pressable onPress={onPress} hitSlop={6}>
+      <Animated.View
+        style={[
+          {
+            width: 46,
+            height: 46,
+            borderRadius: 23,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: bg,
+            borderWidth: selected ? 2 : 1,
+            borderColor: selected ? ring : border,
+          },
+          aStyle,
+        ]}
+      >
+        {selected ? <Ionicons name="checkmark" size={16} color={ring} /> : null}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+
 // First-run example notes so the screen demonstrates the design and both
 // sections. They are ordinary notes — fully editable / deletable by the user.
 function makeSeed(): Note[] {
@@ -84,6 +194,10 @@ export default function Notes() {
   const accent = isDark ? colors.brandPrimary : "#126046";
   const subColor = isDark ? colors.muted : "#68746D";
   const titleColor = isDark ? colors.onSurface : "#15251E";
+  // Forest-green accent used for the editor tools / color selection ring so the
+  // Notes editor stays green-theme compatible in both light and dark modes.
+  const noteGreen = isDark ? "#37C08D" : "#146448";
+  const editorLine = isDark ? colors.border : "rgba(39,71,56,0.10)";
 
   const [notes, setNotes] = useState<Note[]>([]);
   const [query, setQuery] = useState("");
@@ -93,6 +207,9 @@ export default function Notes() {
   const [editing, setEditing] = useState<Note | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftContent, setDraftContent] = useState("");
+  const [draftListMode, setDraftListMode] = useState<ListMode>("plain");
+  const [draftItems, setDraftItems] = useState<ListItem[]>([]);
+  const [draftPalette, setDraftPalette] = useState<PaletteKey | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Load (or seed on first run).
@@ -126,21 +243,63 @@ export default function Notes() {
   const openEditor = (note: Note | null) => {
     setEditing(note);
     setDraftTitle(note?.title || "");
+    const mode: ListMode = note?.listMode || "plain";
+    setDraftListMode(mode);
     setDraftContent(note?.content || "");
+    if (mode === "plain") {
+      setDraftItems([]);
+    } else {
+      const parsed = parseListItems(note?.content || "", mode).filter((i) => i.text.length > 0);
+      setDraftItems(
+        parsed.length
+          ? parsed.map((p) => ({ id: genId(), ...p }))
+          : [{ id: genId(), text: "", checked: false }],
+      );
+    }
+    setDraftPalette(note ? note.palette ?? null : "green");
     setConfirmDelete(false);
     setEditorOpen(true);
   };
 
+  // Toggle between plain / checklist / ordered. Switching seeds items from the
+  // current text; turning a list off folds items back into plain content.
+  const toggleListMode = (mode: ListMode) => {
+    if (draftListMode === mode) {
+      if (draftItems.length) setDraftContent(serializeItems(draftItems, "plain"));
+      setDraftListMode("plain");
+      return;
+    }
+    if (draftListMode === "plain") {
+      const seed = draftContent.split("\n").map((s) => s.trim()).filter(Boolean);
+      setDraftItems((seed.length ? seed : [""]).map((t) => ({ id: genId(), text: t, checked: false })));
+    }
+    setDraftListMode(mode);
+  };
+
+  const updateItemText = (id: string, text: string) =>
+    setDraftItems((items) => items.map((i) => (i.id === id ? { ...i, text } : i)));
+  const toggleItemCheck = (id: string) =>
+    setDraftItems((items) => items.map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)));
+  const addItem = () => setDraftItems((items) => [...items, { id: genId(), text: "", checked: false }]);
+  const removeItem = (id: string) =>
+    setDraftItems((items) => (items.length > 1 ? items.filter((i) => i.id !== id) : items));
+
   const saveNote = () => {
     const title = draftTitle.trim();
-    const content = draftContent.trim();
+    const content = draftListMode === "plain" ? draftContent.trim() : serializeItems(draftItems, draftListMode);
     if (!title && !content) {
       setEditorOpen(false);
       return;
     }
     const nowIso = new Date().toISOString();
+    const listMode: ListMode | undefined = draftListMode === "plain" ? undefined : draftListMode;
     if (editing) {
-      persist(notes.map((n) => (n.id === editing.id ? { ...n, title: title || n.title, content, updatedAt: nowIso } : n)));
+      const palette = draftPalette ?? editing.palette;
+      persist(
+        notes.map((n) =>
+          n.id === editing.id ? { ...n, title: title || n.title, content, listMode, palette, updatedAt: nowIso } : n,
+        ),
+      );
     } else {
       const color = NOTE_COLORS[notes.length % NOTE_COLORS.length];
       const newNote: Note = {
@@ -149,6 +308,8 @@ export default function Notes() {
         content,
         pinned: false,
         color,
+        listMode,
+        palette: draftPalette ?? "green",
         createdAt: nowIso,
         updatedAt: nowIso,
       };
@@ -186,21 +347,28 @@ export default function Notes() {
   const others = sorted.filter((n) => !n.pinned);
 
   const renderCard = (note: Note) => {
-    const items = toItems(note.content);
-    const checklist = !note.pinned; // pinned → filled bullets, others → check circles
     const cats = note.categories || [];
     const icon = note.icon || "document-text";
+    // Resolve per-note color: palette (if set) drives background + accent;
+    // otherwise fall back to the original accent-derived look (unchanged).
+    const pal = note.palette ? NOTE_PALETTES[note.palette] : null;
+    const accent = pal ? (isDark ? pal.accentDark : pal.accentLight) : note.color;
+    const cardBg = pal ? (isDark ? pal.bgDark : pal.bgLight) : tintOf(note.color);
+    const isCheck = note.listMode === "check";
+    const listItems = note.listMode ? parseListItems(note.content, note.listMode).filter((i) => i.text.length > 0) : [];
+    const items = note.listMode ? [] : toItems(note.content);
+    const checklist = !note.pinned; // pinned → filled bullets, others → check circles
     return (
       <Pressable
         key={note.id}
         testID={`note-card-${note.id}`}
         onPress={() => openEditor(note)}
-        style={[styles.card, { backgroundColor: tintOf(note.color) }]}
+        style={[styles.card, { backgroundColor: cardBg }]}
       >
-        <View style={[styles.cardAccent, { backgroundColor: note.color }]} />
+        <View style={[styles.cardAccent, { backgroundColor: accent }]} />
         <View style={styles.cardBody}>
           <View style={styles.cardTop}>
-            <View style={[styles.cardIcon, { backgroundColor: note.color }]}>
+            <View style={[styles.cardIcon, { backgroundColor: accent }]}>
               <Ionicons name={icon as any} size={20} color="#FFFFFF" />
             </View>
             <Text style={styles.cardTitle} numberOfLines={1}>{note.title}</Text>
@@ -214,19 +382,46 @@ export default function Notes() {
             </Pressable>
           </View>
 
-          {items.length > 0 && (
-            <View style={styles.itemList}>
-              {items.slice(0, 6).map((it, idx) => (
-                <View key={idx} style={styles.itemRow}>
-                  {checklist ? (
-                    <Ionicons name="ellipse-outline" size={16} color={note.color} style={styles.itemMark} />
-                  ) : (
-                    <View style={[styles.itemDot, { backgroundColor: note.color }]} />
-                  )}
-                  <Text style={styles.itemText} numberOfLines={2}>{it}</Text>
-                </View>
-              ))}
-            </View>
+          {note.listMode ? (
+            listItems.length > 0 && (
+              <View style={styles.itemList}>
+                {listItems.slice(0, 6).map((it, idx) => (
+                  <View key={idx} style={styles.itemRow}>
+                    {isCheck ? (
+                      <Ionicons
+                        name={it.checked ? "checkbox" : "square-outline"}
+                        size={17}
+                        color={accent}
+                        style={styles.itemMark}
+                      />
+                    ) : (
+                      <Text style={[styles.itemNum, { color: accent }]}>{idx + 1}.</Text>
+                    )}
+                    <Text
+                      style={[styles.itemText, isCheck && it.checked && styles.itemTextDone]}
+                      numberOfLines={2}
+                    >
+                      {it.text}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )
+          ) : (
+            items.length > 0 && (
+              <View style={styles.itemList}>
+                {items.slice(0, 6).map((it, idx) => (
+                  <View key={idx} style={styles.itemRow}>
+                    {checklist ? (
+                      <Ionicons name="ellipse-outline" size={16} color={accent} style={styles.itemMark} />
+                    ) : (
+                      <View style={[styles.itemDot, { backgroundColor: accent }]} />
+                    )}
+                    <Text style={styles.itemText} numberOfLines={2}>{it}</Text>
+                  </View>
+                ))}
+              </View>
+            )
           )}
 
           <View style={styles.cardFooter}>
@@ -239,9 +434,9 @@ export default function Notes() {
                 {cats.slice(0, 2).map((c, i) => (
                   <View
                     key={c}
-                    style={[styles.chip, i === 0 ? { backgroundColor: note.color + (isDark ? "2E" : "1F") } : styles.chipNeutral]}
+                    style={[styles.chip, i === 0 ? { backgroundColor: accent + (isDark ? "2E" : "1F") } : styles.chipNeutral]}
                   >
-                    <Text style={[styles.chipText, i === 0 ? { color: note.color } : styles.chipTextNeutral]}>{c}</Text>
+                    <Text style={[styles.chipText, i === 0 ? { color: accent } : styles.chipTextNeutral]}>{c}</Text>
                   </View>
                 ))}
               </View>
@@ -396,24 +591,113 @@ export default function Notes() {
               </Pressable>
             </View>
 
-            <TextInput
-              testID="notes-title-input"
-              value={draftTitle}
-              onChangeText={setDraftTitle}
-              placeholder="Título"
-              placeholderTextColor={subColor}
-              style={styles.titleInput}
-            />
-            <TextInput
-              testID="notes-content-input"
-              value={draftContent}
-              onChangeText={setDraftContent}
-              placeholder="Escribe tu nota..."
-              placeholderTextColor={subColor}
-              style={styles.contentInput}
-              multiline
-              textAlignVertical="top"
-            />
+            <ScrollView
+              style={styles.sheetScroll}
+              contentContainerStyle={styles.sheetScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.fieldLabel}>Título</Text>
+              <TextInput
+                testID="notes-title-input"
+                value={draftTitle}
+                onChangeText={setDraftTitle}
+                placeholder="Título"
+                placeholderTextColor={subColor}
+                style={styles.titleInput}
+              />
+
+              <Text style={[styles.fieldLabel, { marginTop: 14 }]}>Contenido</Text>
+              {draftListMode === "plain" ? (
+                <TextInput
+                  testID="notes-content-input"
+                  value={draftContent}
+                  onChangeText={setDraftContent}
+                  placeholder="Escribe tu nota..."
+                  placeholderTextColor={subColor}
+                  style={styles.contentInput}
+                  multiline
+                  textAlignVertical="top"
+                />
+              ) : (
+                <View testID="notes-items-editor" style={styles.itemsEditor}>
+                  {draftItems.map((it, idx) => (
+                    <View key={it.id} style={styles.editRow}>
+                      {draftListMode === "check" ? (
+                        <Pressable
+                          testID={`notes-item-check-${idx}`}
+                          hitSlop={6}
+                          onPress={() => it.id && toggleItemCheck(it.id)}
+                          style={styles.editMark}
+                        >
+                          <Ionicons name={it.checked ? "checkbox" : "square-outline"} size={22} color={noteGreen} />
+                        </Pressable>
+                      ) : (
+                        <View style={styles.editMark}>
+                          <Text style={[styles.editNumText, { color: noteGreen }]}>{idx + 1}.</Text>
+                        </View>
+                      )}
+                      <TextInput
+                        testID={`notes-item-input-${idx}`}
+                        value={it.text}
+                        onChangeText={(t) => it.id && updateItemText(it.id, t)}
+                        placeholder="Elemento"
+                        placeholderTextColor={subColor}
+                        style={[styles.editItemInput, draftListMode === "check" && it.checked && styles.editItemDone]}
+                        onSubmitEditing={addItem}
+                        blurOnSubmit={false}
+                        returnKeyType="next"
+                      />
+                      <Pressable hitSlop={6} onPress={() => it.id && removeItem(it.id)} style={styles.editRemove}>
+                        <Ionicons name="close" size={16} color={subColor} />
+                      </Pressable>
+                    </View>
+                  ))}
+                  <Pressable testID="notes-item-add" onPress={addItem} style={styles.addItemBtn}>
+                    <Ionicons name="add" size={18} color={noteGreen} />
+                    <Text style={[styles.addItemText, { color: noteGreen }]}>Agregar elemento</Text>
+                  </Pressable>
+                </View>
+              )}
+
+              <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Herramientas</Text>
+              <View style={styles.toolsRow}>
+                <Pressable
+                  testID="notes-tool-check"
+                  onPress={() => toggleListMode("check")}
+                  style={[styles.toolBtn, draftListMode === "check" && { borderColor: noteGreen, backgroundColor: noteGreen + (isDark ? "24" : "14") }]}
+                >
+                  <Ionicons name="checkbox-outline" size={18} color={draftListMode === "check" ? noteGreen : subColor} />
+                  <Text style={[styles.toolText, draftListMode === "check" && { color: noteGreen }]}>Lista de checks</Text>
+                </Pressable>
+                <Pressable
+                  testID="notes-tool-ordered"
+                  onPress={() => toggleListMode("ordered")}
+                  style={[styles.toolBtn, draftListMode === "ordered" && { borderColor: noteGreen, backgroundColor: noteGreen + (isDark ? "24" : "14") }]}
+                >
+                  <OrderedGlyph color={draftListMode === "ordered" ? noteGreen : subColor} />
+                  <Text style={[styles.toolText, draftListMode === "ordered" && { color: noteGreen }]}>Lista ordenada</Text>
+                </Pressable>
+              </View>
+
+              <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Color de nota</Text>
+              <View style={styles.colorRow}>
+                {PALETTE_ORDER.map((key) => {
+                  const p = NOTE_PALETTES[key];
+                  const sel = (draftPalette ?? "green") === key;
+                  return (
+                    <ColorSwatch
+                      key={key}
+                      bg={isDark ? p.bgDark : p.bgLight}
+                      border={editorLine}
+                      selected={sel}
+                      ring={noteGreen}
+                      onPress={() => setDraftPalette(key)}
+                    />
+                  );
+                })}
+              </View>
+            </ScrollView>
 
             {confirmDelete ? (
               <View style={styles.confirmRow}>
@@ -553,7 +837,9 @@ const useStyles = makeStyles((colors, scheme) => {
     itemRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
     itemDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6, marginLeft: 3 },
     itemMark: { marginTop: 1 },
+    itemNum: { fontSize: 13.5, fontWeight: "800", lineHeight: 20, minWidth: 16 },
     itemText: { flex: 1, fontSize: 14, color: titleColor, lineHeight: 20 },
+    itemTextDone: { textDecorationLine: "line-through", color: subColor },
     cardFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14, gap: 8 },
     footerLeft: { flexDirection: "row", alignItems: "center", gap: 5 },
     cardDate: { fontSize: 12, color: subColor, fontWeight: "600" },
@@ -602,7 +888,11 @@ const useStyles = makeStyles((colors, scheme) => {
       paddingHorizontal: 20,
       paddingTop: 10,
       paddingBottom: 28,
+      maxHeight: "90%",
     },
+    sheetScroll: { flexGrow: 0, flexShrink: 1 },
+    sheetScrollContent: { paddingBottom: 4 },
+    fieldLabel: { fontSize: 13, fontWeight: "800", color: subColor, marginBottom: 8, letterSpacing: 0.1 },
     sheetHandle: { alignSelf: "center", width: 44, height: 4, borderRadius: 2, backgroundColor: lineSoft, marginBottom: 12 },
     sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
     sheetTitle: { fontSize: 18, fontWeight: "800", color: titleColor, letterSpacing: -0.3 },
@@ -611,16 +901,44 @@ const useStyles = makeStyles((colors, scheme) => {
       backgroundColor: isDark ? colors.surface : "#FFFFFF",
       borderWidth: 1, borderColor: lineSoft, borderRadius: radius.md,
       paddingHorizontal: 12, paddingVertical: 12,
-      marginBottom: 10,
     },
     contentInput: {
       fontSize: 14, color: titleColor,
       backgroundColor: isDark ? colors.surface : "#FFFFFF",
       borderWidth: 1, borderColor: lineSoft, borderRadius: radius.md,
       paddingHorizontal: 12, paddingVertical: 12,
-      minHeight: 130, marginBottom: 14,
+      minHeight: 112,
     },
-    sheetActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+
+    // Checklist / ordered-list editor (inside the note sheet, no new screen)
+    itemsEditor: {
+      backgroundColor: isDark ? colors.surface : "#FFFFFF",
+      borderWidth: 1, borderColor: lineSoft, borderRadius: radius.md,
+      paddingHorizontal: 10, paddingVertical: 6, minHeight: 112,
+    },
+    editRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 3 },
+    editMark: { width: 26, alignItems: "center", justifyContent: "center" },
+    editNumText: { fontSize: 14, fontWeight: "800" },
+    editItemInput: { flex: 1, fontSize: 14, color: titleColor, paddingVertical: 6 },
+    editItemDone: { textDecorationLine: "line-through", color: subColor },
+    editRemove: { width: 24, alignItems: "center", justifyContent: "center" },
+    addItemBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 4, marginTop: 2 },
+    addItemText: { fontSize: 13, fontWeight: "700" },
+
+    // Herramientas (two compact rounded tools)
+    toolsRow: { flexDirection: "row", gap: 12 },
+    toolBtn: {
+      flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+      paddingVertical: 13, paddingHorizontal: 10,
+      borderRadius: radius.md, borderWidth: 1, borderColor: lineSoft,
+      backgroundColor: isDark ? colors.surface : "#FFFFFF",
+    },
+    toolText: { fontSize: 13, fontWeight: "700", color: subColor },
+
+    // Color de nota
+    colorRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+
+    sheetActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 16 },
     deleteBtn: {
       flexDirection: "row", alignItems: "center", gap: 5,
       paddingHorizontal: 14, paddingVertical: 11,
@@ -651,7 +969,7 @@ const useStyles = makeStyles((colors, scheme) => {
       borderRadius: radius.md,
     },
     menuItemText: { fontSize: 15.5, fontWeight: "700", color: titleColor },
-    confirmRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+    confirmRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16 },
     confirmText: { flex: 1, fontSize: 13.5, fontWeight: "700", color: titleColor },
     confirmCancel: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: lineSoft },
     confirmCancelText: { color: subColor, fontWeight: "700", fontSize: 13 },

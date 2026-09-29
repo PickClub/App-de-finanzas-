@@ -350,6 +350,18 @@ export default function Home() {
   const money = (n: number) => (hidden ? "••••" : formatCurrency(n));
   const debtMoney = (n: number) => (hidden ? "••••" : formatCurrencyInt(n));
 
+  // Split the existing currency formatting into { symbol, amount } so the
+  // account-card balance can show the "$" inside a small circle and the number
+  // beside it. Uses the SAME formatCurrency values — display-only, no data change.
+  const balanceParts = (n: number) => {
+    const full = formatCurrency(n); // e.g. "$2,500" or "-$3,600"
+    const m = full.match(/^(-?)(\D*)(.*)$/);
+    const sign = m?.[1] || "";
+    const symbol = ((m?.[2] || "$").trim() || "$");
+    const num = m?.[3] || full;
+    return { symbol, amount: hidden ? "••••" : sign + num };
+  };
+
   // Account growth indicator (visual-only) — derived from real summary data:
   // this month's net movement relative to the opening balance. No hardcoding.
   const monthNet = (summary?.month_income || 0) - (summary?.month_expense || 0);
@@ -534,9 +546,14 @@ export default function Home() {
                   </View>
                   <View style={styles.walletTextWrap}>
                     <Text style={styles.walletName} numberOfLines={1}>{a.name}</Text>
-                    <Text style={styles.walletBalance} numberOfLines={1} adjustsFontSizeToFit>
-                      {money(a.current_balance)}
-                    </Text>
+                    <View style={[styles.balancePill, { backgroundColor: darken(ac, 0.1) }]}>
+                      <View style={styles.dollarCircle}>
+                        <Text style={styles.dollarSymbol}>{balanceParts(a.current_balance).symbol}</Text>
+                      </View>
+                      <Text style={styles.walletBalance} numberOfLines={1} adjustsFontSizeToFit>
+                        {balanceParts(a.current_balance).amount}
+                      </Text>
+                    </View>
                   </View>
                 </View>
               </Pressable>
@@ -1086,8 +1103,38 @@ const useStyles = makeStyles((colors, scheme) => {
   walletCardLast: {
     marginRight: 0,
   },
-  walletName: { color: "#fff", fontSize: 12.5, fontWeight: "600", letterSpacing: 0.1 },
-  walletBalance: { color: "rgba(255,255,255,0.92)", fontSize: 11, fontWeight: "600", marginTop: 1 },
+  walletName: { color: "#464C54", fontSize: 12.5, fontWeight: "600", letterSpacing: 0.1 },
+  walletBalance: { color: "#464C54", fontSize: 12.5, fontWeight: "600" },
+  // Compact color-matched balance pill: "$" in a thin outlined circle + amount.
+  balancePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 5,
+    paddingLeft: 3,
+    paddingRight: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    marginTop: 5,
+  },
+  dollarCircle: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(70,76,84,0.45)",
+    backgroundColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dollarSymbol: {
+    color: "#464C54",
+    fontSize: 9,
+    fontWeight: "800",
+    lineHeight: 11,
+    textAlign: "center",
+    includeFontPadding: false,
+  },
   walletAddCard: {
     flexBasis: "31%",
     flexGrow: 0,

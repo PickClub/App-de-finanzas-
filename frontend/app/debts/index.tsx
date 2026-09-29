@@ -281,7 +281,7 @@ export default function Debts() {
         </ScrollView>
 
         {/* Debt cards */}
-        <View style={{ paddingHorizontal: spacing.lg, gap: 14 }}>
+        <View style={{ paddingHorizontal: spacing.lg, gap: 12 }}>
           {filtered.map((d) => {
             const p = d.original_amount > 0 ? d.total_paid / d.original_amount : 0;
             const pctInt = Math.round(p * 100);
@@ -329,7 +329,7 @@ export default function Debts() {
                       </View>
                       <Text style={styles.amountLabel}>Pendiente</Text>
                     </View>
-                    <Text style={[styles.amountValue, { color: P.red }]} numberOfLines={1} adjustsFontSizeToFit>
+                    <Text style={[styles.amountValue, { color: P.text }]} numberOfLines={1} adjustsFontSizeToFit>
                       {formatCurrencyInt(d.remaining_amount)}
                     </Text>
                   </View>
@@ -340,7 +340,7 @@ export default function Debts() {
                       </View>
                       <Text style={styles.amountLabel}>Pagado</Text>
                     </View>
-                    <Text style={[styles.amountValue, { color: accent }]} numberOfLines={1} adjustsFontSizeToFit>
+                    <Text style={[styles.amountValue, { color: P.text }]} numberOfLines={1} adjustsFontSizeToFit>
                       {formatCurrencyInt(d.total_paid)}
                     </Text>
                   </View>
@@ -538,10 +538,10 @@ const useStyles = makeStyles((_c, scheme) => {
     flipHint: { position: "absolute", top: 8, right: 8 },
 
     /* filters */
-    chipRow: { paddingHorizontal: spacing.lg, gap: 8, paddingVertical: spacing.md },
+    chipRow: { paddingHorizontal: spacing.lg, gap: 8, paddingVertical: spacing.sm },
     pill: {
-      height: 38,
-      paddingHorizontal: 18,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
       borderRadius: radius.pill,
       alignItems: "center",
       justifyContent: "center",
@@ -552,14 +552,15 @@ const useStyles = makeStyles((_c, scheme) => {
       borderWidth: 1,
       borderColor: scheme === "dark" ? P.border : "#D9DED8",
     },
-    pillText: { color: P.text, fontSize: 13.5, fontWeight: "700" },
-    pillTextActive: { color: "#fff", fontSize: 13.5, fontWeight: "700" },
+    pillText: { color: P.text, fontSize: 12, fontWeight: "700" },
+    pillTextActive: { color: "#fff", fontSize: 12, fontWeight: "700" },
 
     /* debt card */
     card: {
       backgroundColor: P.card,
       borderRadius: radius.cardLg,
-      padding: spacing.lg,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
       borderWidth: 1,
       overflow: "hidden",
       ...shadow,
@@ -579,16 +580,16 @@ const useStyles = makeStyles((_c, scheme) => {
     debtSub: { fontSize: 11.5, color: P.muted, fontWeight: "500", flexShrink: 1 },
     ringPctSmall: { fontSize: 12.5, fontWeight: "800", letterSpacing: -0.3 },
 
-    amountsRow: { flexDirection: "row", marginTop: 16 },
+    amountsRow: { flexDirection: "row", marginTop: 11 },
     amountCol: { flex: 1 },
     amountHead: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 4 },
     amountIcon: { width: 18, height: 18, borderRadius: 6, alignItems: "center", justifyContent: "center" },
     amountLabel: { fontSize: 11.5, color: P.muted, fontWeight: "500" },
     amountValue: { fontSize: 15.5, fontWeight: "800", letterSpacing: -0.3 },
 
-    trackRow: { flexDirection: "row", alignItems: "center", marginTop: 16, gap: 10 },
-    track: { flex: 1, height: 12, borderRadius: 6, overflow: "hidden" },
-    trackFill: { height: "100%", borderRadius: 6 },
+    trackRow: { flexDirection: "row", alignItems: "center", marginTop: 11, gap: 10 },
+    track: { flex: 1, height: 8, borderRadius: 4, overflow: "hidden" },
+    trackFill: { height: "100%", borderRadius: 4 },
     trackPct: {
       fontSize: 12.5,
       fontWeight: "800",

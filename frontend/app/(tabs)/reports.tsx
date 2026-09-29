@@ -116,7 +116,7 @@ export default function Reports() {
         </View>
         <View style={styles.periodControl} testID="period-control">
           <Text style={styles.periodControlText} numberOfLines={1}>{rangeDef.periodLabel}</Text>
-          <Ionicons name="chevron-down" size={15} color={colors.muted} />
+          <Ionicons name="chevron-down" size={13} color={colors.muted} />
         </View>
       </View>
 
@@ -300,17 +300,17 @@ const useStyles = makeStyles((colors, scheme) => {
   periodControl: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
     maxWidth: 160,
     marginTop: 2,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: radius.pill,
     backgroundColor: isDark ? colors.surfaceSecondary : "#DCE9DD",
     borderWidth: 1,
     borderColor: isDark ? colors.border : "#BAD7C2",
   },
-  periodControlText: { fontSize: 12.5, fontWeight: "700", color: isDark ? colors.onSurface : "#126046", flexShrink: 1 },
+  periodControlText: { fontSize: 11.5, fontWeight: "700", color: isDark ? colors.onSurface : "#126046", flexShrink: 1 },
   // --- Section header (outside the card) — mirrors Home's section headers ---
   sectionHeader: {
     flexDirection: "row",
@@ -326,11 +326,11 @@ const useStyles = makeStyles((colors, scheme) => {
   },
   headTitle: { fontSize: 18, fontWeight: "800", color: headTitleColor, letterSpacing: -0.4, flexShrink: 1 },
   headSubtitle: { fontSize: 11.5, color: headSubColor, marginTop: 1 },
-  chipRow: { paddingHorizontal: spacing.lg, gap: 6, marginTop: 10, height: 40, alignItems: "center" },
+  chipRow: { paddingHorizontal: spacing.lg, gap: 6, marginTop: 10, height: 32, alignItems: "center" },
   // Compact period pills (Reports-local, so no other screen is affected)
   pill: {
-    paddingHorizontal: 11,
-    paddingVertical: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: radius.pill,
     borderWidth: 1,
     justifyContent: "center",
@@ -343,7 +343,7 @@ const useStyles = makeStyles((colors, scheme) => {
     backgroundColor: isDark ? colors.surfaceSecondary : "#DCE9DD",
     borderColor: isDark ? colors.border : "#BAD7C2",
   },
-  pillText: { fontSize: 12, fontWeight: "700" },
+  pillText: { fontSize: 11, fontWeight: "700" },
   pillTextActive: { color: isDark ? colors.onBrandPrimary : "#FFFFFF" },
   pillTextInactive: { color: isDark ? colors.onSurface : "#126046" },
   card: {

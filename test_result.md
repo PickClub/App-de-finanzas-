@@ -163,6 +163,19 @@ backend:
           comment: "✅✅✅ 5TH VERIFICATION COMPLETE (READ-ONLY after latest .env recreation). Backend supervisor: RUNNING (pid 790, uptime 0:03:15). Port 8001 listening confirmed (netstat shows tcp 0.0.0.0:8001 LISTEN). /app/backend/.env exists with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database, CORS_ORIGINS=*. All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, dict with keys: id, name, email, profile_photo, currency ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, dict with keys: total_balance, month_income, month_expense, debts, accounts_count ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs show NO KeyError for MONGO_URL or DB_NAME in current session (backend started Thu Sep 24 10:06:44 2026). Old KeyError traces in error log are from previous crash-loop sessions before .env was recreated. Current session shows only the documented transient ObjectId serialization error (HTTP 500 on first /api/user after cold boot: 'ObjectId' object is not iterable), followed by stable HTTP 200 responses. NO 502 Bad Gateway errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED."
 
 frontend:
+  - task: "Movimientos recientes: existing calendar button opens date/date-range filter sheet"
+    implemented: true
+    working: true
+    file: "frontend/app/(tabs)/index.tsx, frontend/src/components/date-range-sheet.tsx"
+    stuck_count: 0
+    priority: "high"
+    status_history:
+        - working: true
+          agent: "main"
+          comment: |
+            FUNCTION-ONLY change. The existing calendar icon button (testID mr-filter-month) in the "Movimientos recientes" section now opens a new DateRangeSheet (reuses AppSheet primitive + theme tokens: pearl surface, mint accents, dark-green selected dates, rounded corners, Spanish labels) instead of the old monthOnly toggle. The sheet supports: single-day selection, start→end range selection, month navigation (prev/next), a "Período seleccionado" summary row (Un solo día / Rango pill), Aplicar, and close/cancel (backdrop or X) without changing the list. On Aplicar the Home "recent" useMemo filters ONLY the recent-movements list by the selected day/range (inclusive), and this works TOGETHER with the existing Ingresos/Gastos/Transferencias type filters. Button appearance/position unchanged (active tint reflects an applied date filter, reusing the pre-existing mrIconPillActive style). No Home layout/header/cards/nav/backend changes; no new dependencies.
+            VERIFIED on web preview: single-day 29 → list filtered to 0 (no tx that day, empty state shown); range 28–30 → 4 rows; range 28–30 + Expenses → 2 rows (combined filtering confirmed). ESLint clean (new file 0 issues).
+
   - task: "Notes editor: minimal tools (checklist + ordered list) and note color selection"
     implemented: true
     working: "NA"

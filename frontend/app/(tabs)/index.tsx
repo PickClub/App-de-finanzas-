@@ -20,6 +20,7 @@ import i18n, { useTranslation } from "@/src/i18n";
 import { IconTile } from "@/src/components/ui";
 import { LockToggle, useLock } from "@/src/lock";
 import { WalletIcon, ChartIcon, HandCoinIcon } from "@/src/components/animated-section-icons";
+import { DateRangeSheet, type DateRange } from "@/src/components/date-range-sheet";
 
 // --- HOME-ONLY color redesign (light mode only) ---------------------------
 // These tokens SHADOW the global theme ONLY on the Home screen in light mode,
@@ -321,7 +322,8 @@ export default function Home() {
   const { guard } = useLock();
   const [hidden, setHidden] = useState(false);
   const [txFilter, setTxFilter] = useState("all");
-  const [monthOnly, setMonthOnly] = useState(false);
+  const [dateSheet, setDateSheet] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   const summaryQ = useQuery({ queryKey: ["summary"], queryFn: api.summary });
   const userQ = useQuery({ queryKey: ["user"], queryFn: api.getUser });
@@ -336,13 +338,14 @@ export default function Home() {
     if (txFilter === "income") items = items.filter((t: any) => t.type === "income" || t.type === "loan_received");
     else if (txFilter === "expense") items = items.filter((t: any) => t.type === "expense" || t.type === "debt_payment");
     else if (txFilter === "transfer") items = items.filter((t: any) => t.type === "transfer");
-    if (monthOnly) {
-      const now = new Date();
-      const first = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      items = items.filter((t: any) => new Date(t.date).getTime() >= first);
+    if (dateRange) {
+      items = items.filter((t: any) => {
+        const ts = new Date(t.date).getTime();
+        return ts >= dateRange.start && ts <= dateRange.end;
+      });
     }
     return items.slice(0, 6);
-  }, [txQ.data, txFilter, monthOnly]);
+  }, [txQ.data, txFilter, dateRange]);
   const cats: any[] = catQ.data || [];
   const catById = Object.fromEntries(cats.map((c) => [c.id, c]));
   const accounts: any[] = accQ.data || [];
@@ -864,10 +867,10 @@ export default function Home() {
           })}
           <Pressable
             testID="mr-filter-month"
-            onPress={() => setMonthOnly((m) => !m)}
-            style={[styles.mrIconPill, monthOnly && styles.mrIconPillActive]}
+            onPress={() => setDateSheet(true)}
+            style={[styles.mrIconPill, dateRange && styles.mrIconPillActive]}
           >
-            <Ionicons name="calendar-outline" size={15} color={monthOnly ? colors.brandPrimary : colors.muted} />
+            <Ionicons name="calendar-outline" size={15} color={dateRange ? colors.brandPrimary : colors.muted} />
           </Pressable>
         </ScrollView>
 
@@ -938,6 +941,15 @@ export default function Home() {
         </Pressable>
       </View>
     </Animated.ScrollView>
+    <DateRangeSheet
+      visible={dateSheet}
+      value={dateRange}
+      onClose={() => setDateSheet(false)}
+      onApply={(range) => {
+        setDateRange(range);
+        setDateSheet(false);
+      }}
+    />
     </View>
   );
 }

@@ -110,13 +110,9 @@ export default function Reports() {
       contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 120 }}
     >
       <View style={styles.screenHead}>
-        <View style={{ flex: 1, paddingRight: 10 }}>
+        <View style={{ flex: 1 }}>
           <Text style={styles.title}>Informes</Text>
           <Text style={styles.subtitle}>Analiza tu actividad financiera</Text>
-        </View>
-        <View style={styles.periodControl} testID="period-control">
-          <Text style={styles.periodControlText} numberOfLines={1}>{rangeDef.periodLabel}</Text>
-          <Ionicons name="chevron-down" size={13} color={colors.muted} />
         </View>
       </View>
 

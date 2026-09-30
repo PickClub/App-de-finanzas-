@@ -163,6 +163,19 @@ backend:
           comment: "✅✅✅ 5TH VERIFICATION COMPLETE (READ-ONLY after latest .env recreation). Backend supervisor: RUNNING (pid 790, uptime 0:03:15). Port 8001 listening confirmed (netstat shows tcp 0.0.0.0:8001 LISTEN). /app/backend/.env exists with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database, CORS_ORIGINS=*. All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, dict with keys: id, name, email, profile_photo, currency ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, dict with keys: total_balance, month_income, month_expense, debts, accounts_count ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs show NO KeyError for MONGO_URL or DB_NAME in current session (backend started Thu Sep 24 10:06:44 2026). Old KeyError traces in error log are from previous crash-loop sessions before .env was recreated. Current session shows only the documented transient ObjectId serialization error (HTTP 500 on first /api/user after cold boot: 'ObjectId' object is not iterable), followed by stable HTTP 200 responses. NO 502 Bad Gateway errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED."
 
 frontend:
+  - task: "Debts screen: one-time screen-entry progress animation (main ring + card rings + horizontal bars) 0 -> real %"
+    implemented: true
+    working: true
+    file: "frontend/app/debts/index.tsx"
+    stuck_count: 0
+    priority: "high"
+    status_history:
+        - working: true
+          agent: "main"
+          comment: |
+            VISUAL-ONLY. Added a single shared entry factor (Animated.Value 0..1 + JS listener -> entryT state) that ALL existing progress indicators multiply their REAL percentage by: main ProgressRing (summary.pct * entryT), each debt-card ProgressRing (p * entryT), and each horizontal bar (width Math.max(3,pctInt) * entryT). Sweeps 0 -> current value over 1000ms with Easing.out(cubic), synchronized across all indicators. Runs ONCE per screen focus via useFocusEffect and only after the debt query has resolved (dataReadyRef guard) so it never snaps on async load. Does NOT restart on scroll / re-render / filter (tab) change (guarded by an armed ref that only re-arms on focus). No numbers/labels animated (kept at real values). No formula/data/calculation/design/color/layout changes; no new dependencies.
+            VERIFIED on web preview by sampling over time on entry: bars 400ms~30/17/5/17% -> 700ms~59/33/10/33% -> 1100ms 68/38/11/38% (stable); ring strokeDashoffsets decrease from ~full to targets and settle; main ring settles at real 40% ($18,500 de $46,000). Navigating away and back re-runs the animation once. Final values match real data exactly (Hermano 68%, Patricia 38%, Paz 11%, Tia 38%). Only pre-existing unrelated eslint warnings remain (debts = q.data || []).
+
   - task: "Home Mis cuentas: account cards become a horizontal paginated carousel (5/page) + dots inside Agregar card + percentage card sync"
     implemented: true
     working: true

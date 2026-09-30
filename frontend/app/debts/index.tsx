@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { View, Text, ScrollView, Pressable, StyleSheet, Animated, Easing, Platform } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing, type ColorScheme } from "@/src/theme";
@@ -104,6 +104,57 @@ export default function Debts() {
   // ONE aggregate summary across all debts — real data only.
   const summary = useMemo(() => buildStat(debts), [debts]);
   const summaryPct = Math.round(summary.pct * 100);
+
+  // --- One-time screen-entry progress animation (VISUAL ONLY) --------------
+  // A single factor 0..1 that all progress indicators (main ring, card rings,
+  // horizontal bars) multiply their REAL percentage by, so they sweep from 0
+  // to their current value together when the screen is opened. It runs once
+  // per focus and only after the debt data is available (so it doesn't snap on
+  // async load), and it does NOT restart on scroll / re-render / filter change.
+  const entry = useRef(new Animated.Value(0)).current;
+  const [entryT, setEntryT] = useState(0);
+  const armed = useRef(false);
+  const dataReadyRef = useRef(false);
+
+  useEffect(() => {
+    const id = entry.addListener(({ value }) => setEntryT(value));
+    return () => entry.removeListener(id);
+  }, [entry]);
+
+  const startEntryAnim = useCallback(() => {
+    if (!armed.current || !dataReadyRef.current) return;
+    armed.current = false;
+    entry.setValue(0);
+    setEntryT(0);
+    Animated.timing(entry, {
+      toValue: 1,
+      duration: 1000,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [entry]);
+
+  // Track when the debt query has resolved (cached re-entries resolve instantly).
+  useEffect(() => {
+    if (q.isSuccess || q.data) {
+      dataReadyRef.current = true;
+      startEntryAnim();
+    }
+  }, [q.isSuccess, q.data, startEntryAnim]);
+
+  // Arm a fresh one-time animation each time the screen gains focus.
+  useFocusEffect(
+    useCallback(() => {
+      armed.current = true;
+      entry.stopAnimation();
+      entry.setValue(0);
+      setEntryT(0);
+      startEntryAnim(); // starts immediately if data already available
+      return () => {
+        entry.stopAnimation();
+      };
+    }, [entry, startEntryAnim])
+  );
 
   // Back-side data (presentation only) — derived from the SAME real debt data.
   const oweList = useMemo(() => debts.filter((d) => d.direction === "i_owe"), [debts]);
@@ -223,7 +274,7 @@ export default function Debts() {
             ) : (
               <>
                 <View style={styles.summaryLeft}>
-                  <ProgressRing size={116} stroke={11} progress={summary.pct} color={P.ring} trackColor={P.ringTrack}>
+                  <ProgressRing size={116} stroke={11} progress={summary.pct * entryT} color={P.ring} trackColor={P.ringTrack}>
                     <Text style={styles.sumPct}>{summaryPct}%</Text>
                     <Text style={styles.sumPctSub}>Pagado</Text>
                   </ProgressRing>
@@ -305,7 +356,7 @@ export default function Debts() {
                       </Text>
                     </View>
                   </View>
-                  <ProgressRing size={52} stroke={6} progress={p} color={accent} trackColor={accent + "22"}>
+                  <ProgressRing size={52} stroke={6} progress={p * entryT} color={accent} trackColor={accent + "22"}>
                     <Text style={[styles.ringPctSmall, { color: P.text }]}>{pctInt}%</Text>
                   </ProgressRing>
                 </View>
@@ -354,7 +405,7 @@ export default function Debts() {
                       colors={[accent + "CC", accent]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
-                      style={[styles.trackFill, { width: `${Math.max(3, pctInt)}%` }]}
+                      style={[styles.trackFill, { width: `${Math.max(3, pctInt) * entryT}%` }]}
                     />
                   </View>
                   <Text style={styles.trackPct}>{pctInt}%</Text>

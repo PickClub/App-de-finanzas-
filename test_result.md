@@ -163,6 +163,19 @@ backend:
           comment: "✅✅✅ 5TH VERIFICATION COMPLETE (READ-ONLY after latest .env recreation). Backend supervisor: RUNNING (pid 790, uptime 0:03:15). Port 8001 listening confirmed (netstat shows tcp 0.0.0.0:8001 LISTEN). /app/backend/.env exists with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database, CORS_ORIGINS=*. All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, dict with keys: id, name, email, profile_photo, currency ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, dict with keys: total_balance, month_income, month_expense, debts, accounts_count ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs show NO KeyError for MONGO_URL or DB_NAME in current session (backend started Thu Sep 24 10:06:44 2026). Old KeyError traces in error log are from previous crash-loop sessions before .env was recreated. Current session shows only the documented transient ObjectId serialization error (HTTP 500 on first /api/user after cold boot: 'ObjectId' object is not iterable), followed by stable HTTP 200 responses. NO 502 Bad Gateway errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED."
 
 frontend:
+  - task: "Home Mis cuentas: account cards become a horizontal paginated carousel (5/page) + dots inside Agregar card + percentage card sync"
+    implemented: true
+    working: true
+    file: "frontend/app/(tabs)/index.tsx"
+    stuck_count: 0
+    priority: "high"
+    status_history:
+        - working: true
+          agent: "main"
+          comment: |
+            SCOPED to the account-card area of "Mis cuentas" ONLY. The colored account cards are now inside a horizontal pagingEnabled ScrollView (snapToInterval = container width, decelerationRate fast, disableIntervalMomentum) that snaps page-by-page. Each page = the SAME 3-col grid rendering exactly 5 accounts + the existing "Agregar cuenta" card (accounts 1–5, 6–10, 11–15, ...). Header/title/subtitle/icon/eye/Ver todo/divider and all other Home content are OUTSIDE the swipe container and do not move. Card dimensions/colors/design/icons/typography/spacing unchanged (same walletCard/walletInner/walletAddCard styles). Tiny page-indicator dots added INSIDE the existing Agregar card via absolute positioning (bottom:6, pointerEvents none) so the card never grows and no spacing changes — dots render only when pageCount>1; active dot slightly larger + solid green, inactive subtle green. The Resumen-del-mes percentage/distribution card now syncs to the active page: accountBars() receives acctPages[activePage] instead of all accounts, keeping the EXISTING calculation (share of summary.total_balance, sorted by balance). acctPage updates from onScroll/onMomentumScrollEnd. No new dependencies (uses RN ScrollView + Dimensions).
+            VERIFIED on web preview by temporarily creating 5 extra accounts (10 total → 2 pages) then deleting them: Page1 cards = Terreno/Casa/Boda/Comida/Deposito, % card = Casa 37% Terreno 26% Boda 22% Deposito 9% Comida 7%, dot 1 active. Scroll to Page2 cards = Viaje/Emergencia/Universidad/Salud/Navidad, % card synced (Universidad 20% Emergencia 14% Viaje 7% Salud 6% Navidad 4%), dot 2 active. Restored to original 5 accounts → single page, NO dots, layout identical to before. ESLint clean (only pre-existing unrelated accountTypeLabel warning).
+
   - task: "Movimientos recientes: existing calendar button opens date/date-range filter sheet"
     implemented: true
     working: true

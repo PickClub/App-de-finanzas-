@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet, RefreshControl } from "react-native";
+import { View, Text, ScrollView, Pressable, StyleSheet, RefreshControl, Dimensions } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedScrollHandler,
@@ -348,7 +348,27 @@ export default function Home() {
   }, [txQ.data, txFilter, dateRange]);
   const cats: any[] = catQ.data || [];
   const catById = Object.fromEntries(cats.map((c) => [c.id, c]));
-  const accounts: any[] = accQ.data || [];
+  const accounts: any[] = useMemo(() => accQ.data || [], [accQ.data]);
+
+  // --- Accounts carousel (paginate ONLY the colored account cards) ----------
+  // Groups of 5 existing accounts per page. Nothing else in the section moves.
+  const [acctPage, setAcctPage] = useState(0);
+  const [carouselW, setCarouselW] = useState<number>(Dimensions.get("window").width);
+  const acctPages = useMemo(() => {
+    const groups: any[][] = [];
+    for (let i = 0; i < accounts.length; i += 5) groups.push(accounts.slice(i, i + 5));
+    return groups.length ? groups : [[]];
+  }, [accounts]);
+  const acctPageCount = acctPages.length;
+  // Keep the active page valid if the number of accounts changes.
+  const safeAcctPage = Math.min(acctPage, acctPageCount - 1);
+  const onCarouselScroll = (e: any) => {
+    const w = e.nativeEvent.layoutMeasurement?.width || carouselW;
+    if (w > 0) {
+      const p = Math.round(e.nativeEvent.contentOffset.x / w);
+      if (p !== acctPage && p >= 0 && p < acctPageCount) setAcctPage(p);
+    }
+  };
 
   const money = (n: number) => (hidden ? "••••" : formatCurrency(n));
   const debtMoney = (n: number) => (hidden ? "••••" : formatCurrencyInt(n));
@@ -515,62 +535,91 @@ export default function Home() {
             }
           />
         </View>
-        <View style={styles.walletGrid}>
-          {accounts.map((a, idx) => {
-            const isThird = (idx + 1) % 3 === 0;
-            const ac = homeAccountColor(a, scheme);
-            return (
-              <Pressable
-                key={a.id}
-                testID={`wallet-${a.id}`}
-                onPress={guard(() => router.push(`/accounts/new?id=${a.id}`))}
-                style={[styles.walletCard, { backgroundColor: ac }, isThird && styles.walletCardLast]}
-              >
-                <View style={styles.walletInner}>
-                  <LinearGradient
-                    colors={[lighten(ac, 0.16), ac, darken(ac, 0.06)]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <Ionicons
-                    name={a.icon as any}
-                    size={58}
-                    color="rgba(255,255,255,0.12)"
-                    style={styles.walletWatermark}
-                  />
-                  <View style={styles.walletTopRow}>
-                    <View style={styles.walletIconBox}>
-                      <Ionicons name={a.icon as any} size={14} color="#fff" />
-                    </View>
-                    <View style={[styles.walletArrow, { backgroundColor: darken(ac, 0.16) }]}>
-                      <Ionicons name="chevron-forward" size={12} color="#fff" />
-                    </View>
-                  </View>
-                  <View style={styles.walletTextWrap}>
-                    <Text style={styles.walletName} numberOfLines={1}>{a.name}</Text>
-                    <View style={[styles.balancePill, { backgroundColor: darken(ac, 0.1) }]}>
-                      <View style={styles.dollarCircle}>
-                        <Text style={styles.dollarSymbol}>{balanceParts(a.current_balance).symbol}</Text>
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          snapToInterval={carouselW}
+          snapToAlignment="start"
+          disableIntervalMomentum
+          scrollEventThrottle={16}
+          onScroll={onCarouselScroll}
+          onMomentumScrollEnd={onCarouselScroll}
+          onLayout={(e) => setCarouselW(e.nativeEvent.layout.width)}
+          testID="accounts-carousel"
+        >
+          {acctPages.map((pageAccounts, pi) => (
+            <View key={pi} style={{ width: carouselW }}>
+              <View style={styles.walletGrid}>
+                {pageAccounts.map((a, idx) => {
+                  const isThird = (idx + 1) % 3 === 0;
+                  const ac = homeAccountColor(a, scheme);
+                  return (
+                    <Pressable
+                      key={a.id}
+                      testID={`wallet-${a.id}`}
+                      onPress={guard(() => router.push(`/accounts/new?id=${a.id}`))}
+                      style={[styles.walletCard, { backgroundColor: ac }, isThird && styles.walletCardLast]}
+                    >
+                      <View style={styles.walletInner}>
+                        <LinearGradient
+                          colors={[lighten(ac, 0.16), ac, darken(ac, 0.06)]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={StyleSheet.absoluteFill}
+                        />
+                        <Ionicons
+                          name={a.icon as any}
+                          size={58}
+                          color="rgba(255,255,255,0.12)"
+                          style={styles.walletWatermark}
+                        />
+                        <View style={styles.walletTopRow}>
+                          <View style={styles.walletIconBox}>
+                            <Ionicons name={a.icon as any} size={14} color="#fff" />
+                          </View>
+                          <View style={[styles.walletArrow, { backgroundColor: darken(ac, 0.16) }]}>
+                            <Ionicons name="chevron-forward" size={12} color="#fff" />
+                          </View>
+                        </View>
+                        <View style={styles.walletTextWrap}>
+                          <Text style={styles.walletName} numberOfLines={1}>{a.name}</Text>
+                          <View style={[styles.balancePill, { backgroundColor: darken(ac, 0.1) }]}>
+                            <View style={styles.dollarCircle}>
+                              <Text style={styles.dollarSymbol}>{balanceParts(a.current_balance).symbol}</Text>
+                            </View>
+                            <Text style={styles.walletBalance} numberOfLines={1} adjustsFontSizeToFit>
+                              {balanceParts(a.current_balance).amount}
+                            </Text>
+                          </View>
+                        </View>
                       </View>
-                      <Text style={styles.walletBalance} numberOfLines={1} adjustsFontSizeToFit>
-                        {balanceParts(a.current_balance).amount}
-                      </Text>
+                    </Pressable>
+                  );
+                })}
+                <Pressable
+                  testID="wallet-add"
+                  onPress={() => router.push("/accounts/new")}
+                  style={[styles.walletAddCard, (pageAccounts.length + 1) % 3 === 0 && styles.walletCardLast]}
+                >
+                  <Ionicons name="add" size={22} color={colors.brandPrimary} />
+                  <Text style={styles.walletAddText}>{t("home.addAccount")}</Text>
+                  {acctPageCount > 1 && (
+                    <View style={styles.walletDots} pointerEvents="none">
+                      {acctPages.map((_, di) => (
+                        <View
+                          key={di}
+                          style={[styles.walletDot, di === safeAcctPage && styles.walletDotActive]}
+                        />
+                      ))}
                     </View>
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })}
-          <Pressable
-            testID="wallet-add"
-            onPress={() => router.push("/accounts/new")}
-            style={[styles.walletAddCard, (accounts.length + 1) % 3 === 0 && styles.walletCardLast]}
-          >
-            <Ionicons name="add" size={22} color={colors.brandPrimary} />
-            <Text style={styles.walletAddText}>{t("home.addAccount")}</Text>
-          </Pressable>
-        </View>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
       </View>
 
       {/* Section divider — before Resumen del mes */}
@@ -657,7 +706,7 @@ export default function Home() {
           </View>
         <View style={[styles.miniCard, styles.miniAccounts]}>
           <View testID="cuentas-scroll" style={{ gap: 6 }}>
-            {accountBars(accounts, summary?.total_balance || 0, colors, scheme)}
+            {accountBars(acctPages[safeAcctPage] || [], summary?.total_balance || 0, colors, scheme)}
           </View>
         </View>
       </View>
@@ -1170,6 +1219,30 @@ const useStyles = makeStyles((colors, scheme) => {
     fontWeight: "800",
     fontSize: 11,
     lineHeight: 14,
+  },
+  // Tiny page indicator dots, absolutely pinned to the bottom of the existing
+  // "Agregar cuenta" card so the card never grows and no spacing changes.
+  walletDots: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 6,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 4,
+  },
+  walletDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: isDark ? colors.brandPrimary + "40" : "rgba(13,104,76,0.28)",
+  },
+  walletDotActive: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: isDark ? colors.brandPrimary : "#0D684C",
   },
   miniRow: {
     flexDirection: "row",

@@ -14,7 +14,6 @@ import { LockToggle, useLock } from "@/src/lock";
 
 const TABS = [
   { id: "all", label: "Todos" },
-  { id: "active", label: "Activos" },
   { id: "paid", label: "Pagados" },
   { id: "i_owe", label: "Yo debo" },
   { id: "they_owe", label: "Me deben" },
@@ -255,30 +254,21 @@ export default function Debts() {
           </Animated.View>
         </Pressable>
 
-        {/* Filters */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          {TABS.map((t) => {
-            const active = tab === t.id;
-            return (
-              <Pressable key={t.id} testID={`tab-${t.id}`} onPress={() => setTab(t.id)}>
-                {active ? (
-                  <LinearGradient
-                    colors={P.pillGrad}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.pill}
-                  >
-                    <Text style={styles.pillTextActive}>{t.label}</Text>
-                  </LinearGradient>
-                ) : (
-                  <View style={[styles.pill, styles.pillIdle]}>
-                    <Text style={styles.pillText}>{t.label}</Text>
-                  </View>
-                )}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        {/* Filters — fixed row (no horizontal scroll); 4 buttons evenly span
+            the same width as the debt cards below */}
+        <View style={styles.filterRow}>
+          {TABS.map((t) => (
+            <FilterPill
+              key={t.id}
+              testID={`tab-${t.id}`}
+              label={t.label}
+              active={tab === t.id}
+              gradient={P.pillGrad}
+              onPress={() => setTab(t.id)}
+              styles={styles}
+            />
+          ))}
+        </View>
 
         {/* Debt cards */}
         <View style={{ paddingHorizontal: spacing.lg, gap: 12 }}>
@@ -388,6 +378,48 @@ export default function Debts() {
         </View>
       </ScrollView>
     </View>
+  );
+}
+
+function FilterPill({
+  label,
+  active,
+  gradient,
+  onPress,
+  testID,
+  styles,
+}: {
+  label: string;
+  active: boolean;
+  gradient: [string, string];
+  onPress: () => void;
+  testID: string;
+  styles: any;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const useNative = Platform.OS !== "web";
+  const pressIn = () => {
+    // subtle compress
+    Animated.spring(scale, { toValue: 0.95, useNativeDriver: useNative, speed: 50, bounciness: 0 }).start();
+  };
+  const pressOut = () => {
+    // elastic spring back with a tiny bounce
+    Animated.spring(scale, { toValue: 1, useNativeDriver: useNative, speed: 20, bounciness: 12 }).start();
+  };
+  return (
+    <Animated.View style={{ flex: 1, transform: [{ scale }] }}>
+      <Pressable testID={testID} onPress={onPress} onPressIn={pressIn} onPressOut={pressOut}>
+        {active ? (
+          <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.pill}>
+            <Text style={styles.pillTextActive} numberOfLines={1}>{label}</Text>
+          </LinearGradient>
+        ) : (
+          <View style={[styles.pill, styles.pillIdle]}>
+            <Text style={styles.pillText} numberOfLines={1}>{label}</Text>
+          </View>
+        )}
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -538,14 +570,13 @@ const useStyles = makeStyles((_c, scheme) => {
     flipHint: { position: "absolute", top: 8, right: 8 },
 
     /* filters */
-    chipRow: { paddingHorizontal: spacing.lg, gap: 8, paddingVertical: spacing.sm },
+    filterRow: { flexDirection: "row", paddingHorizontal: spacing.lg, gap: 8, paddingVertical: spacing.sm },
     pill: {
-      paddingHorizontal: 12,
+      paddingHorizontal: 6,
       paddingVertical: 6,
       borderRadius: radius.pill,
       alignItems: "center",
       justifyContent: "center",
-      flexShrink: 0,
     },
     pillIdle: {
       backgroundColor: P.card,

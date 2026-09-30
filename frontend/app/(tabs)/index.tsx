@@ -1,9 +1,10 @@
-import React, { useState, useMemo, useCallback } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet, RefreshControl, Dimensions } from "react-native";
+import React, { useState, useMemo, useCallback, useRef } from "react";
+import { View, Text, ScrollView, Pressable, StyleSheet, RefreshControl, Dimensions, Platform, Animated as RNAnimated } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedScrollHandler,
   useAnimatedReaction,
+  LinearTransition,
   type SharedValue,
 } from "react-native-reanimated";
 import Svg, { Circle as SvgCircle, Path as SvgPath } from "react-native-svg";
@@ -308,6 +309,100 @@ function SectionHeader({
   );
 }
 
+// Movimientos recientes filter pill. Copies ONLY the visual language + press
+// interaction of the Deudas FilterPill (pill shape, border, green selected
+// gradient, spring compression to ~0.95 on press-in and a soft spring return on
+// release). Business logic (txFilter, testIDs, colors, gradients, layout) is
+// unchanged — this wrapper only adds the shared press-spring feedback.
+function MRPill({
+  testID,
+  active,
+  onPress,
+  icon,
+  iconColor,
+  label,
+  gradient,
+  styles,
+}: {
+  testID: string;
+  active: boolean;
+  onPress: () => void;
+  icon: string;
+  iconColor: string;
+  label: string;
+  gradient: [string, string];
+  styles: any;
+}) {
+  const scale = useRef(new RNAnimated.Value(1)).current;
+  const useNative = Platform.OS !== "web";
+  const pressIn = () => {
+    RNAnimated.spring(scale, { toValue: 0.95, useNativeDriver: useNative, speed: 50, bounciness: 0 }).start();
+  };
+  const pressOut = () => {
+    RNAnimated.spring(scale, { toValue: 1, useNativeDriver: useNative, speed: 20, bounciness: 12 }).start();
+  };
+  const content = (
+    <>
+      <Ionicons name={icon as any} size={13} color={active ? "#fff" : iconColor} />
+      <Text style={[styles.mrPillText, active && styles.mrPillTextActive]}>{label}</Text>
+    </>
+  );
+  return (
+    <RNAnimated.View style={{ transform: [{ scale }], flexShrink: 0 }}>
+      <Pressable testID={testID} onPress={onPress} onPressIn={pressIn} onPressOut={pressOut}>
+        {active ? (
+          <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.mrPill}>
+            {content}
+          </LinearGradient>
+        ) : (
+          <View style={[styles.mrPill, styles.mrPillIdle]}>{content}</View>
+        )}
+      </Pressable>
+    </RNAnimated.View>
+  );
+}
+
+// Calendar control for Movimientos recientes. Same Deudas-style press spring as
+// MRPill; keeps its existing icon-pill appearance and its existing onPress
+// (opens the SAME DateRangeSheet). Purely additive press feedback.
+function MRIconPill({
+  testID,
+  active,
+  onPress,
+  activeColor,
+  idleColor,
+  styles,
+}: {
+  testID: string;
+  active: boolean;
+  onPress: () => void;
+  activeColor: string;
+  idleColor: string;
+  styles: any;
+}) {
+  const scale = useRef(new RNAnimated.Value(1)).current;
+  const useNative = Platform.OS !== "web";
+  const pressIn = () => {
+    RNAnimated.spring(scale, { toValue: 0.95, useNativeDriver: useNative, speed: 50, bounciness: 0 }).start();
+  };
+  const pressOut = () => {
+    RNAnimated.spring(scale, { toValue: 1, useNativeDriver: useNative, speed: 20, bounciness: 12 }).start();
+  };
+  return (
+    <RNAnimated.View style={{ transform: [{ scale }], flexShrink: 0 }}>
+      <Pressable
+        testID={testID}
+        onPress={onPress}
+        onPressIn={pressIn}
+        onPressOut={pressOut}
+        style={[styles.mrIconPill, active && styles.mrIconPillActive]}
+      >
+        <Ionicons name="calendar-outline" size={15} color={active ? activeColor : idleColor} />
+      </Pressable>
+    </RNAnimated.View>
+  );
+}
+
 export default function Home() {
   const { colors: baseColors, scheme } = useTheme();
   const { t } = useTranslation();
@@ -344,7 +439,7 @@ export default function Home() {
         return ts >= dateRange.start && ts <= dateRange.end;
       });
     }
-    return items.slice(0, 6);
+    return items.slice(0, 10);
   }, [txQ.data, txFilter, dateRange]);
   const cats: any[] = catQ.data || [];
   const catById = Object.fromEntries(cats.map((c) => [c.id, c]));
@@ -453,7 +548,7 @@ export default function Home() {
     <Animated.ScrollView
       testID="home-scroll"
       style={{ flex: 1, backgroundColor: "transparent" }}
-      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 120 }}
+      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: spacing.lg }}
       onScroll={scrollHandler}
       scrollEventThrottle={16}
       onLayout={(e) => {
@@ -865,7 +960,7 @@ export default function Home() {
             <Text style={styles.mrTitle} numberOfLines={1} ellipsizeMode="clip">
               {t("home.recentMovements")} <Text style={styles.mrTitleAccent}>{t("home.recentMovementsAccent")}</Text>
             </Text>
-            <Text style={styles.mrSubtitle} numberOfLines={1}>
+            <Text style={styles.mrSubtitle}>
               {t("home.recentMovementsSubtitle")}
             </Text>
           </View>
@@ -886,45 +981,32 @@ export default function Home() {
         >
           {TX_FILTERS.map((f) => {
             const active = txFilter === f.id;
-            const content = (
-              <>
-                <Ionicons name={f.icon as any} size={13} color={active ? "#fff" : f.color} />
-                <Text style={[styles.mrPillText, active && styles.mrPillTextActive]}>{f.label}</Text>
-              </>
-            );
-            return active ? (
-              <Pressable key={f.id} testID={`mr-filter-${f.id}`} onPress={() => setTxFilter(f.id)}>
-                <LinearGradient
-                  colors={scheme === "dark" ? [colors.brandPrimary, colors.brandSecondary] : ["#16694A", "#146448"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.mrPill}
-                >
-                  {content}
-                </LinearGradient>
-              </Pressable>
-            ) : (
-              <Pressable
+            return (
+              <MRPill
                 key={f.id}
                 testID={`mr-filter-${f.id}`}
+                active={active}
                 onPress={() => setTxFilter(f.id)}
-                style={[styles.mrPill, styles.mrPillIdle]}
-              >
-                {content}
-              </Pressable>
+                icon={f.icon}
+                iconColor={f.color}
+                label={f.label}
+                gradient={scheme === "dark" ? [colors.brandPrimary, colors.brandSecondary] : ["#16694A", "#146448"]}
+                styles={styles}
+              />
             );
           })}
-          <Pressable
+          <MRIconPill
             testID="mr-filter-month"
+            active={!!dateRange}
             onPress={() => setDateSheet(true)}
-            style={[styles.mrIconPill, dateRange && styles.mrIconPillActive]}
-          >
-            <Ionicons name="calendar-outline" size={15} color={dateRange ? colors.brandPrimary : colors.muted} />
-          </Pressable>
+            activeColor={colors.brandPrimary}
+            idleColor={colors.muted}
+            styles={styles}
+          />
         </ScrollView>
 
         {/* List card */}
-        <View style={styles.mrCard}>
+        <Animated.View style={styles.mrCard} layout={LinearTransition.duration(260)}>
           {recent.length === 0 && (
             <Text style={{ color: colors.muted, textAlign: "center", padding: spacing.lg }}>
               {t("home.noMovements")}
@@ -942,7 +1024,7 @@ export default function Home() {
             const badgeLabel = cat?.name ? translateCategoryName(cat.name) : (isTransfer ? t("txType.transfer") : isIncome ? t("txType.income") : t("txType.expense"));
             const badgeColor = cat?.color || color;
             return (
-              <View key={item.id}>
+              <Animated.View key={item.id} layout={LinearTransition.duration(260)}>
                 {idx > 0 && <View style={styles.mrDivider} />}
                 <Pressable
                   testID={`mr-tx-${item.id}`}
@@ -963,12 +1045,13 @@ export default function Home() {
                   <Text style={[styles.mrAmount, { color }]}>{sign}{formatCurrency(item.amount)}</Text>
                   <Ionicons name="chevron-forward" size={15} color={colors.muted} style={{ marginLeft: 4 }} />
                 </Pressable>
-              </View>
+              </Animated.View>
             );
           })}
-        </View>
+        </Animated.View>
 
         {/* AI banner — taps through to the IA tab (same route as the mic in the bottom nav) */}
+        <Animated.View layout={LinearTransition.duration(260)}>
         <Pressable testID="ai-banner" onPress={() => router.push("/(tabs)/transactions")} style={{ marginTop: 8 }}>
           <LinearGradient
             colors={scheme === "dark" ? [colors.brandPrimary + "1F", colors.statsPurple + "1F"] : ["#E5F1E7", "#E5F1E7"]}
@@ -988,6 +1071,7 @@ export default function Home() {
             </View>
           </LinearGradient>
         </Pressable>
+        </Animated.View>
       </View>
     </Animated.ScrollView>
     <DateRangeSheet

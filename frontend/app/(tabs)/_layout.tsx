@@ -411,7 +411,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="transactions" options={{ title: "IA" }} />
         <Tabs.Screen name="fab" options={{ title: "" }} />
         <Tabs.Screen name="reports" options={{ title: "Informes" }} />
-        <Tabs.Screen name="notes" options={{ title: "Notas" }} />
+        <Tabs.Screen name="notes" options={{ title: "Notas", lazy: false }} />
         <Tabs.Screen name="more" options={{ title: "Más" }} />
       </Tabs>
       <QuickMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />

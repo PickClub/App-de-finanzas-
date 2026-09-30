@@ -7,7 +7,7 @@ import Animated, {
   LinearTransition,
   type SharedValue,
 } from "react-native-reanimated";
-import Svg, { Circle as SvgCircle, Path as SvgPath } from "react-native-svg";
+import Svg, { Path as SvgPath } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
 import { useQuery } from "@tanstack/react-query";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -427,6 +427,11 @@ export default function Home() {
   const accQ = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
 
   const summary = summaryQ.data;
+  // Display-only proportions of the existing summary, without new requests.
+  const debtTotal = (summary?.debts?.i_owe || 0) + (summary?.debts?.they_owe || 0);
+  const debtShare = (amount: number) => debtTotal > 0 ? Math.max(0, Math.min(100, amount / debtTotal * 100)) : 0;
+  const debtShareLabel = (amount: number) => hidden ? "••••" : `${Math.round(debtShare(amount))}% ${i18n.language.startsWith("es") ? "del total" : "of total"}`;
+
   const user = userQ.data;
   const recent = useMemo(() => {
     let items: any[] = txQ.data || [];
@@ -833,114 +838,91 @@ export default function Home() {
       {/* Debts card */}
       <View style={{ paddingHorizontal: spacing.lg }}>
         <Pressable testID="debts-card" onPress={() => router.push("/debts")} style={styles.debtCard}>
-          {/* soft abstract background */}
-          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-            <Svg width="100%" height="100%" viewBox="0 0 320 240" preserveAspectRatio="none">
-              <SvgCircle cx="24" cy="200" r="42" fill={colors.brandSecondary} opacity="0.06" />
-              <SvgCircle cx="290" cy="30" r="26" fill={colors.statsPurple} opacity="0.05" />
-              <SvgPath
-                d="M0 60 Q 60 40, 120 55 T 260 45 T 340 55"
-                stroke={colors.brandSecondary}
-                strokeOpacity="0.12"
-                strokeWidth="1"
-                fill="none"
-              />
-              <SvgPath
-                d="M20 210 Q 90 195, 160 205 T 320 200"
-                stroke={colors.brandPrimary}
-                strokeOpacity="0.08"
-                strokeWidth="1"
-                fill="none"
-              />
-              <SvgCircle cx="180" cy="122" r="4" fill={colors.brandPrimary} opacity="0.14" />
-              <SvgCircle cx="60" cy="120" r="2.5" fill={colors.statsPurple} opacity="0.2" />
-              {[0, 1, 2].map((r) =>
-                [0, 1, 2].map((c) => (
-                  <SvgCircle
-                    key={`d-${r}-${c}`}
-                    cx={295 + c * 6}
-                    cy={112 + r * 6}
-                    r="1.2"
-                    fill={colors.muted}
-                    opacity="0.35"
-                  />
-                )),
+          <View style={styles.debtQuadRow}>
+            <View style={[styles.debtQuadTile, styles.debtOweTint]}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                <View style={[styles.debtQuadIcon, { backgroundColor: colors.expenseRed + "14" }]}>
+                  <Ionicons name="arrow-up" size={15} color={colors.expenseRed} />
+                </View>
+                <Text style={[styles.debtQuadLabel, { flex: 1 }]} numberOfLines={2}>{t("home.iOwe")}</Text>
+                <View style={styles.debtArrowBtn}>
+                  <Ionicons name="chevron-forward" size={11} color={colors.muted} />
+                </View>
+              </View>
+              <Text style={[styles.debtQuadValue, { color: colors.expenseRed }]} numberOfLines={1} adjustsFontSizeToFit>
+                {debtMoney(summary?.debts?.i_owe || 0)}
+              </Text>
+              <View style={[styles.debtProgressTrack, { backgroundColor: colors.expenseRed + "12" }]}>
+                <View style={[styles.debtProgressFill, { backgroundColor: colors.expenseRed, width: `${hidden ? 0 : debtShare(summary?.debts?.i_owe || 0)}%` }]} />
+              </View>
+              <Text style={styles.debtQuadFoot} numberOfLines={1}>{debtShareLabel(summary?.debts?.i_owe || 0)}</Text>
+            </View>
+            <View style={[styles.debtQuadTile, styles.debtOwedTint]}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                <View style={[styles.debtQuadIcon, { backgroundColor: colors.incomeGreen + "14" }]}>
+                  <Ionicons name="arrow-down" size={15} color={colors.incomeGreen} />
+                </View>
+                <Text style={[styles.debtQuadLabel, { flex: 1 }]} numberOfLines={2}>{t("home.owedToMe")}</Text>
+                <View style={styles.debtArrowBtn}>
+                  <Ionicons name="chevron-forward" size={11} color={colors.muted} />
+                </View>
+              </View>
+              <Text style={[styles.debtQuadValue, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit>
+                {debtMoney(summary?.debts?.they_owe || 0)}
+              </Text>
+              <View style={[styles.debtProgressTrack, { backgroundColor: colors.incomeGreen + "12" }]}>
+                <View style={[styles.debtProgressFill, { backgroundColor: colors.incomeGreen, width: `${hidden ? 0 : debtShare(summary?.debts?.they_owe || 0)}%` }]} />
+              </View>
+              <Text style={styles.debtQuadFoot} numberOfLines={1}>{debtShareLabel(summary?.debts?.they_owe || 0)}</Text>
+            </View>
+          </View>
+          <View style={styles.debtQuadRow}>
+            <View style={[styles.debtQuadTile, styles.debtPaidTint]}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                <View style={[styles.debtQuadIcon, { backgroundColor: colors.statsPurple + "14" }]}>
+                  <Ionicons name="card" size={15} color={colors.statsPurple} />
+                </View>
+                <Text style={[styles.debtQuadLabel, { flex: 1 }]} numberOfLines={2}>{t("home.paidThisMonth")}</Text>
+                <View style={styles.debtArrowBtn}>
+                  <Ionicons name="chevron-forward" size={11} color={colors.muted} />
+                </View>
+              </View>
+              <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.debtDecorBars}>
+                {[12, 19, 27, 36].map((height) => (
+                  <View key={height} style={{ width: 7, height, borderRadius: 4, backgroundColor: colors.statsPurple, opacity: 0.09 }} />
+                ))}
+              </View>
+              <Text style={[styles.debtQuadValue, { color: colors.statsPurple }]} numberOfLines={1} adjustsFontSizeToFit>
+                {debtMoney(summary?.debts?.paid_this_month || 0)}
+              </Text>
+              <Text style={styles.debtQuadFoot}>{t("home.goodProgress")}</Text>
+            </View>
+            <View style={[styles.debtQuadTile, styles.debtNextTint]}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                <View style={[styles.debtQuadIcon, { backgroundColor: colors.brandSecondary + "14" }]}>
+                  <Ionicons name="calendar-outline" size={15} color={colors.brandSecondary} />
+                </View>
+                <Text style={[styles.debtQuadLabel, { flex: 1 }]} numberOfLines={2}>{t("home.nextPayment")}</Text>
+                <View style={styles.debtArrowBtn}>
+                  <Ionicons name="chevron-forward" size={11} color={colors.muted} />
+                </View>
+              </View>
+              <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.debtDecorCalendar}>
+                <Ionicons name="calendar-outline" size={46} color={colors.brandSecondary} />
+              </View>
+              {summary?.debts?.next_payment ? (
+                <>
+                  <Text style={styles.debtQuadDate} numberOfLines={1} adjustsFontSizeToFit>
+                    {formatDateLong(summary.debts.next_payment.date)}
+                  </Text>
+                  <Text style={[styles.debtQuadValue, { color: colors.brandSecondary }]} numberOfLines={1} adjustsFontSizeToFit>
+                    {debtMoney(summary.debts.next_payment.amount)}
+                  </Text>
+                  <Text style={styles.debtQuadFoot}>{t("home.keepPaymentsUpToDate")}</Text>
+                </>
+              ) : (
+                <Text style={styles.debtQuadFoot}>{t("home.noUpcomingPayments")}</Text>
               )}
-            </Svg>
-          </View>
-
-          {/* first row */}
-          <View style={styles.debtQuadRow}>
-            <View style={styles.debtQuadLeft}>
-              <View style={styles.debtQuadInner}>
-                <View style={[styles.debtQuadIcon, { backgroundColor: colors.expenseRed + "1A" }]}>
-                  <Ionicons name="arrow-up" size={14} color={colors.expenseRed} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.debtQuadLabel}>{t("home.iOwe")}</Text>
-                  <Text style={[styles.debtQuadValue, { color: colors.expenseRed }]} numberOfLines={1} adjustsFontSizeToFit>
-                    {debtMoney(summary?.debts?.i_owe || 0)}
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <View style={styles.debtVDivider} />
-            <View style={styles.debtQuadRight}>
-              <View style={styles.debtQuadInner}>
-                <View style={[styles.debtQuadIcon, { backgroundColor: colors.incomeGreen + "1A" }]}>
-                  <Ionicons name="arrow-down" size={14} color={colors.incomeGreen} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.debtQuadLabel}>{t("home.owedToMe")}</Text>
-                  <Text style={[styles.debtQuadValue, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit>
-                    {debtMoney(summary?.debts?.they_owe || 0)}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.debtHDivider} />
-
-          {/* second row */}
-          <View style={styles.debtQuadRow}>
-            <View style={styles.debtQuadLeft}>
-              <View style={styles.debtQuadInner}>
-                <View style={[styles.debtQuadIcon, { backgroundColor: colors.statsPurple + "1A" }]}>
-                  <Ionicons name="card" size={14} color={colors.statsPurple} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.debtQuadLabel}>{t("home.paidThisMonth")}</Text>
-                  <Text style={[styles.debtQuadValue, { color: colors.statsPurple }]} numberOfLines={1} adjustsFontSizeToFit>
-                    {debtMoney(summary?.debts?.paid_this_month || 0)}
-                  </Text>
-                  <Text style={styles.debtQuadFoot}>{t("home.goodProgress")}</Text>
-                </View>
-              </View>
-            </View>
-            <View style={styles.debtVDivider} />
-            <View style={styles.debtQuadRight}>
-              <View style={styles.debtQuadInner}>
-                <View style={[styles.debtQuadIcon, { backgroundColor: colors.brandSecondary + "1F" }]}>
-                  <Ionicons name="calendar" size={14} color={colors.brandSecondary} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.debtQuadLabel}>{t("home.nextPayment")}</Text>
-                  {summary?.debts?.next_payment ? (
-                    <>
-                      <Text style={styles.debtQuadDate} numberOfLines={1}>
-                        {formatDateLong(summary.debts.next_payment.date)}
-                      </Text>
-                      <Text style={[styles.debtQuadValue, { color: colors.brandSecondary, fontSize: 15 }]} numberOfLines={1} adjustsFontSizeToFit>
-                        {debtMoney(summary.debts.next_payment.amount)}
-                      </Text>
-                      <Text style={styles.debtQuadFoot}>{t("home.keepPaymentsUpToDate")}</Text>
-                    </>
-                  ) : (
-                    <Text style={styles.debtQuadFoot}>{t("home.noUpcomingPayments")}</Text>
-                  )}
-                </View>
-              </View>
             </View>
           </View>
         </Pressable>
@@ -1403,16 +1385,16 @@ const useStyles = makeStyles((colors, scheme) => {
   mcAvgVal: { fontSize: 13, fontWeight: "800", color: wallText, marginTop: 1 },
   debtCard: {
     backgroundColor: cardSurface,
-    borderRadius: radius.cardLg,
-    padding: 13,
-    borderWidth: 1,
+    borderRadius: 28,
+    padding: 8,
+    gap: 8,
+    borderWidth: 0.5,
     borderColor: lineSoft,
-    overflow: "hidden",
     shadowColor: "#274738",
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
   debtHeader: {
     flexDirection: "row",
@@ -1433,36 +1415,33 @@ const useStyles = makeStyles((colors, scheme) => {
     marginTop: 2,
   },
   debtArrowBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.7)",
+    alignItems: "center", justifyContent: "center",
   },
   debtTitle: { fontSize: 16, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.4 },
-  debtQuadRow: {
-    flexDirection: "row",
-    marginTop: 11,
+  debtQuadRow: { flexDirection: "row", gap: 8 },
+  debtQuadTile: {
+    flex: 1, minWidth: 0, padding: 7, borderRadius: 20,
+    borderWidth: 0.5, borderColor: isDark ? colors.border : "rgba(39,71,56,0.035)",
+    overflow: "hidden",
   },
-  debtQuadLeft: { flex: 1, paddingRight: 6 },
-  debtQuadRight: { flex: 1, paddingLeft: 10 },
-  debtQuadInner: { flexDirection: "row", alignItems: "flex-start" },
+  debtOweTint: { backgroundColor: isDark ? colors.expenseRed + "0B" : "#FCF5F3" },
+  debtOwedTint: { backgroundColor: isDark ? colors.incomeGreen + "0B" : "#F2F8F4" },
+  debtPaidTint: { backgroundColor: isDark ? colors.statsPurple + "0B" : "#F6F3FC" },
+  debtNextTint: { backgroundColor: isDark ? colors.brandSecondary + "0B" : "#FCF6EE" },
   debtQuadIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 22, height: 22, borderRadius: 8,
+    alignItems: "center", justifyContent: "center",
   },
-  debtQuadLabel: { fontSize: 10, color: wallMuted, fontWeight: "500" },
-  debtQuadValue: { fontSize: 18, fontWeight: "800", marginTop: 2, letterSpacing: -0.5 },
-  debtQuadFoot: { fontSize: 8, color: wallSub, marginTop: 2, fontWeight: "500" },
-  debtQuadDate: { fontSize: 10, color: wallText, fontWeight: "700", marginTop: 2 },
-  debtVDivider: { width: 1, backgroundColor: dividerSoft, marginVertical: 4 },
-  debtHDivider: { height: 1, backgroundColor: dividerSoft, marginTop: 11 },
+  debtQuadLabel: { fontSize: 10, lineHeight: 11, color: wallMuted, fontWeight: "600" },
+  debtQuadValue: { fontSize: 20, lineHeight: 24, fontWeight: "800", marginTop: 2, letterSpacing: -0.5 },
+  debtQuadFoot: { fontSize: 8, lineHeight: 11, color: wallSub, marginTop: 4, fontWeight: "500" },
+  debtQuadDate: { fontSize: 9, lineHeight: 11, color: wallMuted, fontWeight: "500", marginTop: 2 },
+  debtProgressTrack: { height: 4, borderRadius: 2, overflow: "hidden", marginTop: 5 },
+  debtProgressFill: { height: 4, borderRadius: 2 },
+  debtDecorBars: { position: "absolute", right: 9, bottom: 8, flexDirection: "row", alignItems: "flex-end", gap: 4 },
+  debtDecorCalendar: { position: "absolute", right: 5, bottom: 5, opacity: 0.08 },
   debtLabel: { fontSize: 12, color: colors.muted, fontWeight: "400" },
   debtValue: { fontSize: 18, fontWeight: "600", marginTop: 4, letterSpacing: -0.3 },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },

@@ -53,7 +53,8 @@ export default function NewDebt() {
       icon,
     });
     qc.invalidateQueries();
-    router.replace("/debts");
+    // Reuse the existing list; replace only when opened directly from Home.
+    router.dismissTo("/debts");
   };
 
   if (!step2) {

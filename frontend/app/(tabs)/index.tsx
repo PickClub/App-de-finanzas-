@@ -125,6 +125,35 @@ function accountBars(accounts: any[], total: number, colors: ThemeColors, scheme
   });
 }
 
+// Soft pastel "mountain/hill" decoration that emanates from the RIGHT side of a
+// Deudas tile. Two overlapping low-opacity hills (no blur, no image, no deps) —
+// static + cheap for Android. Rendered BEHIND the tile content (absoluteFill +
+// pointerEvents none) and clipped by the tile's overflow:hidden.
+function DebtWave({ color, opacity }: { color: string; opacity: number }) {
+  return (
+    <View
+      pointerEvents="none"
+      accessible={false}
+      importantForAccessibility="no-hide-descendants"
+      style={StyleSheet.absoluteFill}
+    >
+      <Svg width="100%" height="100%" viewBox="0 0 120 80" preserveAspectRatio="none">
+        <SvgPath
+          d="M120,80 L120,16 C108,11 98,30 82,26 C66,22 56,42 40,37 C26,33 12,43 0,39 L0,80 Z"
+          fill={color}
+          opacity={opacity * 0.5}
+        />
+        <SvgPath
+          d="M120,80 L120,40 C110,35 100,51 84,48 C66,45 54,61 36,56 C22,52 10,59 0,57 L0,80 Z"
+          fill={color}
+          opacity={opacity}
+        />
+      </Svg>
+    </View>
+  );
+}
+
+
 // Mini 7-bar chart for the income / expense cards. Uses real amounts; when a
 // period has no data it falls back to a soft placeholder pattern so the card
 // never looks empty. Colors are passed in to respect the current theme.
@@ -425,12 +454,29 @@ export default function Home() {
   const txQ = useQuery({ queryKey: ["transactions"], queryFn: api.listTransactions });
   const catQ = useQuery({ queryKey: ["categories"], queryFn: api.listCategories });
   const accQ = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
+  // Existing /api/debts endpoint (same one the /debts screen already uses) — read-only.
+  // Used ONLY to derive the REAL per-direction debt count for the Deudas cards.
+  const debtsListQ = useQuery({ queryKey: ["debts"], queryFn: api.listDebts });
 
   const summary = summaryQ.data;
   // Display-only proportions of the existing summary, without new requests.
   const debtTotal = (summary?.debts?.i_owe || 0) + (summary?.debts?.they_owe || 0);
   const debtShare = (amount: number) => debtTotal > 0 ? Math.max(0, Math.min(100, amount / debtTotal * 100)) : 0;
-  const debtShareLabel = (amount: number) => hidden ? "••••" : `${Math.round(debtShare(amount))}% ${i18n.language.startsWith("es") ? "del total" : "of total"}`;
+  // Real counts derived from existing data (no new API, no backend change).
+  const iOweCount = (debtsListQ.data || []).filter((d: any) => d?.direction === "i_owe").length;
+  const theyOweCount = (debtsListQ.data || []).filter((d: any) => d?.direction === "they_owe").length;
+  // "N deudas · X% del total" — falls back to just the percentage when the count
+  // is not yet available / is zero, so no wrong count ever flashes during load.
+  const debtCountShareLabel = (amount: number, count: number) => {
+    if (hidden) return "••••";
+    const isEs = i18n.language.startsWith("es");
+    const pct = `${Math.round(debtShare(amount))}% ${isEs ? "del total" : "of total"}`;
+    if (!count) return pct;
+    const noun = isEs ? (count === 1 ? "deuda" : "deudas") : (count === 1 ? "debt" : "debts");
+    return `${count} ${noun} · ${pct}`;
+  };
+  // Scheme-aware opacity for the decorative pastel hills (subtle but perceptible).
+  const debtWaveOpacity = scheme === "dark" ? 0.12 : 0.15;
 
   const user = userQ.data;
   const recent = useMemo(() => {
@@ -840,6 +886,7 @@ export default function Home() {
         <Pressable testID="debts-card" onPress={() => router.push("/debts")} style={styles.debtCard}>
           <View style={styles.debtQuadRow}>
             <View style={[styles.debtQuadTile, styles.debtOweTint]}>
+              <DebtWave color={colors.expenseRed} opacity={debtWaveOpacity} />
               <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.expenseRed + "14" }]}>
                   <Ionicons name="arrow-up" size={15} color={colors.expenseRed} />
@@ -855,9 +902,10 @@ export default function Home() {
               <View style={[styles.debtProgressTrack, { backgroundColor: colors.expenseRed + "12" }]}>
                 <View style={[styles.debtProgressFill, { backgroundColor: colors.expenseRed, width: `${hidden ? 0 : debtShare(summary?.debts?.i_owe || 0)}%` }]} />
               </View>
-              <Text style={styles.debtQuadFoot} numberOfLines={1}>{debtShareLabel(summary?.debts?.i_owe || 0)}</Text>
+              <Text style={styles.debtQuadFoot} numberOfLines={1}>{debtCountShareLabel(summary?.debts?.i_owe || 0, iOweCount)}</Text>
             </View>
             <View style={[styles.debtQuadTile, styles.debtOwedTint]}>
+              <DebtWave color={colors.incomeGreen} opacity={debtWaveOpacity} />
               <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.incomeGreen + "14" }]}>
                   <Ionicons name="arrow-down" size={15} color={colors.incomeGreen} />
@@ -873,11 +921,12 @@ export default function Home() {
               <View style={[styles.debtProgressTrack, { backgroundColor: colors.incomeGreen + "12" }]}>
                 <View style={[styles.debtProgressFill, { backgroundColor: colors.incomeGreen, width: `${hidden ? 0 : debtShare(summary?.debts?.they_owe || 0)}%` }]} />
               </View>
-              <Text style={styles.debtQuadFoot} numberOfLines={1}>{debtShareLabel(summary?.debts?.they_owe || 0)}</Text>
+              <Text style={styles.debtQuadFoot} numberOfLines={1}>{debtCountShareLabel(summary?.debts?.they_owe || 0, theyOweCount)}</Text>
             </View>
           </View>
           <View style={styles.debtQuadRow}>
             <View style={[styles.debtQuadTile, styles.debtPaidTint]}>
+              <DebtWave color={colors.statsPurple} opacity={debtWaveOpacity} />
               <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.statsPurple + "14" }]}>
                   <Ionicons name="card" size={15} color={colors.statsPurple} />
@@ -888,8 +937,8 @@ export default function Home() {
                 </View>
               </View>
               <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.debtDecorBars}>
-                {[12, 19, 27, 36].map((height) => (
-                  <View key={height} style={{ width: 7, height, borderRadius: 4, backgroundColor: colors.statsPurple, opacity: 0.09 }} />
+                {[13, 20, 29, 39].map((height) => (
+                  <View key={height} style={{ width: 6, height, borderRadius: 3, backgroundColor: colors.statsPurple, opacity: 0.16 }} />
                 ))}
               </View>
               <Text style={[styles.debtQuadValue, { color: colors.statsPurple }]} numberOfLines={1} adjustsFontSizeToFit>
@@ -898,6 +947,7 @@ export default function Home() {
               <Text style={styles.debtQuadFoot}>{t("home.goodProgress")}</Text>
             </View>
             <View style={[styles.debtQuadTile, styles.debtNextTint]}>
+              <DebtWave color={colors.brandSecondary} opacity={debtWaveOpacity} />
               <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.brandSecondary + "14" }]}>
                   <Ionicons name="calendar-outline" size={15} color={colors.brandSecondary} />
@@ -908,7 +958,7 @@ export default function Home() {
                 </View>
               </View>
               <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.debtDecorCalendar}>
-                <Ionicons name="calendar-outline" size={46} color={colors.brandSecondary} />
+                <Ionicons name="calendar-outline" size={66} color={colors.brandSecondary} />
               </View>
               {summary?.debts?.next_payment ? (
                 <>
@@ -1435,13 +1485,13 @@ const useStyles = makeStyles((colors, scheme) => {
     alignItems: "center", justifyContent: "center",
   },
   debtQuadLabel: { fontSize: 10, lineHeight: 11, color: wallMuted, fontWeight: "600" },
-  debtQuadValue: { fontSize: 20, lineHeight: 24, fontWeight: "800", marginTop: 2, letterSpacing: -0.5 },
-  debtQuadFoot: { fontSize: 8, lineHeight: 11, color: wallSub, marginTop: 4, fontWeight: "500" },
+  debtQuadValue: { fontSize: 23, lineHeight: 27, fontWeight: "700", marginTop: 4, letterSpacing: -0.6 },
+  debtQuadFoot: { fontSize: 9.5, lineHeight: 13, color: wallSub, marginTop: 5, fontWeight: "500" },
   debtQuadDate: { fontSize: 9, lineHeight: 11, color: wallMuted, fontWeight: "500", marginTop: 2 },
-  debtProgressTrack: { height: 4, borderRadius: 2, overflow: "hidden", marginTop: 5 },
+  debtProgressTrack: { height: 4, borderRadius: 2, overflow: "hidden", marginTop: 6 },
   debtProgressFill: { height: 4, borderRadius: 2 },
   debtDecorBars: { position: "absolute", right: 9, bottom: 8, flexDirection: "row", alignItems: "flex-end", gap: 4 },
-  debtDecorCalendar: { position: "absolute", right: 5, bottom: 5, opacity: 0.08 },
+  debtDecorCalendar: { position: "absolute", right: -6, bottom: -8, opacity: 0.1 },
   debtLabel: { fontSize: 12, color: colors.muted, fontWeight: "400" },
   debtValue: { fontSize: 18, fontWeight: "600", marginTop: 4, letterSpacing: -0.3 },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },

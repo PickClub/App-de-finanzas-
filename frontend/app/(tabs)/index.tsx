@@ -88,42 +88,6 @@ function accountTypeLabel(t: string) {
   return m[t] || t;
 }
 
-function accountBars(accounts: any[], total: number, colors: ThemeColors, scheme: string) {
-  const positives = accounts.filter((a) => a.current_balance > 0);
-  const base = total > 0 ? total : positives.reduce((s, a) => s + a.current_balance, 0);
-  // Home distribution preview shows a MAXIMUM of 5 accounts (top by balance).
-  const sorted = [...positives].sort((a, b) => b.current_balance - a.current_balance).slice(0, 5);
-  if (sorted.length === 0) {
-    return <Text style={{ color: colors.muted, fontSize: 10 }}>{i18n.t("home.noAccounts")}</Text>;
-  }
-  // Soft neutral track — clearly visible against the warm-white card surface.
-  const track = scheme === "dark" ? "#3A352F" : "#E5E9E3";
-  return sorted.map((a) => {
-    const ac = homeAccountColor(a, scheme);
-    const pct = base > 0 ? Math.round((a.current_balance / base) * 100) : 0;
-    return (
-      <View key={a.id}>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <Text style={{ flexShrink: 1, fontSize: 10, fontWeight: "700", color: colors.onSurface }} numberOfLines={1}>
-            {a.name}
-          </Text>
-          <Text style={{ fontSize: 10, fontWeight: "800", color: ac, marginLeft: 4 }}>{pct}%</Text>
-        </View>
-        <View
-          style={{
-            marginTop: 4,
-            height: 9,
-            borderRadius: 4.5,
-            backgroundColor: track,
-            overflow: "hidden",
-          }}
-        >
-          <View style={{ width: `${Math.max(6, pct)}%`, height: "100%", backgroundColor: ac, borderRadius: 4.5 }} />
-        </View>
-      </View>
-    );
-  });
-}
 
 // Soft pastel "mountain/hill" decoration that emanates from the RIGHT side of a
 // Deudas tile. Two overlapping low-opacity hills (no blur, no image, no deps) —
@@ -148,92 +112,6 @@ function DebtWave({ color, opacity }: { color: string; opacity: number }) {
           fill={color}
           opacity={opacity}
         />
-      </Svg>
-    </View>
-  );
-}
-
-
-// Mini 7-bar chart for the income / expense cards. Uses real amounts; when a
-// period has no data it falls back to a soft placeholder pattern so the card
-// never looks empty. Colors are passed in to respect the current theme.
-function MiniBars({ data, color }: { data: number[]; color: string }) {
-  const max = Math.max(...data, 0);
-  const nonZero = data.filter((v) => v > 0).length;
-  const pattern = [0.45, 0.6, 0.5, 0.8, 0.55, 1, 0.65];
-  // With sparse real data (0-2 active days) the chart would look like a flat
-  // line, so fall back to a soft pattern to keep the reference look.
-  const usePattern = nonZero < 3;
-  return (
-    <View style={mb.row}>
-      {data.map((v, i) => {
-        const ratio = usePattern ? pattern[i % pattern.length] : v / max;
-        const peak = usePattern ? pattern[i % pattern.length] === 1 : v === max && v > 0;
-        return (
-          <View
-            key={i}
-            style={{
-              flex: 1,
-              height: 6 + ratio * 22,
-              borderRadius: 3,
-              backgroundColor: color + (peak ? "" : "59"),
-            }}
-          />
-        );
-      })}
-    </View>
-  );
-}
-
-// Small drag-handle affordance (2×3 dots) shown at the card's top-right.
-function DragDots({ color }: { color: string }) {
-  return (
-    <View style={{ flexDirection: "row", gap: 3 }}>
-      {[0, 1].map((c) => (
-        <View key={c} style={{ gap: 3 }}>
-          {[0, 1, 2].map((r) => (
-            <View key={r} style={{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: color }} />
-          ))}
-        </View>
-      ))}
-    </View>
-  );
-}
-
-const mb = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "flex-end", height: 34, gap: 3, marginTop: 2 },
-});
-
-// Smooth wave / line chart used inside the Gastos card. Mirrors MiniBars'
-// sparse-data fallback so it always renders as a clean wave rather than a flat
-// line, and fills a soft tinted area under the curve.
-function MiniWave({ data, color }: { data: number[]; color: string }) {
-  const max = Math.max(...data, 0);
-  const nonZero = data.filter((v) => v > 0).length;
-  const pattern = [0.35, 0.55, 0.4, 0.72, 0.5, 0.85, 0.6];
-  const usePattern = nonZero < 3;
-  const W = 100;
-  const H = 34;
-  const n = data.length;
-  const pts = data.map((v, i) => {
-    const ratio = usePattern ? pattern[i % pattern.length] : max > 0 ? v / max : 0;
-    const x = n > 1 ? (i / (n - 1)) * W : W / 2;
-    const y = H - 4 - ratio * (H - 9);
-    return { x, y };
-  });
-  let line = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const xMid = (pts[i].x + pts[i + 1].x) / 2;
-    const yMid = (pts[i].y + pts[i + 1].y) / 2;
-    line += ` Q ${pts[i].x.toFixed(1)} ${pts[i].y.toFixed(1)} ${xMid.toFixed(1)} ${yMid.toFixed(1)}`;
-  }
-  line += ` T ${pts[n - 1].x.toFixed(1)} ${pts[n - 1].y.toFixed(1)}`;
-  const area = `${line} L ${W} ${H} L 0 ${H} Z`;
-  return (
-    <View style={mb.row}>
-      <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-        <SvgPath d={area} fill={color + "22"} />
-        <SvgPath d={line} stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
       </Svg>
     </View>
   );
@@ -538,29 +416,16 @@ export default function Home() {
   const growthPct = openingBalance > 0 ? (monthNet / openingBalance) * 100 : 0;
   const growthPositive = growthPct >= 0;
 
-  // Last-7-days mini-chart data + daily averages for the Income / Expense cards.
-  const stats = useMemo(() => {
-    const txs = txQ.data || [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const incBars = Array(7).fill(0) as number[];
-    const expBars = Array(7).fill(0) as number[];
-    txs.forEach((t: any) => {
-      const d = new Date(t.date);
-      d.setHours(0, 0, 0, 0);
-      const diff = Math.round((today.getTime() - d.getTime()) / 86400000);
-      if (diff < 0 || diff > 6) return;
-      if (t.type === "income") incBars[6 - diff] += t.amount;
-      else if (t.type === "expense" || t.type === "debt_payment") expBars[6 - diff] += t.amount;
-    });
-    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    return {
-      incBars,
-      expBars,
-      avgIncome: (summary?.month_income || 0) / daysInMonth,
-      avgExpense: (summary?.month_expense || 0) / daysInMonth,
-    };
-  }, [txQ.data, summary?.month_income, summary?.month_expense]);
+  // Bilingual labels for the "Resumen del mes" section (inline, to avoid
+  // touching shared i18n files or any other screen).
+  const l10n = (es: string, en: string) => (i18n.language.startsWith("es") ? es : en);
+  // "Distribución de mis cuentas" data — derived ONLY from the existing accounts
+  // (the same ones shown in "Mis cuentas"). No new data, no categories.
+  const distAccounts = useMemo(
+    () => [...accounts].sort((a: any, b: any) => (b?.current_balance || 0) - (a?.current_balance || 0)),
+    [accounts],
+  );
+  const distTotal = distAccounts.reduce((s: number, a: any) => s + (a?.current_balance || 0), 0);
 
   const TX_FILTERS = [
     { id: "all", label: t("home.filterAll"), icon: "grid", color: colors.brandPrimary },
@@ -792,68 +657,72 @@ export default function Home() {
         />
       </View>
 
-      {/* Income / Expense / Accounts distribution */}
-      <View style={styles.miniRow}>
-        <View style={[styles.miniCard, styles.miniHalfLeft, styles.cardIncome]}>
-            <View style={styles.mcTop}>
-              <View style={[styles.miniPill, { backgroundColor: colors.incomeGreen }]}>
-                <Ionicons name="trending-up" size={16} color="#fff" />
-              </View>
-              <View style={styles.mcTopRight}>
-                <Text style={styles.miniSub}>{t("home.thisMonth")}</Text>
-                <DragDots color={colors.muted} />
-              </View>
-            </View>
-            <Text style={styles.miniLabel}>{t("home.income")}</Text>
-            <Text
-              style={[styles.miniAmount, { color: colors.incomeGreen }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.6}
-            >
-              +{money(summary?.month_income || 0)}
-            </Text>
-            <MiniBars data={stats.incBars} color={colors.incomeGreen} />
-            <View style={styles.mcFooter}>
-              <Ionicons name="calendar-outline" size={13} color={colors.incomeGreen} />
-              <View style={styles.mcFooterCol}>
-                <Text style={styles.mcAvgLabel}>{t("home.dailyAverage")}</Text>
-                <Text style={styles.mcAvgVal}>{money(stats.avgIncome)}</Text>
-              </View>
-            </View>
+      {/* Resumen del mes — 3 symmetric stat cards */}
+      <View style={styles.statRow}>
+        {/* Balance del mes (net = income - expense) — number in dark/black */}
+        <View style={styles.statCard}>
+          <View style={[styles.statBadge, { backgroundColor: scheme === "dark" ? colors.brandPrimary + "26" : "#DCE9DD" }]}>
+            <Ionicons name="wallet-outline" size={16} color={scheme === "dark" ? colors.brandPrimary : "#126046"} />
           </View>
-          <View style={[styles.miniCard, styles.miniHalfRight, styles.cardExpense]}>
-            <View style={styles.mcTop}>
-              <View style={[styles.miniPill, { backgroundColor: colors.expenseRed }]}>
-                <Ionicons name="trending-down" size={16} color="#fff" />
-              </View>
-              <View style={styles.mcTopRight}>
-                <Text style={styles.miniSub}>{t("home.thisMonth")}</Text>
-                <DragDots color={colors.muted} />
-              </View>
-            </View>
-            <Text style={styles.miniLabel}>{t("home.expenses")}</Text>
-            <Text
-              style={[styles.miniAmount, { color: colors.expenseRed }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.6}
-            >
-              -{money(summary?.month_expense || 0)}
-            </Text>
-            <MiniWave data={stats.expBars} color={colors.expenseRed} />
-            <View style={styles.mcFooter}>
-              <Ionicons name="calendar-outline" size={13} color={colors.expenseRed} />
-              <View style={styles.mcFooterCol}>
-                <Text style={styles.mcAvgLabel}>{t("home.dailyAverage")}</Text>
-                <Text style={styles.mcAvgVal}>{money(stats.avgExpense)}</Text>
-              </View>
-            </View>
+          <Text style={styles.statTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Balance del mes", "Month balance")}</Text>
+          <Text style={[styles.statAmount, { color: colors.onSurface }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
+            {money(monthNet)}
+          </Text>
+          <Text style={styles.statThisMonth}>{t("home.thisMonth")}</Text>
+        </View>
+        {/* Total gastado — soft / desaturated red */}
+        <View style={styles.statCard}>
+          <View style={[styles.statBadge, { backgroundColor: colors.expenseRed + (scheme === "dark" ? "26" : "1F") }]}>
+            <Ionicons name="trending-down" size={16} color={colors.expenseRed} />
           </View>
-        <View style={[styles.miniCard, styles.miniAccounts]}>
-          <View testID="cuentas-scroll" style={{ gap: 6 }}>
-            {accountBars(acctPages[safeAcctPage] || [], summary?.total_balance || 0, colors, scheme)}
+          <Text style={styles.statTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Total gastado", "Total spent")}</Text>
+          <Text style={[styles.statAmount, { color: lighten(colors.expenseRed, 0.16) }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
+            {money(summary?.month_expense || 0)}
+          </Text>
+          <Text style={styles.statThisMonth}>{t("home.thisMonth")}</Text>
+        </View>
+        {/* Total ingresado — green */}
+        <View style={styles.statCard}>
+          <View style={[styles.statBadge, { backgroundColor: colors.incomeGreen + (scheme === "dark" ? "26" : "1F") }]}>
+            <Ionicons name="trending-up" size={16} color={colors.incomeGreen} />
           </View>
+          <Text style={styles.statTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Total ingresado", "Total income")}</Text>
+          <Text style={[styles.statAmount, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
+            {money(summary?.month_income || 0)}
+          </Text>
+          <Text style={styles.statThisMonth}>{t("home.thisMonth")}</Text>
+        </View>
+      </View>
+
+      {/* Distribución de mis cuentas */}
+      <View style={styles.distWrap}>
+        <View testID="cuentas-scroll" style={styles.distCard}>
+          <View style={styles.distHeader}>
+            <Text style={styles.distTitle} numberOfLines={1}>{l10n("Distribución de mis cuentas", "My accounts distribution")}</Text>
+            <Pressable style={styles.distSeePill} onPress={() => router.push("/accounts")} hitSlop={8}>
+              <Text style={styles.distSeeText}>{l10n("Ver cuentas", "View accounts")}</Text>
+              <Ionicons name="chevron-forward" size={13} color={scheme === "dark" ? colors.brandPrimary : "#126046"} />
+            </Pressable>
+          </View>
+          {distAccounts.map((a: any) => {
+            const ac = homeAccountColor(a, scheme);
+            const raw = distTotal > 0 ? ((a?.current_balance || 0) / distTotal) * 100 : 0;
+            const w = Math.max(0, Math.min(100, raw));
+            return (
+              <View key={a.id} style={styles.distRow}>
+                <View style={[styles.distDot, { backgroundColor: ac }]} />
+                <Text style={styles.distName} numberOfLines={1}>{a.name}</Text>
+                <View style={styles.distTrack}>
+                  <View style={[styles.distFill, { width: `${hidden ? 0 : (w > 0 ? Math.max(w, 4) : 0)}%`, backgroundColor: ac }]} />
+                </View>
+                <Text style={[styles.distPct, { color: ac }]}>{hidden ? "••" : `${Math.round(raw)}%`}</Text>
+                <Text style={styles.distBalance} numberOfLines={1}>{hidden ? "••••" : formatCurrencyInt(a?.current_balance || 0)}</Text>
+              </View>
+            );
+          })}
+          {distAccounts.length === 0 && (
+            <Text style={styles.distEmpty}>{t("home.noAccounts")}</Text>
+          )}
         </View>
       </View>
 
@@ -1433,6 +1302,66 @@ const useStyles = makeStyles((colors, scheme) => {
   mcFooterCol: { flex: 1 },
   mcAvgLabel: { fontSize: 9, color: wallMuted, fontWeight: "600" },
   mcAvgVal: { fontSize: 13, fontWeight: "800", color: wallText, marginTop: 1 },
+  // --- Resumen del mes: 3 symmetric stat cards ---
+  statRow: {
+    flexDirection: "row",
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    gap: 8,
+    alignItems: "stretch",
+  },
+  statCard: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: isDark ? colors.surfaceSecondary : "#F4F4EE",
+    borderRadius: radius.cardLg,
+    borderWidth: 1,
+    borderColor: lineSoft,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: "center",
+  },
+  statBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  statTitle: { fontSize: 11.5, color: wallMuted, fontWeight: "600", textAlign: "center", marginBottom: 5 },
+  statAmount: { fontSize: 17, fontWeight: "800", letterSpacing: -0.4, textAlign: "center" },
+  statThisMonth: { fontSize: 10, color: wallSub, fontWeight: "500", marginTop: 5, textAlign: "center" },
+  // --- Distribución de mis cuentas ---
+  distWrap: { paddingHorizontal: spacing.lg, marginTop: 10 },
+  distCard: {
+    backgroundColor: cardSurface,
+    borderRadius: radius.cardLg,
+    borderWidth: 1,
+    borderColor: lineSoft,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+  },
+  distHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  distTitle: { flex: 1, minWidth: 0, fontSize: 15, fontWeight: "800", color: wallText, letterSpacing: -0.3 },
+  distSeePill: {
+    flexDirection: "row", alignItems: "center", gap: 2,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14,
+    backgroundColor: seePill, marginLeft: 8,
+  },
+  distSeeText: { fontSize: 12, fontWeight: "700", color: accentGreen },
+  distRow: { flexDirection: "row", alignItems: "center", paddingVertical: 7 },
+  distDot: { width: 11, height: 11, borderRadius: 5.5, marginRight: 9 },
+  distName: { width: 82, fontSize: 13, fontWeight: "600", color: wallText },
+  distTrack: {
+    flex: 1, height: 8, borderRadius: 4,
+    backgroundColor: isDark ? colors.border : "#E9ECE7",
+    overflow: "hidden", marginHorizontal: 8,
+  },
+  distFill: { height: "100%", borderRadius: 4 },
+  distPct: { width: 42, textAlign: "right", fontSize: 12.5, fontWeight: "800" },
+  distBalance: { width: 72, textAlign: "right", fontSize: 13, fontWeight: "600", color: wallText, marginLeft: 8 },
+  distEmpty: { fontSize: 12, color: wallMuted, paddingVertical: 8 },
   debtCard: {
     backgroundColor: cardSurface,
     borderRadius: 28,

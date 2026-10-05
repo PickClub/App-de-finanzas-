@@ -163,6 +163,22 @@ backend:
           comment: "✅✅✅ 5TH VERIFICATION COMPLETE (READ-ONLY after latest .env recreation). Backend supervisor: RUNNING (pid 790, uptime 0:03:15). Port 8001 listening confirmed (netstat shows tcp 0.0.0.0:8001 LISTEN). /app/backend/.env exists with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database, CORS_ORIGINS=*. All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, dict with keys: id, name, email, profile_photo, currency ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, dict with keys: total_balance, month_income, month_expense, debts, accounts_count ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs show NO KeyError for MONGO_URL or DB_NAME in current session (backend started Thu Sep 24 10:06:44 2026). Old KeyError traces in error log are from previous crash-loop sessions before .env was recreated. Current session shows only the documented transient ObjectId serialization error (HTTP 500 on first /api/user after cold boot: 'ObjectId' object is not iterable), followed by stable HTTP 200 responses. NO 502 Bad Gateway errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED."
 
 frontend:
+  - task: "Distribución de mis cuentas -> DONUT synced to active accounts page (acctPage) + Resumen del mes sparklines"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(tabs)/index.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            SCOPED to app/(tabs)/index.tsx ONLY (no nav/tab-bar/top-cards/backend/global-color changes).
+            (1) Replaced the horizontal bars in "Distribución de mis cuentas" with a DONUT. distAccounts/distTotal now derive from acctPages[safeAcctPage] (the SAME active page as the top accounts carousel — single source of truth, max 5 accounts, last page fewer), sorted by balance. Donut = SVG arc segments (NO % labels on arcs); center = SUM of the active page's accounts + "Total" label (NOT the global balance). Side list rows keep: color dot + category icon + name + balance + % pill; percentages live ONLY in the side list. On page change a reanimated withTiming(0->1, 520ms, Easing.out.cubic) sweeps the donut segments and LinearTransition(260ms) animates the list rows (no springs, no remount of the whole section). Reused acctPage via onScroll/onMomentumScrollEnd of the existing carousel; NO second pagination added.
+            (2) "Resumen del mes" 3 stat cards: added a soft sparkline (SVG line + small dots + extremely pale area fill) at the bottom of each card. Number colors UNCHANGED (Balance=onSurface, Gastado=red, Ingresado=green). Line color follows each card's accent (green/red/green).
+            VERIFIED on web preview: single page (5 accounts) donut center = $20,000 (8500+6500+2500+1500+1000), side list %s 43/33/13/8/5. Temporarily added 2 accounts (7 total -> 2 pages); programmatically paged the top carousel to page 2 -> donut + list + center AUTO-updated to ONLY ZZ Test A $4,000 (80%) + ZZ Test B $1,000 (20%), center $5,000 (page total, NOT global $25,000). Deleted the 2 temp accounts afterward (data restored to original 5). Sparklines render on all 3 summary cards. ESLint clean.
+
   - task: "Debts screen: one-time screen-entry progress animation (main ring + card rings + horizontal bars) 0 -> real %"
     implemented: true
     working: true

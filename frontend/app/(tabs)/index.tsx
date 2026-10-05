@@ -1,13 +1,16 @@
-import React, { useState, useMemo, useCallback, useRef } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { View, Text, ScrollView, Pressable, StyleSheet, RefreshControl, Dimensions, Platform, Animated as RNAnimated } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedScrollHandler,
   useAnimatedReaction,
+  useAnimatedProps,
+  withTiming,
+  Easing,
   LinearTransition,
   type SharedValue,
 } from "react-native-reanimated";
-import Svg, { Circle as SvgCircle } from "react-native-svg";
+import Svg, { Circle as SvgCircle, Path as SvgPath, Polyline as SvgPolyline } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
 import { useQuery } from "@tanstack/react-query";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -89,6 +92,10 @@ function accountTypeLabel(t: string) {
 }
 
 
+// Donut geometry for "Distribución de mis cuentas" (module constants).
+const DONUT_SIZE = 132;
+const DONUT_STROKE = 20;
+
 // Compact circular progress indicator for the Deudas tiles. Uses react-native-svg
 // (already a dependency). No gradient / glow / heavy shadow — secondary info only.
 function DebtRing({ pct, color, track, display }: { pct: number; color: string; track: string; display?: string }) {
@@ -122,6 +129,94 @@ function DebtRing({ pct, color, track, display }: { pct: number; color: string; 
   );
 }
 
+
+// Tiny decorative sparkline (soft line + small dots + extremely pale area fill)
+// shown at the bottom of each "Resumen del mes" stat card. Visual-only; it does
+// NOT change the card's number color. Width is measured so dots stay circular.
+function StatSpark({ color, data }: { color: string; data: number[] }) {
+  const [w, setW] = useState(0);
+  const h = 26;
+  const padY = 4;
+  const n = data.length;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const span = max - min || 1;
+  const norm = data.map((v) => (v - min) / span); // 0..1 (0 = low)
+  const xOf = (i: number) => (n > 1 ? (i / (n - 1)) * w : 0);
+  const yOf = (t: number) => padY + (1 - t) * (h - padY * 2);
+  const linePts = norm.map((t, i) => `${xOf(i)},${yOf(t)}`).join(" ");
+  const areaD = `M0,${h} ` + norm.map((t, i) => `L${xOf(i)},${yOf(t)}`).join(" ") + ` L${w},${h} Z`;
+  return (
+    <View style={{ width: "100%", height: h }} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+      {w > 0 && (
+        <Svg width={w} height={h}>
+          <SvgPath d={areaD} fill={color} fillOpacity={0.08} />
+          <SvgPolyline
+            points={linePts}
+            fill="none"
+            stroke={color}
+            strokeWidth={1.6}
+            strokeOpacity={0.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          {norm.map((t, i) => (
+            <SvgCircle key={i} cx={xOf(i)} cy={yOf(t)} r={1.7} fill={color} fillOpacity={0.85} />
+          ))}
+        </Svg>
+      )}
+    </View>
+  );
+}
+
+// Animated donut arc segment. A fixed, hook-safe child so each account segment
+// can sweep from 0 -> its real fraction (driven by a shared `progress` value)
+// without per-item hooks in a map. No percentage labels are drawn on the arcs.
+const AnimatedArc = Animated.createAnimatedComponent(SvgCircle);
+function DonutSegment({
+  size,
+  stroke,
+  color,
+  startFrac,
+  frac,
+  circ,
+  gapPx,
+  progress,
+}: {
+  size: number;
+  stroke: number;
+  color: string;
+  startFrac: number;
+  frac: number;
+  circ: number;
+  gapPx: number;
+  progress: SharedValue<number>;
+}) {
+  const r = (size - stroke) / 2;
+  const animatedProps = useAnimatedProps(() => {
+    const p = progress.value;
+    const len = Math.max(0, frac * circ * p - gapPx);
+    const start = startFrac * circ * p;
+    return {
+      strokeDasharray: `${len} ${circ}`,
+      strokeDashoffset: -start,
+    } as any;
+  });
+  if (frac <= 0) return null;
+  return (
+    <AnimatedArc
+      cx={size / 2}
+      cy={size / 2}
+      r={r}
+      stroke={color}
+      strokeWidth={stroke}
+      fill="none"
+      strokeLinecap="butt"
+      animatedProps={animatedProps}
+      transform={`rotate(-90 ${size / 2} ${size / 2})`}
+    />
+  );
+}
 
 // Reusable external section header — same visual style as the "Movimientos
 // recientes" header (soft coral icon tile on the left, title + subtitle, and a
@@ -429,11 +524,16 @@ export default function Home() {
   // Bilingual labels for the "Resumen del mes" section (inline, to avoid
   // touching shared i18n files or any other screen).
   const l10n = (es: string, en: string) => (i18n.language.startsWith("es") ? es : en);
-  // "Distribución de mis cuentas" data — derived ONLY from the existing accounts
-  // (the same ones shown in "Mis cuentas"). No new data, no categories.
+  // "Distribución de mis cuentas" data — SYNCED to the SAME active page as the
+  // top accounts carousel (acctPage is the single source of truth). It shows
+  // ONLY the accounts on the active page (max 5), sorted by balance. The donut
+  // total + percentages are computed from THIS page's accounts, not globally.
   const distAccounts = useMemo(
-    () => [...accounts].sort((a: any, b: any) => (b?.current_balance || 0) - (a?.current_balance || 0)),
-    [accounts],
+    () =>
+      [...(acctPages[safeAcctPage] || [])].sort(
+        (a: any, b: any) => (b?.current_balance || 0) - (a?.current_balance || 0),
+      ),
+    [acctPages, safeAcctPage],
   );
   const distTotal = distAccounts.reduce((s: number, a: any) => s + (a?.current_balance || 0), 0);
 
@@ -455,6 +555,14 @@ export default function Home() {
   const summaryY = useSharedValue(0);
   const debtsY = useSharedValue(0);
   const focusId = useSharedValue(0);
+
+  // Donut sweep driver — 0 -> 1 whenever the ACTIVE accounts page changes, so
+  // the segments grow smoothly (light timing, no spring) instead of snapping.
+  const donutProgress = useSharedValue(0);
+  useEffect(() => {
+    donutProgress.value = 0;
+    donutProgress.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
+  }, [safeAcctPage, donutProgress]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
@@ -678,6 +786,9 @@ export default function Home() {
           <Text style={[styles.statAmount, { color: colors.onSurface }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
             {money(monthNet)}
           </Text>
+          <View style={styles.statSpark}>
+            <StatSpark color={scheme === "dark" ? colors.brandPrimary : "#126046"} data={[3, 4, 3.4, 5, 4.6, 6, 5.6, 6.6]} />
+          </View>
           <Text style={styles.statThisMonth}>{t("home.thisMonth")}</Text>
         </View>
         {/* Total gastado — soft / desaturated red */}
@@ -689,6 +800,9 @@ export default function Home() {
           <Text style={[styles.statAmount, { color: lighten(colors.expenseRed, 0.16) }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
             {money(summary?.month_expense || 0)}
           </Text>
+          <View style={styles.statSpark}>
+            <StatSpark color={colors.expenseRed} data={[3.4, 3, 4, 3.8, 4.8, 4.4, 5.6, 6.2]} />
+          </View>
           <Text style={styles.statThisMonth}>{t("home.thisMonth")}</Text>
         </View>
         {/* Total ingresado — green */}
@@ -700,6 +814,9 @@ export default function Home() {
           <Text style={[styles.statAmount, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
             {money(summary?.month_income || 0)}
           </Text>
+          <View style={styles.statSpark}>
+            <StatSpark color={colors.incomeGreen} data={[3, 3.6, 3.2, 4.4, 4, 5, 5.4, 6.4]} />
+          </View>
           <Text style={styles.statThisMonth}>{t("home.thisMonth")}</Text>
         </View>
       </View>
@@ -714,25 +831,91 @@ export default function Home() {
               <Ionicons name="chevron-forward" size={13} color={scheme === "dark" ? colors.brandPrimary : "#126046"} />
             </Pressable>
           </View>
-          {distAccounts.map((a: any) => {
-            const ac = homeAccountColor(a, scheme);
-            const raw = distTotal > 0 ? ((a?.current_balance || 0) / distTotal) * 100 : 0;
-            const w = Math.max(0, Math.min(100, raw));
-            return (
-              <View key={a.id} style={styles.distRow}>
-                <View style={[styles.distDot, { backgroundColor: ac }]} />
-                <Text style={styles.distName} numberOfLines={1}>{a.name}</Text>
-                <View style={styles.distTrack}>
-                  <View style={[styles.distFill, { width: `${hidden ? 0 : (w > 0 ? Math.max(w, 4) : 0)}%`, backgroundColor: ac }]} />
-                </View>
-                <Text style={[styles.distPct, { color: ac }]}>{hidden ? "••" : `${Math.round(raw)}%`}</Text>
-                <Text style={styles.distBalance} numberOfLines={1}>{hidden ? "••••" : formatCurrencyInt(a?.current_balance || 0)}</Text>
+          <View style={styles.distBody}>
+            {/* Donut — segments ONLY (no % labels on the arcs). Total in center
+                 is the SUM of the active page's accounts, not the global balance. */}
+            <View style={styles.distDonutWrap}>
+              <Svg width={DONUT_SIZE} height={DONUT_SIZE}>
+                <SvgCircle
+                  cx={DONUT_SIZE / 2}
+                  cy={DONUT_SIZE / 2}
+                  r={(DONUT_SIZE - DONUT_STROKE) / 2}
+                  stroke={scheme === "dark" ? colors.border : "#ECEFEA"}
+                  strokeWidth={DONUT_STROKE}
+                  fill="none"
+                />
+                {(() => {
+                  const circ = 2 * Math.PI * ((DONUT_SIZE - DONUT_STROKE) / 2);
+                  let acc = 0;
+                  return distAccounts.map((a: any) => {
+                    const val = a?.current_balance || 0;
+                    const frac = distTotal > 0 ? val / distTotal : 0;
+                    const startFrac = acc;
+                    acc += frac;
+                    return (
+                      <DonutSegment
+                        key={a.id}
+                        size={DONUT_SIZE}
+                        stroke={DONUT_STROKE}
+                        color={homeAccountColor(a, scheme)}
+                        startFrac={startFrac}
+                        frac={frac}
+                        circ={circ}
+                        gapPx={distAccounts.length > 1 ? 3 : 0}
+                        progress={donutProgress}
+                      />
+                    );
+                  });
+                })()}
+              </Svg>
+              <View style={styles.distCenter} pointerEvents="none">
+                <Ionicons
+                  name="layers"
+                  size={18}
+                  color={scheme === "dark" ? colors.brandPrimary : "#126046"}
+                  style={{ marginBottom: 2 }}
+                />
+                <Text style={styles.distCenterVal} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55}>
+                  {hidden ? "••••" : formatCurrencyInt(distTotal)}
+                </Text>
+                <Text style={styles.distCenterLabel}>{l10n("Total", "Total")}</Text>
               </View>
-            );
-          })}
-          {distAccounts.length === 0 && (
-            <Text style={styles.distEmpty}>{t("home.noAccounts")}</Text>
-          )}
+            </View>
+            {/* Side list — SAME paged accounts. Percentages live ONLY here. */}
+            <View style={styles.distList}>
+              {distAccounts.map((a: any) => {
+                const ac = homeAccountColor(a, scheme);
+                const raw = distTotal > 0 ? ((a?.current_balance || 0) / distTotal) * 100 : 0;
+                return (
+                  <Animated.View key={a.id} layout={LinearTransition.duration(260)}>
+                    <Pressable
+                      testID={`dist-row-${a.id}`}
+                      style={styles.distRow}
+                      onPress={() => router.push(`/accounts/new?id=${a.id}`)}
+                    >
+                      <View style={[styles.distDot, { backgroundColor: ac }]} />
+                      <View style={[styles.distRowIcon, { backgroundColor: ac + "1A" }]}>
+                        <Ionicons name={a.icon as any} size={15} color={ac} />
+                      </View>
+                      <View style={styles.distRowText}>
+                        <Text style={styles.distName} numberOfLines={1}>{a.name}</Text>
+                        <Text style={styles.distBalance} numberOfLines={1}>
+                          {hidden ? "••••" : formatCurrencyInt(a?.current_balance || 0)}
+                        </Text>
+                      </View>
+                      <View style={[styles.distPctPill, { backgroundColor: ac + "1A" }]}>
+                        <Text style={[styles.distPct, { color: ac }]}>{hidden ? "••" : `${Math.round(raw)}%`}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={14} color={colors.muted} />
+                    </Pressable>
+                  </Animated.View>
+                );
+              })}
+              {distAccounts.length === 0 && (
+                <Text style={styles.distEmpty}>{t("home.noAccounts")}</Text>
+              )}
+            </View>
+          </View>
         </View>
       </View>
 
@@ -1343,6 +1526,7 @@ const useStyles = makeStyles((colors, scheme) => {
   statTitle: { fontSize: 11.5, color: wallMuted, fontWeight: "600", textAlign: "center", marginBottom: 5 },
   statAmount: { fontSize: 17, fontWeight: "800", letterSpacing: -0.4, textAlign: "center" },
   statThisMonth: { fontSize: 10, color: wallSub, fontWeight: "500", marginTop: 5, textAlign: "center" },
+  statSpark: { width: "100%", paddingHorizontal: 2, marginTop: 6 },
   // --- Distribución de mis cuentas ---
   distWrap: { paddingHorizontal: spacing.lg, marginTop: 10 },
   distCard: {
@@ -1361,17 +1545,20 @@ const useStyles = makeStyles((colors, scheme) => {
     backgroundColor: seePill, marginLeft: 8,
   },
   distSeeText: { fontSize: 12, fontWeight: "700", color: accentGreen },
-  distRow: { flexDirection: "row", alignItems: "center", paddingVertical: 7 },
-  distDot: { width: 11, height: 11, borderRadius: 5.5, marginRight: 9 },
-  distName: { width: 74, fontSize: 13, fontWeight: "600", color: wallText },
-  distTrack: {
-    flex: 1, height: 10, borderRadius: 4,
-    backgroundColor: isDark ? colors.border : "#E9ECE7",
-    overflow: "hidden", marginLeft: 8, marginRight: 10,
-  },
-  distFill: { height: "100%", borderRadius: 4 },
-  distPct: { width: 32, textAlign: "right", fontSize: 12.5, fontWeight: "800" },
-  distBalance: { width: 58, textAlign: "right", fontSize: 13, fontWeight: "600", color: wallText, marginLeft: 6 },
+  distBody: { flexDirection: "row", alignItems: "center", gap: 10 },
+  distDonutWrap: { width: DONUT_SIZE, height: DONUT_SIZE, alignItems: "center", justifyContent: "center" },
+  distCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+  distCenterVal: { fontSize: 19, fontWeight: "800", color: wallText, letterSpacing: -0.5, textAlign: "center", maxWidth: DONUT_SIZE - DONUT_STROKE * 2 },
+  distCenterLabel: { fontSize: 11, color: wallMuted, fontWeight: "600", marginTop: 1 },
+  distList: { flex: 1, minWidth: 0 },
+  distRow: { flexDirection: "row", alignItems: "center", paddingVertical: 5 },
+  distDot: { width: 9, height: 9, borderRadius: 4.5, marginRight: 7 },
+  distRowIcon: { width: 26, height: 26, borderRadius: 9, alignItems: "center", justifyContent: "center", marginRight: 8 },
+  distRowText: { flex: 1, minWidth: 0 },
+  distName: { fontSize: 13, fontWeight: "700", color: wallText },
+  distBalance: { fontSize: 11.5, fontWeight: "600", color: wallMuted, marginTop: 1 },
+  distPctPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginHorizontal: 5 },
+  distPct: { fontSize: 11.5, fontWeight: "800" },
   distEmpty: { fontSize: 12, color: wallMuted, paddingVertical: 8 },
   debtCard: {
     backgroundColor: cardSurface,

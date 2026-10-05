@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import { View, ScrollView, Pressable, StyleSheet, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import { Text, TextInput } from "@/src/components/typography";
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from "react-native-reanimated";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";

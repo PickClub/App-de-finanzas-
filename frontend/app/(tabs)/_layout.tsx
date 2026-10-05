@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Tabs, useRouter } from "expo-router";
-import { Pressable, View, Text, BackHandler } from "react-native";
+import { Pressable, View, BackHandler } from "react-native";
+import { Text } from "@/src/components/typography";
 import Animated, {
   useSharedValue,
   runOnJS,

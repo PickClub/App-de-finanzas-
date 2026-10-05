@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, Modal, Animated, Easing, StyleSheet, Dimensions } from "react-native";
+import { View, Pressable, Modal, Animated, Easing, StyleSheet, Dimensions } from "react-native";
+import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, radius, spacing } from "@/src/theme";

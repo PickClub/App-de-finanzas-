@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet, Alert } from "react-native";
+import { View, ScrollView, Pressable, StyleSheet, Alert } from "react-native";
+import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

@@ -16,6 +16,7 @@ import { queryClient } from "@/src/query-client";
 import { ThemeProvider, useTheme } from "@/src/theme";
 import { LockProvider } from "@/src/lock";
 import { LanguageProvider } from "@/src/i18n";
+import { FONT_FILES } from "@/src/components/typography";
 
 // Prewarm the icon fonts so bundled routes have icons on first render.
 import "@react-native-vector-icons/ionicons";
@@ -25,6 +26,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 export default function RootLayout() {
   const [loaded] = Font.useFonts({
     SpaceGrotesk: require("../assets/fonts/SpaceGrotesk-Variable.ttf"),
+    ...FONT_FILES,
   });
 
   useEffect(() => {

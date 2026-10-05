@@ -1,14 +1,13 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
-  Text,
   ScrollView,
   Pressable,
-  TextInput,
   Modal,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -371,7 +370,7 @@ export default function Notes() {
             <View style={[styles.cardIcon, { backgroundColor: accent }]}>
               <Ionicons name={icon as any} size={20} color="#FFFFFF" />
             </View>
-            <Text style={styles.cardTitle} numberOfLines={1}>{note.title}</Text>
+            <Text style={styles.cardTitle}>{note.title}</Text>
             <Pressable
               testID={`note-menu-${note.id}`}
               hitSlop={8}
@@ -462,7 +461,7 @@ export default function Notes() {
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={styles.title}>Notas</Text>
-            <Text style={styles.subtitle} numberOfLines={2}>Tus ideas, tareas y recuerdos en un solo lugar.</Text>
+            <Text style={styles.subtitle}>Tus ideas, tareas y recuerdos en un solo lugar.</Text>
           </View>
           <Pressable testID="notes-new-btn" onPress={() => openEditor(null)} style={styles.newBtn}>
             <Ionicons name="add" size={18} color="#FFFFFF" />

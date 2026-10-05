@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { View, Text, ScrollView, Pressable, Platform, ActivityIndicator } from "react-native";
+import { View, ScrollView, Pressable, Platform, ActivityIndicator } from "react-native";
+import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -41,8 +42,8 @@ function InfoRow({ styles, tileBg, iconColor, icon, label, value, rightNode }: a
       <View style={[styles.infoTile, { backgroundColor: tileBg }]}>
         <Ionicons name={icon} size={18} color={iconColor} />
       </View>
-      <Text style={styles.infoLabel} numberOfLines={1}>{label}</Text>
-      {rightNode ? rightNode : <Text style={styles.infoValue} numberOfLines={1}>{value}</Text>}
+      <Text style={styles.infoLabel}>{label}</Text>
+      {rightNode ? rightNode : <Text style={styles.infoValue}>{value}</Text>}
     </View>
   );
 }
@@ -125,7 +126,7 @@ export default function AccountDetail() {
             <Ionicons name={iconName as any} size={30} color="#fff" />
           </View>
           <View style={{ flex: 1, marginLeft: 16, minWidth: 0 }}>
-            <Text style={styles.accName} numberOfLines={1}>{account.name}</Text>
+            <Text style={styles.accName}>{account.name}</Text>
             <View style={styles.typeRow}>
               <View style={[styles.typeDot, { backgroundColor: ac }]} />
               <Text style={styles.typeLabel}>{t(`accounts.types.${account.type}`)}</Text>
@@ -207,8 +208,8 @@ export default function AccountDetail() {
                 >
                   <IconTile icon={ic} tint={tint} size={36} />
                   <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
-                    <Text style={styles.txName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.txDate} numberOfLines={1}>{formatDateLong(item.date)}</Text>
+                    <Text style={styles.txName}>{item.name}</Text>
+                    <Text style={styles.txDate}>{formatDateLong(item.date)}</Text>
                   </View>
                   <Text style={[styles.txAmount, { color: amtColor }]}>
                     {sign}{formatCurrencyInt(item.amount)}

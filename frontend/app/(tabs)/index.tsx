@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet, RefreshControl, Dimensions, Platform, Animated as RNAnimated } from "react-native";
+import { View, ScrollView, Pressable, StyleSheet, RefreshControl, Dimensions, Platform, Animated as RNAnimated } from "react-native";
+import { Text } from "@/src/components/typography";
 import Animated, {
   useSharedValue,
   useAnimatedScrollHandler,
@@ -300,8 +301,8 @@ function SectionHeader({
         )}
       </View>
       <View style={{ flex: 1, marginLeft: 10 }}>
-        <Text style={styles.mrTitle} numberOfLines={1}>{title}</Text>
-        <Text style={styles.mrSubtitle} numberOfLines={1}>{subtitle}</Text>
+        <Text style={styles.mrTitle}>{title}</Text>
+        <Text style={styles.mrSubtitle}>{subtitle}</Text>
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         {right}
@@ -713,7 +714,7 @@ export default function Home() {
                           </View>
                         </View>
                         <View style={styles.walletTextWrap}>
-                          <Text style={styles.walletName} numberOfLines={1}>{a.name}</Text>
+                          <Text style={styles.walletName} numberOfLines={2}>{a.name}</Text>
                           <View style={[styles.balancePill, { backgroundColor: darken(ac, 0.1) }]}>
                             <View style={styles.dollarCircle}>
                               <Text style={styles.dollarSymbol}>{balanceParts(a.current_balance).symbol}</Text>
@@ -825,7 +826,7 @@ export default function Home() {
       <View style={styles.distWrap}>
         <View testID="cuentas-scroll" style={styles.distCard}>
           <View style={styles.distHeader}>
-            <Text style={styles.distTitle} numberOfLines={1}>{l10n("Distribución de mis cuentas", "My accounts distribution")}</Text>
+            <Text style={styles.distTitle}>{l10n("Distribución de mis cuentas", "My accounts distribution")}</Text>
             <Pressable style={styles.distSeePill} onPress={() => router.push("/accounts")} hitSlop={8}>
               <Text style={styles.distSeeText}>{l10n("Ver cuentas", "View accounts")}</Text>
               <Ionicons name="chevron-forward" size={13} color={scheme === "dark" ? colors.brandPrimary : "#126046"} />
@@ -894,19 +895,15 @@ export default function Home() {
                       onPress={() => router.push(`/accounts/${a.id}`)}
                     >
                       <View style={[styles.distDot, { backgroundColor: ac }]} />
-                      <View style={[styles.distRowIcon, { backgroundColor: ac + "1A" }]}>
-                        <Ionicons name={a.icon as any} size={15} color={ac} />
-                      </View>
                       <View style={styles.distRowText}>
-                        <Text style={styles.distName} numberOfLines={1}>{a.name}</Text>
-                        <Text style={styles.distBalance} numberOfLines={1}>
+                        <Text style={styles.distName}>{a.name}</Text>
+                        <Text style={styles.distBalance}>
                           {hidden ? "••••" : formatCurrencyInt(a?.current_balance || 0)}
                         </Text>
                       </View>
                       <View style={[styles.distPctPill, { backgroundColor: ac + "1A" }]}>
                         <Text style={[styles.distPct, { color: ac }]}>{hidden ? "••" : `${Math.round(raw)}%`}</Text>
                       </View>
-                      <Ionicons name="chevron-forward" size={14} color={colors.muted} />
                     </Pressable>
                   </Animated.View>
                 );
@@ -930,7 +927,7 @@ export default function Home() {
             <Ionicons name="layers-outline" size={18} color={colors.brandPrimary} />
           </View>
           <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={styles.mrTitle} numberOfLines={1} ellipsizeMode="clip">
+            <Text style={styles.mrTitle}>
               {t("home.recentMovements")} <Text style={styles.mrTitleAccent}>{t("home.recentMovementsAccent")}</Text>
             </Text>
             <Text style={styles.mrSubtitle}>
@@ -1009,14 +1006,14 @@ export default function Home() {
                 >
                   <IconTile icon={iconName} tint={tint} size={36} />
                   <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.mrName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.mrName}>{item.name}</Text>
                     <View style={styles.mrTimeRow}>
                       <Ionicons name="time-outline" size={12} color={colors.muted} />
-                      <Text style={styles.mrTime} numberOfLines={1}>{formatDateTime(item.date)}</Text>
+                      <Text style={styles.mrTime}>{formatDateTime(item.date)}</Text>
                     </View>
                   </View>
                   <View style={[styles.mrBadge, { backgroundColor: badgeColor + "1A" }]}>
-                    <Text style={[styles.mrBadgeText, { color: badgeColor }]} numberOfLines={1}>{badgeLabel}</Text>
+                    <Text style={[styles.mrBadgeText, { color: badgeColor }]}>{badgeLabel}</Text>
                   </View>
                   <Text style={[styles.mrAmount, { color }]}>{sign}{formatCurrency(item.amount)}</Text>
                   <Ionicons name="chevron-forward" size={15} color={colors.muted} style={{ marginLeft: 4 }} />
@@ -1039,8 +1036,8 @@ export default function Home() {
               <Ionicons name="sparkles" size={17} color={scheme === "dark" ? colors.brandPrimary : "#147450"} />
             </View>
             <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={styles.aiTitle} numberOfLines={1}>{t("home.aiBannerTitle")}</Text>
-              <Text style={styles.aiSub} numberOfLines={1}>{t("home.aiBannerSubtitle")}</Text>
+              <Text style={styles.aiTitle}>{t("home.aiBannerTitle")}</Text>
+              <Text style={styles.aiSub}>{t("home.aiBannerSubtitle")}</Text>
             </View>
             <View style={styles.aiChevron}>
               <Ionicons name="chevron-forward" size={16} color={scheme === "dark" ? colors.brandPrimary : "#126047"} />
@@ -1083,7 +1080,7 @@ export default function Home() {
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.expenseRed + "14" }]}>
                   <Ionicons name="arrow-up" size={15} color={colors.expenseRed} />
                 </View>
-                <Text style={[styles.debtQuadLabel, { flex: 1 }]} numberOfLines={2}>{t("home.iOwe")}</Text>
+                <Text style={[styles.debtQuadLabel, { flex: 1 }]}>{t("home.iOwe")}</Text>
                 <View style={styles.debtArrowBtn}>
                   <Ionicons name="chevron-forward" size={11} color={colors.muted} />
                 </View>
@@ -1093,7 +1090,7 @@ export default function Home() {
                   <Text style={[styles.debtQuadValue, { color: colors.expenseRed }]} numberOfLines={1} adjustsFontSizeToFit>
                     {debtMoney(summary?.debts?.i_owe || 0)}
                   </Text>
-                  <Text style={styles.debtQuadFoot} numberOfLines={1}>{debtCountShareLabel(summary?.debts?.i_owe || 0, iOweCount)}</Text>
+                  <Text style={styles.debtQuadFoot}>{debtCountShareLabel(summary?.debts?.i_owe || 0, iOweCount)}</Text>
                 </View>
                 <DebtRing pct={hidden ? 0 : debtShare(summary?.debts?.i_owe || 0)} color={colors.expenseRed} track={ringTrack} display={hidden ? "••" : undefined} />
               </View>
@@ -1103,7 +1100,7 @@ export default function Home() {
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.incomeGreen + "14" }]}>
                   <Ionicons name="arrow-down" size={15} color={colors.incomeGreen} />
                 </View>
-                <Text style={[styles.debtQuadLabel, { flex: 1 }]} numberOfLines={2}>{t("home.owedToMe")}</Text>
+                <Text style={[styles.debtQuadLabel, { flex: 1 }]}>{t("home.owedToMe")}</Text>
                 <View style={styles.debtArrowBtn}>
                   <Ionicons name="chevron-forward" size={11} color={colors.muted} />
                 </View>
@@ -1113,7 +1110,7 @@ export default function Home() {
                   <Text style={[styles.debtQuadValue, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit>
                     {debtMoney(summary?.debts?.they_owe || 0)}
                   </Text>
-                  <Text style={styles.debtQuadFoot} numberOfLines={1}>{debtCountShareLabel(summary?.debts?.they_owe || 0, theyOweCount)}</Text>
+                  <Text style={styles.debtQuadFoot}>{debtCountShareLabel(summary?.debts?.they_owe || 0, theyOweCount)}</Text>
                 </View>
                 <DebtRing pct={hidden ? 0 : debtShare(summary?.debts?.they_owe || 0)} color={colors.incomeGreen} track={ringTrack} display={hidden ? "••" : undefined} />
               </View>
@@ -1125,7 +1122,7 @@ export default function Home() {
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.statsPurple + "14" }]}>
                   <Ionicons name="card" size={15} color={colors.statsPurple} />
                 </View>
-                <Text style={[styles.debtQuadLabel, { flex: 1 }]} numberOfLines={2}>{t("home.paidThisMonth")}</Text>
+                <Text style={[styles.debtQuadLabel, { flex: 1 }]}>{t("home.paidThisMonth")}</Text>
                 <View style={styles.debtArrowBtn}>
                   <Ionicons name="chevron-forward" size={11} color={colors.muted} />
                 </View>
@@ -1145,7 +1142,7 @@ export default function Home() {
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.brandSecondary + "14" }]}>
                   <Ionicons name="calendar-outline" size={15} color={colors.brandSecondary} />
                 </View>
-                <Text style={[styles.debtQuadLabel, { flex: 1 }]} numberOfLines={2}>{t("home.nextPayment")}</Text>
+                <Text style={[styles.debtQuadLabel, { flex: 1 }]}>{t("home.nextPayment")}</Text>
                 <View style={styles.debtArrowBtn}>
                   <Ionicons name="chevron-forward" size={11} color={colors.muted} />
                 </View>
@@ -1526,9 +1523,9 @@ const useStyles = makeStyles((colors, scheme) => {
     justifyContent: "center",
     marginBottom: 6,
   },
-  statTitle: { fontSize: 11.5, color: wallMuted, fontWeight: "600", textAlign: "center", marginBottom: 5 },
-  statAmount: { fontSize: 17, fontWeight: "800", letterSpacing: -0.4, textAlign: "center" },
-  statThisMonth: { fontSize: 10, color: wallSub, fontWeight: "500", marginTop: 5, textAlign: "center" },
+  statTitle: { fontSize: 11.5, lineHeight: 14, color: wallMuted, fontWeight: "600", textAlign: "center", marginBottom: 5, flexShrink: 0 },
+  statAmount: { fontSize: 17, lineHeight: 20, fontWeight: "800", letterSpacing: -0.4, textAlign: "center", flexShrink: 0 },
+  statThisMonth: { fontSize: 10, lineHeight: 12, color: wallSub, fontWeight: "500", marginTop: 5, textAlign: "center" },
   statSpark: { width: "100%", paddingHorizontal: 2, marginTop: 6 },
   // --- Distribución de mis cuentas ---
   distWrap: { paddingHorizontal: spacing.lg, marginTop: 10 },
@@ -1556,9 +1553,8 @@ const useStyles = makeStyles((colors, scheme) => {
   distList: { flex: 1, minWidth: 0 },
   distRow: { flexDirection: "row", alignItems: "center", paddingVertical: 5 },
   distDot: { width: 9, height: 9, borderRadius: 4.5, marginRight: 7 },
-  distRowIcon: { width: 26, height: 26, borderRadius: 9, alignItems: "center", justifyContent: "center", marginRight: 8 },
   distRowText: { flex: 1, minWidth: 0 },
-  distName: { fontSize: 13, fontWeight: "700", color: wallText },
+  distName: { fontSize: 13, fontWeight: "400", color: wallText },
   distBalance: { fontSize: 11.5, fontWeight: "600", color: wallMuted, marginTop: 1 },
   distPctPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginHorizontal: 5 },
   distPct: { fontSize: 11.5, fontWeight: "800" },

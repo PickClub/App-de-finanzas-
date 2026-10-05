@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet, Animated, Easing, Platform } from "react-native";
+import { View, ScrollView, Pressable, StyleSheet, Animated, Easing, Platform } from "react-native";
+import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -226,8 +227,8 @@ export default function Debts() {
             <Ionicons name="chevron-back" size={22} color={P.text} />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title} numberOfLines={1}>Deudas y préstamos</Text>
-            <Text style={styles.subtitle} numberOfLines={1}>Tus deudas en un solo lugar</Text>
+            <Text style={styles.title}>Deudas y préstamos</Text>
+            <Text style={styles.subtitle}>Tus deudas en un solo lugar</Text>
           </View>
           <LockToggle testID="lock-debts" compact />
           <Pressable
@@ -278,7 +279,7 @@ export default function Debts() {
                     <Text style={styles.sumPct}>{summaryPct}%</Text>
                     <Text style={styles.sumPctSub}>Pagado</Text>
                   </ProgressRing>
-                  <Text style={styles.sumCaption} numberOfLines={1}>
+                  <Text style={styles.sumCaption}>
                     <Text style={{ color: P.green, fontWeight: "800" }}>{formatCurrencyInt(summary.paid)}</Text>
                     <Text style={{ color: P.muted }}> de {formatCurrencyInt(summary.original)}</Text>
                   </Text>
@@ -343,7 +344,7 @@ export default function Debts() {
                 <View style={styles.cardTop}>
                   <IconTile icon={d.icon} tint={accent} size={44} />
                   <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={styles.debtName} numberOfLines={1}>{d.name}</Text>
+                    <Text style={styles.debtName}>{d.name}</Text>
                     <View style={styles.subRow}>
                       <View style={[styles.statusPill, { backgroundColor: statusColor + "22" }]}>
                         <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
@@ -351,7 +352,7 @@ export default function Debts() {
                           {isPaid ? "Pagada" : "Activa"}
                         </Text>
                       </View>
-                      <Text style={styles.debtSub} numberOfLines={1}>
+                      <Text style={styles.debtSub}>
                         {d.direction === "i_owe" ? "Yo debo" : "Me deben"}{d.person ? ` · ${d.person}` : ""}
                       </Text>
                     </View>
@@ -462,11 +463,11 @@ function FilterPill({
       <Pressable testID={testID} onPress={onPress} onPressIn={pressIn} onPressOut={pressOut}>
         {active ? (
           <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.pill}>
-            <Text style={styles.pillTextActive} numberOfLines={1}>{label}</Text>
+            <Text style={styles.pillTextActive}>{label}</Text>
           </LinearGradient>
         ) : (
           <View style={[styles.pill, styles.pillIdle]}>
-            <Text style={styles.pillText} numberOfLines={1}>{label}</Text>
+            <Text style={styles.pillText}>{label}</Text>
           </View>
         )}
       </Pressable>
@@ -495,8 +496,8 @@ function MetricRow({
       <View style={[styles.metricIcon, { backgroundColor: tint + "22" }]}>
         <Ionicons name={icon} size={13} color={tint} />
       </View>
-      <Text style={styles.metricLabel} numberOfLines={1}>{label}</Text>
-      <Text style={[styles.metricValue, { color: valueColor }]} numberOfLines={1}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={[styles.metricValue, { color: valueColor }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
     </View>
   );
 }
@@ -530,12 +531,12 @@ function BackBlock({
       <View style={[styles.backIcon, { backgroundColor: accent + "22" }]}>
         <Ionicons name={icon} size={15} color={accent} />
       </View>
-      <Text style={styles.backBlockTitle} numberOfLines={1}>{title}</Text>
-      <Text style={[styles.backBlockTotal, { color: accent }]} numberOfLines={1}>{total}</Text>
+      <Text style={styles.backBlockTitle}>{title}</Text>
+      <Text style={[styles.backBlockTotal, { color: accent }]} numberOfLines={1} adjustsFontSizeToFit>{total}</Text>
       {rows.map((d) => (
         <View key={d.id} style={styles.backRow}>
-          <Text style={styles.backRowLabel} numberOfLines={1}>{d.person || d.name}</Text>
-          <Text style={[styles.backRowValue, { color: P.text }]} numberOfLines={1}>{formatCurrencyInt(d.remaining_amount)}</Text>
+          <Text style={styles.backRowLabel}>{d.person || d.name}</Text>
+          <Text style={[styles.backRowValue, { color: P.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatCurrencyInt(d.remaining_amount)}</Text>
         </View>
       ))}
       {more > 0 && <Text style={styles.backMore}>+ {more} más</Text>}

@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
-import { View, Text, ScrollView, Pressable, Platform, Animated as RNAnimated } from "react-native";
+import { View, ScrollView, Pressable, Platform, Animated as RNAnimated } from "react-native";
+import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -179,10 +180,10 @@ export default function Reports() {
         </View>
         <View style={{ flex: 1, marginLeft: 10 }}>
           <View style={styles.titleRow}>
-            <Text style={styles.headTitle} numberOfLines={1}>Flujo de efectivo</Text>
+            <Text style={styles.headTitle}>Flujo de efectivo</Text>
             <Ionicons name="information-circle-outline" size={15} color={colors.muted} />
           </View>
-          <Text style={styles.headSubtitle} numberOfLines={1}>Resumen de tu actividad en el período</Text>
+          <Text style={styles.headSubtitle}>Resumen de tu actividad en el período</Text>
         </View>
       </View>
       <View style={styles.card}>
@@ -207,7 +208,7 @@ export default function Reports() {
             >
               <View style={styles.tConcept}>
                 <Ionicons name={r.icon as any} size={15} color={colors.muted} />
-                <Text style={styles.tConceptText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{r.label}</Text>
+                <Text style={styles.tConceptText}>{r.label}</Text>
               </View>
               <View style={styles.tCol}>
                 <Text style={[styles.tValue, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
@@ -229,8 +230,8 @@ export default function Reports() {
             <Ionicons name="wallet-outline" size={20} color={balance >= 0 ? colors.incomeGreen : colors.expenseRed} />
           </View>
           <View style={styles.netTextWrap}>
-            <Text style={styles.netTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Saldo neto del período</Text>
-            <Text style={styles.netSub} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>Ingresos menos gastos</Text>
+            <Text style={styles.netTitle}>Saldo neto del período</Text>
+            <Text style={styles.netSub}>Ingresos menos gastos</Text>
           </View>
           <View style={styles.netVDivider} />
           <View style={styles.netCalc}>
@@ -260,8 +261,8 @@ export default function Reports() {
           <Ionicons name="pie-chart" size={18} color={accent} />
         </View>
         <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={styles.headTitle} numberOfLines={1}>Gastos por categoría</Text>
-          <Text style={styles.headSubtitle} numberOfLines={1}>Tus principales categorías en este período</Text>
+          <Text style={styles.headTitle}>Gastos por categoría</Text>
+          <Text style={styles.headSubtitle}>Tus principales categorías en este período</Text>
         </View>
         {byCategory.length > 0 && (
           <Pressable onPress={() => setShowAll((v) => !v)} style={styles.topBadge} testID="toggle-cats">
@@ -284,7 +285,7 @@ export default function Reports() {
                 >
                   <CircleIcon icon={x.cat.icon} color={x.cat.color} size={42} />
                   <View style={styles.catMiddle}>
-                    <Text style={styles.catName} numberOfLines={1}>{x.cat.name}</Text>
+                    <Text style={styles.catName}>{x.cat.name}</Text>
                     <View style={styles.barTrack}>
                       <View style={[styles.barFill, { width: `${Math.max(6, barPct)}%`, backgroundColor: x.cat.color }]} />
                     </View>

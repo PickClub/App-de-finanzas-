@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Pressable, StyleSheet } from "react-native";
+import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { AppSheet } from "@/src/components/sheets";
 import { useTheme, radius } from "@/src/theme";
@@ -243,7 +244,7 @@ export function DateRangeSheet({
         <View style={[st.summaryIcon, { backgroundColor: mint }]}>
           <Ionicons name="calendar-outline" size={16} color={green} />
         </View>
-        <Text style={[st.summaryText, { color: colors.onSurface }]} numberOfLines={1}>
+        <Text style={[st.summaryText, { color: colors.onSurface }]}>
           {summaryText}
         </Text>
         <View style={[st.kindPill, { backgroundColor: mint }]}>

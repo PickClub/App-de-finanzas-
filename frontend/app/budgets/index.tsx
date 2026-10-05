@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet, TextInput, Modal, KeyboardAvoidingView, Platform } from "react-native";
+import { View, ScrollView, Pressable, StyleSheet, Modal, KeyboardAvoidingView, Platform } from "react-native";
+import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";

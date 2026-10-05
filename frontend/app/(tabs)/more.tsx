@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, Pressable, ScrollView } from "react-native";
+import { View, Pressable, ScrollView } from "react-native";
+import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -121,8 +122,8 @@ export default function More() {
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={colors.muted} />
                   </View>
-                  <Text style={styles.tileLabel} numberOfLines={1}>{it.label}</Text>
-                  <Text style={styles.tileSub} numberOfLines={2}>{it.subtitle}</Text>
+                  <Text style={styles.tileLabel}>{it.label}</Text>
+                  <Text style={styles.tileSub}>{it.subtitle}</Text>
                 </Pressable>
               ))}
             </View>
@@ -146,8 +147,8 @@ export default function More() {
                 <Ionicons name={it.icon as any} size={19} color={it.color} />
               </View>
               <View style={{ flex: 1, marginLeft: 14 }}>
-                <Text style={styles.appLabel} numberOfLines={1}>{it.label}</Text>
-                <Text style={styles.appSub} numberOfLines={1}>{it.subtitle}</Text>
+                <Text style={styles.appLabel}>{it.label}</Text>
+                <Text style={styles.appSub}>{it.subtitle}</Text>
               </View>
               <Ionicons name="chevron-forward" size={19} color={colors.muted} />
             </Pressable>
@@ -160,8 +161,8 @@ export default function More() {
             <Ionicons name="bulb-outline" size={22} color={colors.success} />
           </View>
           <View style={{ flex: 1, marginHorizontal: 14 }}>
-            <Text style={styles.suggTitle} numberOfLines={2}>{t("more.suggestionTitle")}</Text>
-            <Text style={styles.suggSub} numberOfLines={2}>{t("more.suggestionSubFull")}</Text>
+            <Text style={styles.suggTitle}>{t("more.suggestionTitle")}</Text>
+            <Text style={styles.suggSub}>{t("more.suggestionSubFull")}</Text>
           </View>
           <View style={styles.suggBtn}>
             <Text style={styles.suggBtnText}>{t("more.send")}</Text>

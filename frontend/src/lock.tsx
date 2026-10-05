@@ -7,7 +7,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Animated, Easing, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
+import { Animated, Easing, Pressable, StyleSheet, View, type GestureResponderEvent } from "react-native";
+import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import * as Haptics from "expo-haptics";
 import { useTheme, makeStyles, radius } from "@/src/theme";

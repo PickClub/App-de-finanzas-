@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { View, Text, ScrollView, TextInput, StyleSheet, FlatList, Pressable, Modal, KeyboardAvoidingView, Platform } from "react-native";
+import { View, ScrollView, StyleSheet, FlatList, Pressable, Modal, KeyboardAvoidingView, Platform } from "react-native";
+import { Text, TextInput } from "@/src/components/typography";
 import { useQuery } from "@tanstack/react-query";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

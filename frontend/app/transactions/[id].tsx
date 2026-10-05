@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { View, Text, ScrollView, Pressable, TextInput, StyleSheet, Alert } from "react-native";
+import { View, ScrollView, Pressable, StyleSheet, Alert } from "react-native";
+import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -262,7 +263,7 @@ export default function TransactionDetail() {
           <View style={styles.summaryTop}>
             <IconTile icon={iconName} tint={iconTint} size={48} />
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.summaryName} numberOfLines={2}>{tx.name}</Text>
+              <Text style={styles.summaryName}>{tx.name}</Text>
               <Text style={styles.summaryDate}>{fmtDateTime(tx.date)}</Text>
             </View>
           </View>
@@ -599,7 +600,7 @@ function InfoRow({
       </View>
       <View style={{ flex: 1, marginLeft: 12 }}>
         <Text style={styles.infoLabel}>{label}</Text>
-        <Text style={styles.infoValue} numberOfLines={2}>{value}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
       </View>
       {onPress && <Ionicons name="chevron-forward" size={17} color={colors.muted} />}
     </>

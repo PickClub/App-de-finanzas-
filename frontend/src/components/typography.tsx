@@ -1,9 +1,9 @@
 /**
- * Global typography layer — Montserrat.
+ * Global typography layer — Nunito Sans.
  *
  * Drop-in replacements for React Native's <Text> / <TextInput>. They keep every
  * existing prop/style untouched and ONLY change the typeface:
- *   - the existing fontWeight is mapped to the matching Montserrat static file
+ *   - the existing fontWeight is mapped to the matching Nunito Sans static file
  *     (Regular / Medium / SemiBold / Bold / ExtraBold) so the current hierarchy is kept
  *     (custom fonts on Android ignore fontWeight, hence one file per weight);
  *   - numbers use tabular figures (fontVariant tabular-nums) unless a style
@@ -21,25 +21,25 @@ import {
 } from "react-native";
 
 export const FONT_FILES = {
-  Montserrat_400Regular: require("../../assets/fonts/Montserrat_400Regular.ttf"),
-  Montserrat_500Medium: require("../../assets/fonts/Montserrat_500Medium.ttf"),
-  Montserrat_600SemiBold: require("../../assets/fonts/Montserrat_600SemiBold.ttf"),
-  Montserrat_700Bold: require("../../assets/fonts/Montserrat_700Bold.ttf"),
-  Montserrat_800ExtraBold: require("../../assets/fonts/Montserrat_800ExtraBold.ttf"),
+  NunitoSans_400Regular: require("../../assets/fonts/NunitoSans_400Regular.ttf"),
+  NunitoSans_500Medium: require("../../assets/fonts/NunitoSans_500Medium.ttf"),
+  NunitoSans_600SemiBold: require("../../assets/fonts/NunitoSans_600SemiBold.ttf"),
+  NunitoSans_700Bold: require("../../assets/fonts/NunitoSans_700Bold.ttf"),
+  NunitoSans_800ExtraBold: require("../../assets/fonts/NunitoSans_800ExtraBold.ttf"),
 };
 
-const REGULAR = "Montserrat_400Regular";
+const REGULAR = "NunitoSans_400Regular";
 
 function familyForWeight(w: TextStyle["fontWeight"] | undefined): string | undefined {
   if (w === undefined || w === null) return undefined;
-  if (w === "bold") return "Montserrat_700Bold";
+  if (w === "bold") return "NunitoSans_700Bold";
   if (w === "normal") return REGULAR;
   const n = typeof w === "number" ? w : parseInt(String(w), 10);
   if (isNaN(n)) return undefined;
-  if (n >= 800) return "Montserrat_800ExtraBold";
-  if (n >= 700) return "Montserrat_700Bold";
-  if (n >= 600) return "Montserrat_600SemiBold";
-  if (n >= 500) return "Montserrat_500Medium";
+  if (n >= 800) return "NunitoSans_800ExtraBold";
+  if (n >= 700) return "NunitoSans_700Bold";
+  if (n >= 600) return "NunitoSans_600SemiBold";
+  if (n >= 500) return "NunitoSans_500Medium";
   return REGULAR;
 }
 

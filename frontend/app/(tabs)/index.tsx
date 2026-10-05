@@ -688,7 +688,7 @@ export default function Home() {
                     <Pressable
                       key={a.id}
                       testID={`wallet-${a.id}`}
-                      onPress={guard(() => router.push(`/accounts/new?id=${a.id}`))}
+                      onPress={guard(() => router.push(`/accounts/${a.id}`))}
                       style={[styles.walletCard, { backgroundColor: ac }, isThird && styles.walletCardLast]}
                     >
                       <View style={styles.walletInner}>
@@ -891,7 +891,7 @@ export default function Home() {
                     <Pressable
                       testID={`dist-row-${a.id}`}
                       style={styles.distRow}
-                      onPress={() => router.push(`/accounts/new?id=${a.id}`)}
+                      onPress={() => router.push(`/accounts/${a.id}`)}
                     >
                       <View style={[styles.distDot, { backgroundColor: ac }]} />
                       <View style={[styles.distRowIcon, { backgroundColor: ac + "1A" }]}>

@@ -163,6 +163,23 @@ backend:
           comment: "✅✅✅ 5TH VERIFICATION COMPLETE (READ-ONLY after latest .env recreation). Backend supervisor: RUNNING (pid 790, uptime 0:03:15). Port 8001 listening confirmed (netstat shows tcp 0.0.0.0:8001 LISTEN). /app/backend/.env exists with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database, CORS_ORIGINS=*. All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, dict with keys: id, name, email, profile_photo, currency ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, dict with keys: total_balance, month_income, month_expense, debts, accounts_count ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs show NO KeyError for MONGO_URL or DB_NAME in current session (backend started Thu Sep 24 10:06:44 2026). Old KeyError traces in error log are from previous crash-loop sessions before .env was recreated. Current session shows only the documented transient ObjectId serialization error (HTTP 500 on first /api/user after cold boot: 'ObjectId' object is not iterable), followed by stable HTTP 200 responses. NO 502 Bad Gateway errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED."
 
 frontend:
+  - task: "Account DETAIL / preview screen inserted between Home tap and Edit form"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/accounts/[id].tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            New read-only screen app/accounts/[id].tsx (route /accounts/<id>). New flow: Home -> tap square account card -> Account Detail -> "Editar cuenta" -> EXISTING edit form (/accounts/new?id=<id>). Home navigation changed in 2 places only (square card line ~691 and distribution row line ~894): /accounts/new?id= -> /accounts/<id>. NO changes to create/update/delete/API/models/backend/edit-form/tab-bar/card design.
+            Screen sections in exact order: (1) header back button (router.back -> Home) + spacer (no ⋮ menu since it had no utility); identity = account-color icon tile + real name + colored dot + localized type; (2) Current balance card = real current_balance, no decimals (formatCurrencyInt), faint account-color wallet + soft color glow; (3) Account information card (BEFORE movements): Tipo / Color (real color dot) / Saldo inicial (real initial_balance), read-only rows with mint icon tiles; (4) Recent movements card: up to 3 tx filtered by account_id/to_account_id, income green / expense red, row -> /transactions/<id>, "Ver todo" -> /(tabs)/transactions (same target Home uses); (5) Editar cuenta button tinted with the account color.
+            Dynamic color: replicated Home's homeAccountColor logic (HOME_ACCOUNT_COLORS name overrides on light, raw a.color otherwise) so accents EXACTLY match the square card; color affects only accents (icon tile, type dot, balance glow/wallet, color dot, edit button) — background stays cream/surface, cards stay pearl/surfaceSecondary. Dark-mode safe via theme tokens. 2 new i18n keys added (accounts.currentBalance, accounts.accountInfo) in es+en.
+            VERIFIED on web preview: Salud (color #FF654A) -> red accents, $1,500 current + $1,500 initial, type Savings; Casa (#2FA47C) -> green accents, $8,500. Tapping "Editar cuenta" opens the existing edit form pre-filled (Salud/1500/Savings/red) -> logic preserved. Temporarily linked 2 tx to Salud -> rows rendered (Supermercado -$82 red, Transferencia +$300 green, dates, chevrons) and current balance recomputed to $1,718; deleted the temp tx afterward (Salud restored to $1,500). ESLint clean, i18n JSON valid, git diff --check clean.
+            LIMITATION: existing transactions in current data all have account_id=null, so by default every account shows "No movements yet" (data limitation, not a bug). Also there is NO per-account filtered transactions list route, so "Ver todo" reuses Home's existing target /(tabs)/transactions (not account-filtered).
+
   - task: "Nueva deuda - first step (Yo debo / Me deben) VISUAL redesign to card chooser"
     implemented: true
     working: "NA"

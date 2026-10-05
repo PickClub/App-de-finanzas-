@@ -131,6 +131,8 @@
     "addAccount": "Add account",
     "newAccount": "New account",
     "editAccount": "Edit account",
+    "currentBalance": "Current balance",
+    "accountInfo": "Account information",
     "balance": "Balance",
     "totalBalance": "Total balance",
     "name": "Name",

@@ -131,6 +131,8 @@
     "addAccount": "Agregar cuenta",
     "newAccount": "Nueva cuenta",
     "editAccount": "Editar cuenta",
+    "currentBalance": "Saldo actual",
+    "accountInfo": "Información de la cuenta",
     "balance": "Saldo",
     "totalBalance": "Saldo total",
     "name": "Nombre",

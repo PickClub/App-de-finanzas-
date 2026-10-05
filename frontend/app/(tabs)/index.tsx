@@ -955,27 +955,30 @@ export default function Home() {
           {TX_FILTERS.map((f) => {
             const active = txFilter === f.id;
             return (
-              <MRPill
-                key={f.id}
-                testID={`mr-filter-${f.id}`}
-                active={active}
-                onPress={() => setTxFilter(f.id)}
-                icon={f.icon}
-                iconColor={f.color}
-                label={f.label}
-                gradient={scheme === "dark" ? [colors.brandPrimary, colors.brandSecondary] : ["#16694A", "#146448"]}
-                styles={styles}
-              />
+              <React.Fragment key={f.id}>
+                <MRPill
+                  testID={`mr-filter-${f.id}`}
+                  active={active}
+                  onPress={() => setTxFilter(f.id)}
+                  icon={f.icon}
+                  iconColor={f.color}
+                  label={f.label}
+                  gradient={scheme === "dark" ? [colors.brandPrimary, colors.brandSecondary] : ["#16694A", "#146448"]}
+                  styles={styles}
+                />
+                {f.id === "all" && (
+                  <MRIconPill
+                    testID="mr-filter-month"
+                    active={!!dateRange}
+                    onPress={() => setDateSheet(true)}
+                    activeColor={colors.brandPrimary}
+                    idleColor={colors.muted}
+                    styles={styles}
+                  />
+                )}
+              </React.Fragment>
             );
           })}
-          <MRIconPill
-            testID="mr-filter-month"
-            active={!!dateRange}
-            onPress={() => setDateSheet(true)}
-            activeColor={colors.brandPrimary}
-            idleColor={colors.muted}
-            styles={styles}
-          />
         </ScrollView>
 
         {/* List card */}

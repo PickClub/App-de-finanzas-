@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { View, Text, ScrollView, Pressable } from "react-native";
+import React, { useMemo, useRef, useState } from "react";
+import { View, Text, ScrollView, Pressable, Platform, Animated as RNAnimated } from "react-native";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -31,6 +31,46 @@ function CircleIcon({ icon, color, size = 42 }: { icon: string; color: string; s
     >
       <Ionicons name={icon as any} size={size * 0.5} color="#fff" />
     </View>
+  );
+}
+
+// Period pill for Informes. Keeps the EXISTING Reports pill design/size/colors
+// untouched; it ONLY adds the same press-spring micro-interaction used by the
+// "Movimientos recientes" filters (compress to ~0.95 on press-in, soft spring
+// back on release). Business logic (setRange) is unchanged.
+function RangePill({
+  testID,
+  active,
+  onPress,
+  label,
+  styles,
+}: {
+  testID: string;
+  active: boolean;
+  onPress: () => void;
+  label: string;
+  styles: any;
+}) {
+  const scale = useRef(new RNAnimated.Value(1)).current;
+  const useNative = Platform.OS !== "web";
+  const pressIn = () => {
+    RNAnimated.spring(scale, { toValue: 0.95, useNativeDriver: useNative, speed: 50, bounciness: 0 }).start();
+  };
+  const pressOut = () => {
+    RNAnimated.spring(scale, { toValue: 1, useNativeDriver: useNative, speed: 20, bounciness: 12 }).start();
+  };
+  return (
+    <RNAnimated.View style={{ transform: [{ scale }], flexShrink: 0 }}>
+      <Pressable
+        testID={testID}
+        onPress={onPress}
+        onPressIn={pressIn}
+        onPressOut={pressOut}
+        style={[styles.pill, active ? styles.pillActive : styles.pillInactive]}
+      >
+        <Text style={[styles.pillText, active ? styles.pillTextActive : styles.pillTextInactive]}>{label}</Text>
+      </Pressable>
+    </RNAnimated.View>
   );
 }
 
@@ -120,16 +160,14 @@ export default function Reports() {
         {RANGES.map((r) => {
           const active = range === r.id;
           return (
-            <Pressable
+            <RangePill
               key={r.id}
-              onPress={() => setRange(r.id)}
-              style={[styles.pill, active ? styles.pillActive : styles.pillInactive]}
               testID={`range-${r.id}`}
-            >
-              <Text style={[styles.pillText, active ? styles.pillTextActive : styles.pillTextInactive]}>
-                {r.pillLabel}
-              </Text>
-            </Pressable>
+              active={active}
+              onPress={() => setRange(r.id)}
+              label={r.pillLabel}
+              styles={styles}
+            />
           );
         })}
       </ScrollView>

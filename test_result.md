@@ -163,6 +163,21 @@ backend:
           comment: "✅✅✅ 5TH VERIFICATION COMPLETE (READ-ONLY after latest .env recreation). Backend supervisor: RUNNING (pid 790, uptime 0:03:15). Port 8001 listening confirmed (netstat shows tcp 0.0.0.0:8001 LISTEN). /app/backend/.env exists with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database, CORS_ORIGINS=*. All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, dict with keys: id, name, email, profile_photo, currency ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, dict with keys: total_balance, month_income, month_expense, debts, accounts_count ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs show NO KeyError for MONGO_URL or DB_NAME in current session (backend started Thu Sep 24 10:06:44 2026). Old KeyError traces in error log are from previous crash-loop sessions before .env was recreated. Current session shows only the documented transient ObjectId serialization error (HTTP 500 on first /api/user after cold boot: 'ObjectId' object is not iterable), followed by stable HTTP 200 responses. NO 502 Bad Gateway errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED."
 
 frontend:
+  - task: "Home MR filters: move Calendar right after 'Todas' + Reports periods reuse MR press-spring"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(tabs)/index.tsx, frontend/app/(tabs)/reports.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            CHANGE 1 (Home / Movimientos recientes): moved the EXISTING calendar control (MRIconPill, testID mr-filter-month) from the end of the horizontal filter bar to immediately AFTER the "Todas" pill. Implemented by rendering TX_FILTERS in a React.Fragment and injecting the SAME <MRIconPill/> with identical props right after the item whose id === "all"; removed the trailing instance. No change to its size/height/padding/icon/colors/border/active-idle/logic/onPress (opens same DateRangeSheet)/animation/press-spring. Bar stays horizontal with the same scroll; other filters keep their relative order (Income, Expenses, Transfers).
+            CHANGE 2 (Informes periods): added a local RangePill wrapper that KEEPS the existing Reports pill styles/size/colors/logic (setRange) unchanged and ONLY adds the same press-spring micro-interaction used by MRPill (RNAnimated.spring to 0.95 on pressIn speed 50 bounciness 0; back to 1 on pressOut speed 20 bounciness 12; useNativeDriver on non-web). Did NOT copy MR pill dimensions — Reports pills keep their compact size.
+            VERIFIED on web preview: Home bar now reads All -> Calendar -> Income -> Expenses -> Transfers. Reports pills unchanged in size; tapping 7 días/30 días recalculates the window correctly (Promedio diario updated) and active-state coloring works. ESLint clean on both files, git diff --check clean. No calc/period logic touched.
+
   - task: "Account DETAIL / preview screen inserted between Home tap and Edit form"
     implemented: true
     working: "NA"

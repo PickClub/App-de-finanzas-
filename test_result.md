@@ -163,6 +163,19 @@ backend:
           comment: "✅✅✅ 5TH VERIFICATION COMPLETE (READ-ONLY after latest .env recreation). Backend supervisor: RUNNING (pid 790, uptime 0:03:15). Port 8001 listening confirmed (netstat shows tcp 0.0.0.0:8001 LISTEN). /app/backend/.env exists with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database, CORS_ORIGINS=*. All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, dict with keys: id, name, email, profile_photo, currency ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, dict with keys: total_balance, month_income, month_expense, debts, accounts_count ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs show NO KeyError for MONGO_URL or DB_NAME in current session (backend started Thu Sep 24 10:06:44 2026). Old KeyError traces in error log are from previous crash-loop sessions before .env was recreated. Current session shows only the documented transient ObjectId serialization error (HTTP 500 on first /api/user after cold boot: 'ObjectId' object is not iterable), followed by stable HTTP 200 responses. NO 502 Bad Gateway errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED."
 
 frontend:
+  - task: "Nueva deuda - first step (Yo debo / Me deben) VISUAL redesign to card chooser"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/debts/new.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            VISUAL-ONLY redesign of the `if (!step2)` selection step in debts/new.tsx. NO logic/route/API/back/post-save changes. Preserved the exact handlers + testIDs: dir-i-owe -> setDirection("i_owe")+setStep2(true); dir-they-owe -> setDirection("they_owe")+setStep2(true). Header "<- Nueva deuda" and router.back() kept as-is. Removed the two giant red/green full-width buttons. New layout: pale mint rounded tile with forest-green wallet icon on top; title "¿Qué quieres registrar?" + grey subtitle "Selecciona el tipo de deuda" (centered); two equal side-by-side pressable cards (surfaceSecondary bg, soft border, very subtle shadow, minHeight 208) — "Yo debo" (pale coral circle + down arrow accent red + "Dinero que debo pagar" + faint coral bottom wave/wallet) and "Me deben" (pale mint circle + up arrow forest green + "Dinero por cobrar" + faint mint wave/wallet). Red/green used only as accents. Full-card press runs a light reanimated 1->0.96->1 scale (withTiming, no spring) then calls the same handler. Dark-mode-safe via theme tokens (colors.surfaceSecondary/onSurface/muted/incomeGreen/expenseRed + forest = "#126046" light / incomeGreen dark). No new dependencies (reanimated already used project-wide). VERIFIED on web preview: screen renders correctly and tapping "Yo debo" still opens its correct form (header "Yo debo"). ESLint clean, git diff --check clean.
+
   - task: "Distribución de mis cuentas -> DONUT synced to active accounts page (acctPage) + Resumen del mes sparklines"
     implemented: true
     working: "NA"

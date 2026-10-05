@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from "react-native-reanimated";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,13 +18,68 @@ const FREQ = [
   { id: "none", label: "Sin frecuencia" },
 ];
 
+// Visual-only selection card used on the first step of "Nueva deuda".
+// It is fully pressable and runs a light 1 -> 0.96 -> 1 scale response, then
+// calls the SAME handler the old big button used (no logic/route change).
+function SelectCard({
+  testID,
+  title,
+  subtitle,
+  arrowIcon,
+  accent,
+  circleBg,
+  bandBg,
+  styles,
+  onPress,
+}: {
+  testID: string;
+  title: string;
+  subtitle: string;
+  arrowIcon: string;
+  accent: string;
+  circleBg: string;
+  bandBg: string;
+  styles: any;
+  onPress: () => void;
+}) {
+  const scale = useSharedValue(1);
+  const aStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <Pressable
+      testID={testID}
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withTiming(0.96, { duration: 90, easing: Easing.out(Easing.quad) });
+      }}
+      onPressOut={() => {
+        scale.value = withTiming(1, { duration: 140, easing: Easing.out(Easing.quad) });
+      }}
+      style={{ flex: 1 }}
+    >
+      <Animated.View style={[styles.selCard, aStyle]}>
+        <View style={[styles.selBand, { backgroundColor: bandBg }]} pointerEvents="none" />
+        <Ionicons name="wallet-outline" size={58} color={accent} style={styles.selBandIcon} />
+        <View style={[styles.selCircle, { backgroundColor: circleBg }]}>
+          <Ionicons name={arrowIcon as any} size={28} color={accent} />
+        </View>
+        <Text style={styles.selCardTitle}>{title}</Text>
+        <Text style={styles.selCardSub}>{subtitle}</Text>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 export default function NewDebt() {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const styles = useStyles();
   const params = useLocalSearchParams<{ direction?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
+
+  // Forest green accent, consistent with Home (hardcoded brand green on light,
+  // brightened green on dark). Used only for the decorative selection screen.
+  const forest = scheme === "dark" ? colors.incomeGreen : "#126046";
 
   const [direction, setDirection] = useState<string>(params.direction || "");
   const [step2, setStep2] = useState(!!params.direction);
@@ -67,19 +123,35 @@ export default function NewDebt() {
           <Text style={styles.title}>Nueva deuda</Text>
           <View style={{ width: 40 }} />
         </View>
-        <View style={{ padding: spacing.lg, flex: 1, justifyContent: "center" }}>
-          <Text style={{ fontSize: 22, fontWeight: "800", color: colors.onSurface, textAlign: "center" }}>
-            ¿Qué tipo de deuda quieres registrar?
-          </Text>
-          <View style={{ gap: 14, marginTop: 30 }}>
-            <Pressable testID="dir-i-owe" onPress={() => { setDirection("i_owe"); setStep2(true); }} style={[styles.bigBtn, { backgroundColor: colors.expenseRed }]}>
-              <Ionicons name="arrow-down-outline" size={26} color="#fff" />
-              <Text style={styles.bigBtnText}>Yo debo</Text>
-            </Pressable>
-            <Pressable testID="dir-they-owe" onPress={() => { setDirection("they_owe"); setStep2(true); }} style={[styles.bigBtn, { backgroundColor: colors.incomeGreen }]}>
-              <Ionicons name="arrow-up-outline" size={26} color="#fff" />
-              <Text style={styles.bigBtnText}>Me deben</Text>
-            </Pressable>
+        <View style={styles.selWrap}>
+          <View style={[styles.selIconTile, { backgroundColor: colors.incomeGreen + "1A" }]}>
+            <Ionicons name="wallet-outline" size={28} color={forest} />
+          </View>
+          <Text style={styles.selHeading}>¿Qué quieres registrar?</Text>
+          <Text style={styles.selSubheading}>Selecciona el tipo de deuda</Text>
+          <View style={styles.selRow}>
+            <SelectCard
+              testID="dir-i-owe"
+              title="Yo debo"
+              subtitle={"Dinero que debo\npagar"}
+              arrowIcon="arrow-down"
+              accent={colors.expenseRed}
+              circleBg={colors.expenseRed + "1A"}
+              bandBg={colors.expenseRed + "0F"}
+              styles={styles}
+              onPress={() => { setDirection("i_owe"); setStep2(true); }}
+            />
+            <SelectCard
+              testID="dir-they-owe"
+              title="Me deben"
+              subtitle={"Dinero por\ncobrar"}
+              arrowIcon="arrow-up"
+              accent={forest}
+              circleBg={colors.incomeGreen + "1A"}
+              bandBg={colors.incomeGreen + "0F"}
+              styles={styles}
+              onPress={() => { setDirection("they_owe"); setStep2(true); }}
+            />
           </View>
         </View>
       </View>
@@ -148,12 +220,38 @@ export default function NewDebt() {
   );
 }
 
-const useStyles = makeStyles((colors) => ({
+const useStyles = makeStyles((colors, scheme) => ({
   headerRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: spacing.lg },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
   title: { flex: 1, fontSize: 20, fontWeight: "800", color: colors.onSurface },
-  bigBtn: { flexDirection: "row", padding: 22, borderRadius: radius.cardLg, alignItems: "center", justifyContent: "center", gap: 12 },
-  bigBtnText: { color: "#fff", fontWeight: "800", fontSize: 18 },
+  // --- First step: debt-type selection (visual redesign) ---
+  selWrap: { paddingHorizontal: spacing.lg, flex: 1, justifyContent: "center", paddingBottom: 48 },
+  selIconTile: { alignSelf: "center", width: 60, height: 60, borderRadius: 18, alignItems: "center", justifyContent: "center", marginBottom: 18 },
+  selHeading: { fontSize: 24, fontWeight: "800", color: colors.onSurface, textAlign: "center", letterSpacing: -0.5 },
+  selSubheading: { fontSize: 14, color: colors.muted, textAlign: "center", marginTop: 6, fontWeight: "500" },
+  selRow: { flexDirection: "row", gap: 14, marginTop: 28 },
+  selCard: {
+    flex: 1,
+    minHeight: 208,
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: radius.cardLg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingTop: 26,
+    paddingHorizontal: 14,
+    alignItems: "center",
+    overflow: "hidden",
+    ...Platform.select({
+      ios: { shadowColor: "#000", shadowOpacity: scheme === "dark" ? 0.25 : 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+      android: { elevation: 2 },
+      default: {},
+    }),
+  },
+  selBand: { position: "absolute", left: 0, right: 0, bottom: 0, height: 92, borderTopLeftRadius: 78, borderTopRightRadius: 14 },
+  selBandIcon: { position: "absolute", right: 8, bottom: 6, opacity: scheme === "dark" ? 0.14 : 0.1 },
+  selCircle: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  selCardTitle: { fontSize: 18, fontWeight: "800", color: colors.onSurface, textAlign: "center" },
+  selCardSub: { fontSize: 13, color: colors.muted, textAlign: "center", marginTop: 6, fontWeight: "500", lineHeight: 18 },
   label: { color: colors.muted, fontSize: 12, fontWeight: "700", textTransform: "uppercase", marginTop: 14, marginBottom: 8, letterSpacing: 0.5 },
   input: { fontSize: 15, color: colors.onSurface, backgroundColor: colors.surfaceSecondary, padding: 14, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border },
   freqChip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },

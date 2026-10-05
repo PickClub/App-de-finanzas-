@@ -1,10 +1,10 @@
 /**
- * "Finance Editorial" typography layer.
+ * Global typography layer — Montserrat.
  *
  * Drop-in replacements for React Native's <Text> / <TextInput>. They keep every
  * existing prop/style untouched and ONLY change the typeface:
- *   - the existing fontWeight is mapped to the matching Lora static file
- *     (Regular / Medium / SemiBold / Bold) so the current hierarchy is kept
+ *   - the existing fontWeight is mapped to the matching Montserrat static file
+ *     (Regular / Medium / SemiBold / Bold / ExtraBold) so the current hierarchy is kept
  *     (custom fonts on Android ignore fontWeight, hence one file per weight);
  *   - numbers use tabular figures (fontVariant tabular-nums) unless a style
  *     already sets fontVariant.
@@ -21,23 +21,25 @@ import {
 } from "react-native";
 
 export const FONT_FILES = {
-  Lora_400Regular: require("../../assets/fonts/Lora_400Regular.ttf"),
-  Lora_500Medium: require("../../assets/fonts/Lora_500Medium.ttf"),
-  Lora_600SemiBold: require("../../assets/fonts/Lora_600SemiBold.ttf"),
-  Lora_700Bold: require("../../assets/fonts/Lora_700Bold.ttf"),
+  Montserrat_400Regular: require("../../assets/fonts/Montserrat_400Regular.ttf"),
+  Montserrat_500Medium: require("../../assets/fonts/Montserrat_500Medium.ttf"),
+  Montserrat_600SemiBold: require("../../assets/fonts/Montserrat_600SemiBold.ttf"),
+  Montserrat_700Bold: require("../../assets/fonts/Montserrat_700Bold.ttf"),
+  Montserrat_800ExtraBold: require("../../assets/fonts/Montserrat_800ExtraBold.ttf"),
 };
 
-const REGULAR = "Lora_400Regular";
+const REGULAR = "Montserrat_400Regular";
 
 function familyForWeight(w: TextStyle["fontWeight"] | undefined): string | undefined {
   if (w === undefined || w === null) return undefined;
-  if (w === "bold") return "Lora_700Bold";
+  if (w === "bold") return "Montserrat_700Bold";
   if (w === "normal") return REGULAR;
   const n = typeof w === "number" ? w : parseInt(String(w), 10);
   if (isNaN(n)) return undefined;
-  if (n >= 700) return "Lora_700Bold";
-  if (n >= 600) return "Lora_600SemiBold";
-  if (n >= 500) return "Lora_500Medium";
+  if (n >= 800) return "Montserrat_800ExtraBold";
+  if (n >= 700) return "Montserrat_700Bold";
+  if (n >= 600) return "Montserrat_600SemiBold";
+  if (n >= 500) return "Montserrat_500Medium";
   return REGULAR;
 }
 
@@ -45,7 +47,7 @@ const FamilyContext = createContext<string | null>(null);
 
 // True when the rendered text is a numeric value (amounts, %, numeric dates…):
 // it contains digits and no letters. Tabular figures are applied only there so
-// mixed text ("7 días", "Pago: Tienda") keeps Lora's natural spacing.
+// mixed text ("7 días", "Pago: Tienda") keeps the font's natural spacing.
 function plainText(children: React.ReactNode): string {
   if (typeof children === "number") return String(children);
   if (typeof children === "string") return children;

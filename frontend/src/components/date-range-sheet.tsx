@@ -1,15 +1,29 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { View, StyleSheet } from "react-native";
+import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { BackHandler, View, StyleSheet } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { AppSheet } from "@/src/components/sheets";
-import { useTheme, radius } from "@/src/theme";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetView,
+  useBottomSheetTimingConfigs,
+  type BottomSheetBackdropProps,
+} from "@gorhom/bottom-sheet";
+import { Easing } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme, radius, spacing } from "@/src/theme";
 
 import { us, scaleStyles } from "@/src/ui-scale";
 export type DateRange = { start: number; end: number };
+export type DateRangeSheetHandle = {
+  open: (value: DateRange | null) => void;
+  close: () => void;
+};
 
 const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
+const OPEN_EASING = Easing.out(Easing.cubic);
+const CLOSE_EASING = Easing.in(Easing.cubic);
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
@@ -39,24 +53,30 @@ function longEs(d: Date) {
 
 /**
  * Date / date-range selection bottom sheet.
- * Reuses the app's AppSheet primitive + theme tokens so it feels native:
+ * Uses the existing Reanimated sheet provider + the same theme tokens:
  * pearl surface, mint accents, dark-green selected dates, rounded corners,
  * Spanish labels. Supports single-day and start→end range selection with
  * month navigation. Nothing is applied until the user taps "Aplicar".
  */
-export function DateRangeSheet({
-  visible,
-  value,
-  onClose,
-  onApply,
-}: {
-  visible: boolean;
-  value: DateRange | null;
-  onClose: () => void;
+// Opening is local to this component: Home and its charts do not re-render.
+export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
   onApply: (range: DateRange | null) => void;
-}) {
+}>(function DateRangeSheet({ onApply }, ref) {
   const { colors, scheme } = useTheme();
+  const insets = useSafeAreaInsets();
   const isDark = scheme === "dark";
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const presented = useRef(false);
+  const closing = useRef(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const animationConfigs = useBottomSheetTimingConfigs({
+    duration: 260,
+    easing: OPEN_EASING,
+  });
+  const closeAnimationConfigs = useBottomSheetTimingConfigs({
+    duration: 200,
+    easing: CLOSE_EASING,
+  });
 
   const green = isDark ? "#2CA079" : "#126046";
   const mint = isDark ? "rgba(44,160,121,0.22)" : "#DCEBE0";
@@ -66,22 +86,70 @@ export function DateRangeSheet({
   const [selStart, setSelStart] = useState<Date | null>(null);
   const [selEnd, setSelEnd] = useState<Date | null>(null);
 
-  // Initialise from the incoming value each time the sheet opens.
-  useEffect(() => {
-    if (!visible) return;
+  const close = useCallback(() => {
+    if (!presented.current || closing.current) return;
+    closing.current = true;
+    sheetRef.current?.dismiss(closeAnimationConfigs);
+  }, [closeAnimationConfigs]);
+
+  const open = useCallback((value: DateRange | null) => {
+    if (presented.current) return;
+    // Prepare the draft before presenting; no post-open effect / second grid.
+    let month: Date;
     if (value) {
       const s = new Date(value.start);
       const e = new Date(value.end);
       setSelStart(startOfDay(s));
       setSelEnd(sameDay(s, e) ? null : startOfDay(e));
-      setViewMonth(new Date(s.getFullYear(), s.getMonth(), 1));
+      month = new Date(s.getFullYear(), s.getMonth(), 1);
     } else {
       setSelStart(null);
       setSelEnd(null);
-      setViewMonth(new Date());
+      month = new Date();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+    // Keep the cached month grid when re-opening the same month.
+    setViewMonth((current) => current.getFullYear() === month.getFullYear()
+      && current.getMonth() === month.getMonth() ? current : month);
+    presented.current = true;
+    closing.current = false;
+    setIsOpen(true);
+    sheetRef.current?.present();
+  }, []);
+
+  useImperativeHandle(ref, () => ({ open, close }), [open, close]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      close();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [isOpen, close]);
+
+  const handleDismiss = useCallback(() => {
+    presented.current = false;
+    closing.current = false;
+    setIsOpen(false);
+  }, []);
+
+  const renderBackdrop = useCallback((props: BottomSheetBackdropProps) => (
+    <BottomSheetBackdrop
+      {...props}
+      appearsOnIndex={0}
+      disappearsOnIndex={-1}
+      opacity={0.45}
+      pressBehavior="none"
+      onPress={close}
+      style={[props.style, st.backdrop]}
+    />
+  ), [close]);
+
+  const renderHandle = useCallback(() => (
+    <View style={st.handle}>
+      <View style={[st.grip, { backgroundColor: colors.borderStrong }]} />
+    </View>
+  ), [colors.borderStrong]);
 
   const cells = useMemo(() => {
     const y = viewMonth.getFullYear();
@@ -132,13 +200,16 @@ export function DateRangeSheet({
   const applyDisabled = !selStart;
 
   const handleApply = () => {
+    if (closing.current) return;
     if (!selStart) {
       onApply(null);
+      close();
       return;
     }
     const start = startOfDay(selStart).getTime();
     const end = endOfDay(selEnd || selStart).getTime();
     onApply({ start, end });
+    close();
   };
 
   const isRange = !!(selStart && selEnd);
@@ -150,7 +221,21 @@ export function DateRangeSheet({
   const kindLabel = !selStart ? "—" : isRange ? "Rango" : "Un solo día";
 
   return (
-    <AppSheet visible={visible} onClose={onClose} testID="date-range-sheet">
+    <BottomSheetModal
+      ref={sheetRef}
+      enableDynamicSizing
+      enablePanDownToClose={false}
+      enableContentPanningGesture={false}
+      enableHandlePanningGesture={false}
+      animationConfigs={animationConfigs}
+      backdropComponent={renderBackdrop}
+      handleComponent={renderHandle}
+      backgroundStyle={[st.sheetBackground, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      style={st.sheetShadow}
+      topInset={insets.top}
+      onDismiss={handleDismiss}
+    >
+    <BottomSheetView testID="date-range-sheet" style={[st.sheetContent, { paddingBottom: insets.bottom + us(spacing.lg) }]}>
       {/* Header */}
       <View style={st.headRow}>
         <View style={{ flex: 1, paddingRight: us(12) }}>
@@ -161,7 +246,7 @@ export function DateRangeSheet({
         </View>
         <Pressable
           testID="date-sheet-close"
-          onPress={onClose}
+          onPress={close}
           style={[st.closeBtn, { backgroundColor: colors.surfaceTertiary }]}
           hitSlop={8}
         >
@@ -263,11 +348,18 @@ export function DateRangeSheet({
       >
         <Text style={st.applyText}>Aplicar</Text>
       </Pressable>
-    </AppSheet>
+    </BottomSheetView>
+    </BottomSheetModal>
   );
-}
+}));
 
 const st = StyleSheet.create(scaleStyles({
+  sheetContent: { paddingHorizontal: spacing.lg },
+  sheetBackground: { borderTopLeftRadius: radius.cardLg, borderTopRightRadius: radius.cardLg, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderWidth: 1 },
+  sheetShadow: { shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 24, shadowOffset: { width: 0, height: -8 }, elevation: 24 },
+  backdrop: { backgroundColor: "#14100C" },
+  handle: { paddingTop: 10 },
+  grip: { alignSelf: "center", width: 40, height: 5, borderRadius: 3, marginBottom: 14 },
   headRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 14 },
   title: { fontSize: 20, fontWeight: "800", letterSpacing: -0.3 },
   subtitle: { fontSize: 13, marginTop: 4, lineHeight: 18 },

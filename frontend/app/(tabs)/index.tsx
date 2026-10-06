@@ -26,7 +26,7 @@ import i18n, { useTranslation } from "@/src/i18n";
 import { IconTile } from "@/src/components/ui";
 import { useLock } from "@/src/lock";
 import { WalletIcon, ChartIcon, HandCoinIcon } from "@/src/components/animated-section-icons";
-import { DateRangeSheet, type DateRange } from "@/src/components/date-range-sheet";
+import { DateRangeSheet, type DateRange, type DateRangeSheetHandle } from "@/src/components/date-range-sheet";
 
 import { us, ufs } from "@/src/ui-scale";
 // --- HOME-ONLY color redesign (light mode only) ---------------------------
@@ -440,8 +440,9 @@ export default function Home() {
   const { guard } = useLock();
   const [hidden, setHidden] = useState(false);
   const [txFilter, setTxFilter] = useState("all");
-  const [dateSheet, setDateSheet] = useState(false);
+  const dateSheetRef = useRef<DateRangeSheetHandle>(null);
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const applyDateRange = useCallback((range: DateRange | null) => setDateRange(range), []);
 
   const summaryQ = useQuery({ queryKey: ["summary"], queryFn: api.summary });
   const userQ = useQuery({ queryKey: ["user"], queryFn: api.getUser });
@@ -589,7 +590,7 @@ export default function Home() {
   useFocusEffect(
     useCallback(() => {
       focusId.value = focusId.value + 1;
-      return () => {};
+      return () => dateSheetRef.current?.close();
     }, [focusId]),
   );
 
@@ -981,7 +982,7 @@ export default function Home() {
                   <MRIconPill
                     testID="mr-filter-month"
                     active={!!dateRange}
-                    onPress={() => setDateSheet(true)}
+                    onPress={() => dateSheetRef.current?.open(dateRange)}
                     activeColor={colors.brandPrimary}
                     idleColor={colors.muted}
                     styles={styles}
@@ -1160,13 +1161,8 @@ export default function Home() {
       </View>
     </Animated.ScrollView>
     <DateRangeSheet
-      visible={dateSheet}
-      value={dateRange}
-      onClose={() => setDateSheet(false)}
-      onApply={(range) => {
-        setDateRange(range);
-        setDateSheet(false);
-      }}
+      ref={dateSheetRef}
+      onApply={applyDateRange}
     />
     </View>
   );

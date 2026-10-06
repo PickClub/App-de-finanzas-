@@ -109,6 +109,20 @@ user_problem_statement: |
   3) Dashboard Ingresos/Gastos cards enriched (icon, title, amount, mini bar chart, promedio diario) and made equal height to the accounts % card.
 
 backend:
+  - task: "Restore backend persistence/connectivity: recreate missing backend/.env + frontend/.env (CREATE/SAVE/RETRIEVE for accounts, transactions, debts)"
+    implemented: true
+    working: true
+    file: "backend/.env, frontend/.env, backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "ROOT CAUSE: both /app/backend/.env and /app/frontend/.env were MISSING (gitignored, lost on import). Backend crash-looped on KeyError('MONGO_URL') at server.py:14 so port 8001 was DOWN (curl 000). Frontend BASE was '' because EXPO_PUBLIC_BACKEND_URL was undefined. FIX (minimal, env-only, NO code/UI changes): recreated backend/.env (MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database) and frontend/.env (EXPO_PUBLIC_BACKEND_URL=<preview endpoint> + EXPO_PACKAGER_PROXY_URL/HOSTNAME). Restarted backend+expo. Manual runtime test PASSED: POST /api/accounts, /api/transactions, /api/debts all returned 200 with id; each GET list contained the created record; direct MongoDB (moneyflow_database) confirmed 1 doc each (true persistence, not in-memory); cleaned up via DELETE (counts back to 0). DB had NO pre-existing app data. Please VERIFY independently: backend up on 8001; for accounts/transactions/debts do CREATE -> GET-read-back -> confirm retrievable, then DELETE test records. Do NOT run /api/seed. Do NOT delete/modify any real user data."
+        - working: true
+          agent: "testing"
+          comment: "✅✅✅ BACKEND PERSISTENCE FULLY VERIFIED - ALL 5 TESTS PASSED (5/5). Comprehensive testing completed against localhost:8001 following exact review request sequence. RESULTS: [TEST 1] HEALTH CHECKS ✓✓✓: GET /api/user → HTTP 200 (user_id=default-user, transient 500 on first call handled correctly per documentation) ✓, GET /api/accounts → HTTP 200 ✓, GET /api/transactions → HTTP 200 ✓, GET /api/debts → HTTP 200 ✓. Backend is UP and serving on port 8001. [TEST 2] ACCOUNT PERSISTENCE ✓✓✓: POST /api/accounts (name=ZZ_TEST_ACCOUNT, type=cash, initial_balance=123.45) → HTTP 200 with id=10e417ae-125b-4758-9619-e83c5d4dd776 ✓. GET /api/accounts → HTTP 200, returned 1 account ✓. PERSISTENCE VERIFIED: created account found in list with matching fields (name, type, balance all correct) ✓. [TEST 3] TRANSACTION PERSISTENCE ✓✓✓: POST /api/transactions (name=ZZ_TEST_TX, amount=50.0, type=income, account_id=test_account) → HTTP 200 with id=9c1216e7-3d35-4d22-a95c-ac131d086dbb ✓. GET /api/transactions → HTTP 200, returned 1 transaction ✓. PERSISTENCE VERIFIED: created transaction found in list with matching fields (name, amount, type all correct) ✓. [TEST 4] DEBT PERSISTENCE ✓✓✓: POST /api/debts (name=ZZ_TEST_DEBT, direction=i_owe, person=Tester, original_amount=200.0) → HTTP 200 with id=68742989-e677-4c08-b040-42b73f853003 ✓. GET /api/debts → HTTP 200, returned 1 debt ✓. PERSISTENCE VERIFIED: created debt found in list with matching fields (name, direction, amount all correct) ✓. [TEST 5] CLEANUP ✓✓✓: DELETE /api/accounts/{id} → HTTP 200 {ok:true}, account removed from list ✓. DELETE /api/transactions/{id} → HTTP 200 {ok:true}, transaction removed from list ✓. DELETE /api/debts/{id} → HTTP 200 {ok:true}, debt removed from list ✓. All test records successfully cleaned up. [MONGODB VERIFICATION] ✓✓✓: Database 'moneyflow_database' exists ✓. Collections (accounts, transactions, debts, users) exist ✓. After cleanup: accounts=0, transactions=0, debts=0, users=1 (default-user) ✓. TRUE PERSISTENCE TO MONGODB CONFIRMED (not in-memory). CONCLUSION: Backend persistence is working correctly. CREATE → SAVE → RETRIEVE flow works for all three entities (accounts, transactions, debts). Each created record is retrievable via GET and persists to MongoDB. DELETE operations work correctly. HTTP 200 responses are NOT empty - each contains the actual created record with proper id field. Backend .env configuration is correct (MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database). No /api/seed was run. No real user data was modified. Test data was fully cleaned up."
   - task: "Recurring templates API (config-only MVP): GET/POST/DELETE /api/recurring"
     implemented: true
     working: true
@@ -1594,3 +1608,72 @@ agent_communication:
         CONCLUSION: The navigation transition bug fix is WORKING CORRECTLY. The "ghost cards / ghost screens" issue has been RESOLVED. The custom fade-through transition ensures clean tab switching with no simultaneous visibility of two screens. Stack navigation slide is faster (180ms) and clean. All navigation is functional and stable.
         
         NOTE: Tested on WEB with mobile viewport. The review request mentions the fix is primarily for visual smoothness which is best judged on Expo Go/Android, but web testing confirms functional correctness, absence of ghost content, and no console errors.
+
+    - agent: "testing"
+      message: |
+        ✅✅✅ BACKEND PERSISTENCE VERIFICATION COMPLETE - ALL TESTS PASSED (5/5)
+        
+        **TEST DATE:** 2026-09-26
+        **TEST TARGET:** localhost:8001
+        **TEST SCOPE:** Backend persistence/connectivity fix (recreated backend/.env + frontend/.env)
+        
+        **COMPREHENSIVE TEST RESULTS:**
+        
+        ✅ [TEST 1] HEALTH CHECKS - ALL PASSED (4/4)
+        • GET /api/user → HTTP 200 ✓ (user_id=default-user)
+          - Transient 500 on first call handled correctly per documentation (ObjectId serialization)
+          - Second call returned stable HTTP 200 as expected
+        • GET /api/accounts → HTTP 200 ✓
+        • GET /api/transactions → HTTP 200 ✓
+        • GET /api/debts → HTTP 200 ✓
+        • Backend is UP and serving on port 8001 ✓
+        
+        ✅✅✅ [TEST 2] ACCOUNT PERSISTENCE - VERIFIED
+        • POST /api/accounts (name=ZZ_TEST_ACCOUNT, type=cash, initial_balance=123.45) → HTTP 200 ✓
+        • Response contains id field: 10e417ae-125b-4758-9619-e83c5d4dd776 ✓
+        • GET /api/accounts → HTTP 200, returned 1 account ✓
+        • PERSISTENCE VERIFIED: Created account found in list ✓
+        • Field values match original data (name, type, balance all correct) ✓
+        
+        ✅✅✅ [TEST 3] TRANSACTION PERSISTENCE - VERIFIED
+        • POST /api/transactions (name=ZZ_TEST_TX, amount=50.0, type=income, account_id=test_account) → HTTP 200 ✓
+        • Response contains id field: 9c1216e7-3d35-4d22-a95c-ac131d086dbb ✓
+        • GET /api/transactions → HTTP 200, returned 1 transaction ✓
+        • PERSISTENCE VERIFIED: Created transaction found in list ✓
+        • Field values match original data (name, amount, type all correct) ✓
+        
+        ✅✅✅ [TEST 4] DEBT PERSISTENCE - VERIFIED
+        • POST /api/debts (name=ZZ_TEST_DEBT, direction=i_owe, person=Tester, original_amount=200.0) → HTTP 200 ✓
+        • Response contains id field: 68742989-e677-4c08-b040-42b73f853003 ✓
+        • GET /api/debts → HTTP 200, returned 1 debt ✓
+        • PERSISTENCE VERIFIED: Created debt found in list ✓
+        • Field values match original data (name, direction, amount all correct) ✓
+        
+        ✅✅✅ [TEST 5] CLEANUP - ALL PASSED (3/3)
+        • DELETE /api/accounts/{id} → HTTP 200 {ok:true} ✓
+        • Account successfully removed from list (verified via GET) ✓
+        • DELETE /api/transactions/{id} → HTTP 200 {ok:true} ✓
+        • Transaction successfully removed from list (verified via GET) ✓
+        • DELETE /api/debts/{id} → HTTP 200 {ok:true} ✓
+        • Debt successfully removed from list (verified via GET) ✓
+        
+        ✅✅✅ [MONGODB VERIFICATION] TRUE PERSISTENCE CONFIRMED
+        • Database 'moneyflow_database' exists ✓
+        • Collections exist: accounts, transactions, debts, users ✓
+        • After cleanup: accounts=0, transactions=0, debts=0, users=1 (default-user) ✓
+        • TRUE PERSISTENCE TO MONGODB CONFIRMED (not in-memory) ✓
+        
+        **CRITICAL FINDINGS:**
+        • CREATE → SAVE → RETRIEVE flow works correctly for all three entities ✓
+        • Each created record is retrievable via GET and persists to MongoDB ✓
+        • HTTP 200 responses are NOT empty - each contains the actual created record with proper id field ✓
+        • DELETE operations work correctly and remove records from both API and database ✓
+        • Backend .env configuration is correct (MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database) ✓
+        
+        **TEST CONSTRAINTS FOLLOWED:**
+        • Did NOT run /api/seed ✓
+        • Did NOT modify any real user data ✓
+        • Test data was fully cleaned up ✓
+        • Only tested temporary ZZ_TEST_* records ✓
+        
+        **CONCLUSION:** Backend persistence is WORKING CORRECTLY. The .env recreation fix has successfully restored full CREATE/SAVE/RETRIEVE/DELETE functionality. All data persists to MongoDB (not in-memory). The backend is stable and serving on port 8001.

@@ -425,6 +425,9 @@ export default function Home() {
   const { colors: baseColors, scheme } = useTheme();
   const { width: windowW } = useWindowDimensions();
   const distStacked = windowW < DIST_STACK_BELOW;
+  // Month-summary cards: on narrow screens the square card is shorter than its
+  // content, so only the local vertical gaps tighten (sizes untouched).
+  const statCompact = windowW < DIST_STACK_BELOW;
   const { t } = useTranslation();
   // Home-only light palette override (dark mode untouched).
   const colors = useMemo(
@@ -792,45 +795,42 @@ export default function Home() {
       <View style={styles.statRow}>
         {/* Balance del mes (net = income - expense) — number in dark/black */}
         <View style={styles.statCard}>
-          <View style={[styles.statBadge, { backgroundColor: scheme === "dark" ? colors.brandPrimary + "26" : "#DCE9DD" }]}>
+          <View style={[styles.statBadge, statCompact && styles.statBadgeCompact, { backgroundColor: scheme === "dark" ? colors.brandPrimary + "26" : "#DCE9DD" }]}>
             <Ionicons name="wallet-outline" size={us(16)} color={scheme === "dark" ? colors.brandPrimary : "#126046"} />
           </View>
-          <Text style={styles.statTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Balance del mes", "Month balance")}</Text>
+          <Text style={[styles.statTitle, statCompact && styles.statTitleCompact]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Balance del mes", "Month balance")}</Text>
           <Text style={[styles.statAmount, { color: colors.onSurface }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
             {money(monthNet)}
           </Text>
-          <View style={styles.statSpark}>
+          <View style={[styles.statSpark, statCompact && styles.statSparkCompact]}>
             <StatSpark color={scheme === "dark" ? colors.brandPrimary : "#126046"} data={[3, 4, 3.4, 5, 4.6, 6, 5.6, 6.6]} />
           </View>
-          <Text style={styles.statThisMonth}>{t("home.thisMonth")}</Text>
         </View>
         {/* Total gastado — soft / desaturated red */}
         <View style={styles.statCard}>
-          <View style={[styles.statBadge, { backgroundColor: colors.expenseRed + (scheme === "dark" ? "26" : "1F") }]}>
+          <View style={[styles.statBadge, statCompact && styles.statBadgeCompact, { backgroundColor: colors.expenseRed + (scheme === "dark" ? "26" : "1F") }]}>
             <Ionicons name="trending-down" size={us(16)} color={colors.expenseRed} />
           </View>
-          <Text style={styles.statTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Total gastado", "Total spent")}</Text>
+          <Text style={[styles.statTitle, statCompact && styles.statTitleCompact]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Total gastado", "Total spent")}</Text>
           <Text style={[styles.statAmount, { color: lighten(colors.expenseRed, 0.16) }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
             {money(summary?.month_expense || 0)}
           </Text>
-          <View style={styles.statSpark}>
+          <View style={[styles.statSpark, statCompact && styles.statSparkCompact]}>
             <StatSpark color={colors.expenseRed} data={[3.4, 3, 4, 3.8, 4.8, 4.4, 5.6, 6.2]} />
           </View>
-          <Text style={styles.statThisMonth}>{t("home.thisMonth")}</Text>
         </View>
         {/* Total ingresado — green */}
         <View style={styles.statCard}>
-          <View style={[styles.statBadge, { backgroundColor: colors.incomeGreen + (scheme === "dark" ? "26" : "1F") }]}>
+          <View style={[styles.statBadge, statCompact && styles.statBadgeCompact, { backgroundColor: colors.incomeGreen + (scheme === "dark" ? "26" : "1F") }]}>
             <Ionicons name="trending-up" size={us(16)} color={colors.incomeGreen} />
           </View>
-          <Text style={styles.statTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Total ingresado", "Total income")}</Text>
+          <Text style={[styles.statTitle, statCompact && styles.statTitleCompact]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Total ingresado", "Total income")}</Text>
           <Text style={[styles.statAmount, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
             {money(summary?.month_income || 0)}
           </Text>
-          <View style={styles.statSpark}>
+          <View style={[styles.statSpark, statCompact && styles.statSparkCompact]}>
             <StatSpark color={colors.incomeGreen} data={[3, 3.6, 3.2, 4.4, 4, 5, 5.4, 6.4]} />
           </View>
-          <Text style={styles.statThisMonth}>{t("home.thisMonth")}</Text>
         </View>
       </View>
 
@@ -1516,8 +1516,10 @@ const useStyles = makeStyles((colors, scheme) => {
   },
   statTitle: { fontSize: 11.5, lineHeight: 14, color: wallMuted, fontWeight: "600", textAlign: "center", marginBottom: 5, flexShrink: 0 },
   statAmount: { fontSize: 17, lineHeight: 20, fontWeight: "800", letterSpacing: -0.4, textAlign: "center", flexShrink: 0 },
-  statThisMonth: { fontSize: 10, lineHeight: 12, color: wallSub, fontWeight: "500", marginTop: 5, textAlign: "center" },
   statSpark: { width: "100%", paddingHorizontal: 2, marginTop: 6 },
+  statBadgeCompact: { marginBottom: 2 },
+  statTitleCompact: { marginBottom: 2 },
+  statSparkCompact: { marginTop: 2 },
   // --- Distribución de mis cuentas ---
   distWrap: { paddingHorizontal: spacing.lg, marginTop: 10 },
   distCard: {

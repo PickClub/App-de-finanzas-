@@ -1526,7 +1526,9 @@ const useStyles = makeStyles((colors, scheme) => {
   distSeeText: { fontSize: 12, fontWeight: "700", color: accentGreen },
   distBody: { flexDirection: "row", alignItems: "center", gap: 10 },
   distDonutWrap: { width: DONUT_SIZE, height: DONUT_SIZE, alignItems: "center", justifyContent: "center" },
-  distCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+  // Explicit overlay the exact size of the donut (StyleSheet.absoluteFillObject
+  // no longer exists in RN 0.86 native, which dropped this block below the ring).
+  distCenter: { position: "absolute", top: 0, left: 0, width: DONUT_SIZE, height: DONUT_SIZE, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
   distCenterVal: { fontSize: 19, fontWeight: "800", color: wallText, letterSpacing: -0.5, textAlign: "center", maxWidth: DONUT_SIZE - DONUT_STROKE * 2 },
   distCenterLabel: { fontSize: 11, color: wallMuted, fontWeight: "600", marginTop: 1 },
   distList: { flex: 1, minWidth: 0 },

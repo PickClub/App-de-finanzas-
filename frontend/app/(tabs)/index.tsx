@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { View, ScrollView, StyleSheet, RefreshControl, Dimensions, Platform, Animated as RNAnimated } from "react-native";
+import { View, ScrollView, StyleSheet, RefreshControl, Dimensions, Platform, Animated as RNAnimated, useWindowDimensions } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Animated, {
@@ -417,8 +417,14 @@ function MRIconPill({
   );
 }
 
+// Below this real (unscaled) logical width the accounts list no longer fits
+// beside the donut, so the distribution body stacks (donut above, list below).
+const DIST_STACK_BELOW = 350;
+
 export default function Home() {
   const { colors: baseColors, scheme } = useTheme();
+  const { width: windowW } = useWindowDimensions();
+  const distStacked = windowW < DIST_STACK_BELOW;
   const { t } = useTranslation();
   // Home-only light palette override (dark mode untouched).
   const colors = useMemo(
@@ -838,7 +844,7 @@ export default function Home() {
               <Ionicons name="chevron-forward" size={us(13)} color={scheme === "dark" ? colors.brandPrimary : "#126046"} />
             </Pressable>
           </View>
-          <View style={styles.distBody}>
+          <View style={[styles.distBody, distStacked && styles.distBodyStacked]}>
             {/* Donut — segments ONLY (no % labels on the arcs). Total in center
                  is the SUM of the active page's accounts, not the global balance. */}
             <View style={styles.distDonutWrap}>
@@ -889,7 +895,7 @@ export default function Home() {
               </View>
             </View>
             {/* Side list — SAME paged accounts. Percentages live ONLY here. */}
-            <View style={styles.distList}>
+            <View style={[styles.distList, distStacked && styles.distListStacked]}>
               {distAccounts.map((a: any) => {
                 const ac = homeAccountColor(a, scheme);
                 const raw = distTotal > 0 ? ((a?.current_balance || 0) / distTotal) * 100 : 0;
@@ -1538,12 +1544,14 @@ const useStyles = makeStyles((colors, scheme) => {
   distCenterVal: { fontSize: 19, fontWeight: "800", color: wallText, letterSpacing: -0.5, textAlign: "center", maxWidth: DONUT_BASE - DONUT_STROKE_BASE * 2 },
   distCenterLabel: { fontSize: 11, color: wallMuted, fontWeight: "600", marginTop: 1 },
   distList: { flex: 1, minWidth: 0 },
+  distBodyStacked: { flexDirection: "column", alignItems: "center" },
+  distListStacked: { flex: 0, alignSelf: "stretch" },
   distRow: { flexDirection: "row", alignItems: "center", paddingVertical: 5 },
   distDot: { width: 9, height: 9, borderRadius: 4.5, marginRight: 6 },
   distRowIcon: { width: 18, height: 18, borderRadius: 6, alignItems: "center", justifyContent: "center", marginRight: 5 },
   distName: { flex: 1, minWidth: 0, fontSize: 13, fontWeight: "400", color: wallText },
-  distBalance: { width: 48, fontSize: 11.5, fontWeight: "600", color: wallMuted, textAlign: "right" },
-  distPctCol: { minWidth: 40, alignItems: "flex-end", marginLeft: 5 },
+  distBalance: { minWidth: 48, flexShrink: 0, fontSize: 11.5, fontWeight: "600", color: wallMuted, textAlign: "right" },
+  distPctCol: { minWidth: 46, alignItems: "flex-end", marginLeft: 5 },
   distPctPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   distPct: { fontSize: 11.5, fontWeight: "800" },
   distEmpty: { fontSize: 12, color: wallMuted, paddingVertical: 8 },

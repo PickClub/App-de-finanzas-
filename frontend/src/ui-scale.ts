@@ -19,23 +19,31 @@
  */
 import type { ImageStyle, TextStyle, ViewStyle } from "react-native";
 
-export const UI_SCALE = 0.8;
+/** Base factor (the 80% look). */
+export const BASE_SCALE = 0.8;
+/** Single additional boost applied on top of the 80% look (+10%). */
+export const SCALE_BOOST = 1.1;
+/** Effective dimension factor: 0.8 × 1.10 = 0.88. */
+export const UI_SCALE = BASE_SCALE * SCALE_BOOST;
 
-/** Scale a dimension (width, padding, icon size…). */
-export const us = (v: number): number => Math.round(v * UI_SCALE * 100) / 100;
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+/** Scale a dimension (width, padding, icon size…): v × 0.88. */
+export const us = (v: number): number => round2(v * UI_SCALE);
 
 /**
- * Scale a font size with a legibility floor for small text:
- *   effective = max(v * UI_SCALE, min(v, 9 + (v - 9) / 2))
- * Monotonic, so the hierarchy is kept. Examples at 0.8:
- *   9→9 · 10→9.5 · 11→10 · 11.5→10.25 · 12→10.5 · 12.5→10.75 · 13→11 ·
- *   14→11.5 · 15→12 · 16→12.8 · 18→14.4 · 28→22.4
- * Sizes < 9 are left unchanged.
+ * Font size = (80% result WITH its legibility floor) × SCALE_BOOST.
+ *   at80 = max(v * 0.8, min(v, 9 + (v - 9) / 2))
+ * The boost multiplies the 80% result, so every text grows by exactly the same
+ * 10% and the current proportions between texts and elements are kept.
+ * Examples (80% → now): 9→9→9.9 · 12→10.5→11.55 · 12.5→10.75→11.83 ·
+ *   13→11→12.1 · 17→13.6→14.96 · 18→14.4→15.84 · 28→22.4→24.64
  */
 export const ufs = (v: number): number => {
   if (v <= 0) return v;
   const floor = Math.min(v, 9 + (v - 9) / 2);
-  return Math.round(Math.max(v * UI_SCALE, floor) * 100) / 100;
+  const at80 = Math.max(v * BASE_SCALE, floor);
+  return round2(at80 * SCALE_BOOST);
 };
 
 /** hitSlop that grows an element of the given effective size to `min` (44). */

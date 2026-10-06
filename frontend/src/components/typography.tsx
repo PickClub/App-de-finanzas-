@@ -19,6 +19,7 @@ import {
   type TextStyle,
   type StyleProp,
 } from "react-native";
+import { ufs } from "@/src/ui-scale";
 
 export const FONT_FILES = {
   NunitoSans_400Regular: require("../../assets/fonts/NunitoSans_400Regular.ttf"),
@@ -59,12 +60,18 @@ function hasDigits(children: React.ReactNode): boolean {
   return /\d/.test(s) && !/[A-Za-zÀ-ÿ]/.test(s);
 }
 
-function resolve(style: StyleProp<TextStyle>, inherited: string | null, numeric = true) {
+// RN's implicit default font size. Styles that set fontSize are already scaled
+// by makeStyles / ufs(); only text WITHOUT any fontSize (and not nested inside
+// another Text, which inherits) gets the scaled default — never a 2nd reduction.
+const DEFAULT_FONT_SIZE = ufs(14);
+
+function resolve(style: StyleProp<TextStyle>, inherited: string | null, numeric = true, topLevel = false) {
   const flat = (StyleSheet.flatten(style) || {}) as TextStyle;
   if (flat.fontFamily) return { family: flat.fontFamily, extra: null };
   const family = familyForWeight(flat.fontWeight) ?? inherited ?? REGULAR;
   const extra: TextStyle = { fontFamily: family, fontWeight: "normal" };
   if (numeric && flat.fontVariant === undefined) extra.fontVariant = ["tabular-nums"];
+  if (topLevel && flat.fontSize === undefined) extra.fontSize = DEFAULT_FONT_SIZE;
   return { family, extra };
 }
 
@@ -73,7 +80,7 @@ type TextInputProps = React.ComponentProps<typeof RNTextInput>;
 
 export function Text(props: TextProps) {
   const inherited = useContext(FamilyContext);
-  const { family, extra } = resolve(props.style as StyleProp<TextStyle>, inherited, hasDigits(props.children));
+  const { family, extra } = resolve(props.style as StyleProp<TextStyle>, inherited, hasDigits(props.children), inherited === null);
   return (
     <FamilyContext.Provider value={family}>
       <RNText {...props} style={extra ? [props.style, extra] : props.style} />
@@ -82,6 +89,6 @@ export function Text(props: TextProps) {
 }
 
 export function TextInput(props: TextInputProps) {
-  const { extra } = resolve(props.style as StyleProp<TextStyle>, null);
+  const { extra } = resolve(props.style as StyleProp<TextStyle>, null, true, true);
   return <RNTextInput {...props} style={extra ? [props.style, extra] : props.style} />;
 }

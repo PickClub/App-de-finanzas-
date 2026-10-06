@@ -11,6 +11,7 @@ import Animated, {
   Easing,
   type SharedValue,
 } from "react-native-reanimated";
+import { us } from "@/src/ui-scale";
 
 // Reanimated's NATIVE runtime special-cases the `transform` key and expects an
 // RN transform ARRAY — passing an SVG `transform` STRING there triggers the
@@ -29,7 +30,7 @@ const ARect = Animated.createAnimatedComponent(Rect);
 const AG = Animated.createAnimatedComponent(G);
 
 const SW = 1.7; // stroke width — matches the outline Ionicons weight
-const SIZE = 20; // rendered inside the 38px tile, ~ the old size-18 icon
+const SIZE = us(20); // rendered inside the 38px tile, ~ the old size-18 icon
 
 type IconProps = {
   color: string;

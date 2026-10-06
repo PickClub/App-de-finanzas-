@@ -4,7 +4,8 @@
 
 import { reloadAppAsync } from "expo";
 import { Component, type ErrorInfo, type PropsWithChildren, useState } from "react";
-import { Platform, Pressable, ScrollView, View } from "react-native";
+import { Platform, ScrollView, View } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 
 import { makeStyles } from "@/src/theme";

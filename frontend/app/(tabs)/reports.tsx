@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
-import { View, ScrollView, Pressable, Platform, Animated as RNAnimated } from "react-native";
+import { View, ScrollView, Platform, Animated as RNAnimated } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useQuery } from "@tanstack/react-query";
@@ -8,6 +9,7 @@ import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatCurrency } from "@/src/format";
 
+import { us } from "@/src/ui-scale";
 const RANGES = [
   { id: "7d", label: "7d", pillLabel: "7 días", days: 7, periodLabel: "Últimos 7 días" },
   { id: "30d", label: "30d", pillLabel: "30 días", days: 30, periodLabel: "Últimos 30 días" },
@@ -18,7 +20,7 @@ const RANGES = [
 ];
 
 // Solid colored circular icon (white glyph) — colors come from the theme tokens.
-function CircleIcon({ icon, color, size = 42 }: { icon: string; color: string; size?: number }) {
+function CircleIcon({ icon, color, size = us(42) }: { icon: string; color: string; size?: number }) {
   return (
     <View
       style={{
@@ -148,7 +150,7 @@ export default function Reports() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#E8EFE7" }}
-      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 120 }}
+      contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(120) }}
     >
       <View style={styles.screenHead}>
         <View style={{ flex: 1 }}>
@@ -176,12 +178,12 @@ export default function Reports() {
       {/* Flujo de efectivo — section header (outside the card, Home visual language) */}
       <View style={styles.sectionHeader}>
         <View style={styles.headIconTile}>
-          <Ionicons name="bar-chart" size={18} color={accent} />
+          <Ionicons name="bar-chart" size={us(18)} color={accent} />
         </View>
-        <View style={{ flex: 1, marginLeft: 10 }}>
+        <View style={{ flex: 1, marginLeft: us(10) }}>
           <View style={styles.titleRow}>
             <Text style={styles.headTitle}>Flujo de efectivo</Text>
-            <Ionicons name="information-circle-outline" size={15} color={colors.muted} />
+            <Ionicons name="information-circle-outline" size={us(15)} color={colors.muted} />
           </View>
           <Text style={styles.headSubtitle}>Resumen de tu actividad en el período</Text>
         </View>
@@ -207,7 +209,7 @@ export default function Reports() {
               testID={`cash-row-${r.key}`}
             >
               <View style={styles.tConcept}>
-                <Ionicons name={r.icon as any} size={15} color={colors.muted} />
+                <Ionicons name={r.icon as any} size={us(15)} color={colors.muted} />
                 <Text style={styles.tConceptText}>{r.label}</Text>
               </View>
               <View style={styles.tCol}>
@@ -227,7 +229,7 @@ export default function Reports() {
         {/* Saldo neto del período — full visual calculation */}
         <View style={styles.netPanel} testID="balance-row">
           <View style={[styles.netIcon, { backgroundColor: (balance >= 0 ? colors.incomeGreen : colors.expenseRed) + "1F" }]}>
-            <Ionicons name="wallet-outline" size={20} color={balance >= 0 ? colors.incomeGreen : colors.expenseRed} />
+            <Ionicons name="wallet-outline" size={us(20)} color={balance >= 0 ? colors.incomeGreen : colors.expenseRed} />
           </View>
           <View style={styles.netTextWrap}>
             <Text style={styles.netTitle}>Saldo neto del período</Text>
@@ -258,16 +260,16 @@ export default function Reports() {
       {/* Gastos por categoría — section header (outside the card, Home visual language) */}
       <View style={styles.sectionHeader}>
         <View style={styles.headIconTile}>
-          <Ionicons name="pie-chart" size={18} color={accent} />
+          <Ionicons name="pie-chart" size={us(18)} color={accent} />
         </View>
-        <View style={{ flex: 1, marginLeft: 10 }}>
+        <View style={{ flex: 1, marginLeft: us(10) }}>
           <Text style={styles.headTitle}>Gastos por categoría</Text>
           <Text style={styles.headSubtitle}>Tus principales categorías en este período</Text>
         </View>
         {byCategory.length > 0 && (
           <Pressable onPress={() => setShowAll((v) => !v)} style={styles.topBadge} testID="toggle-cats">
             <Text style={styles.topBadgeText}>{showAll ? "Todas" : "Top 5"}</Text>
-            <Ionicons name={showAll ? "chevron-up" : "chevron-down"} size={14} color={colors.muted} />
+            <Ionicons name={showAll ? "chevron-up" : "chevron-down"} size={us(14)} color={colors.muted} />
           </Pressable>
         )}
       </View>
@@ -283,7 +285,7 @@ export default function Reports() {
                   style={[styles.catRow, i < shownCats.length - 1 && styles.catRowDivider]}
                   testID={`cat-row-${x.id}`}
                 >
-                  <CircleIcon icon={x.cat.icon} color={x.cat.color} size={42} />
+                  <CircleIcon icon={x.cat.icon} color={x.cat.color} size={us(42)} />
                   <View style={styles.catMiddle}>
                     <Text style={styles.catName}>{x.cat.name}</Text>
                     <View style={styles.barTrack}>
@@ -300,7 +302,7 @@ export default function Reports() {
             {byCategory.length > 5 && (
               <Pressable onPress={() => setShowAll((v) => !v)} style={styles.verTodas} testID="ver-todas">
                 <Text style={styles.verTodasText}>{showAll ? "Ver menos" : "Ver todas las categorías"}</Text>
-                <Ionicons name={showAll ? "chevron-up" : "chevron-forward"} size={18} color={colors.onSurface} />
+                <Ionicons name={showAll ? "chevron-up" : "chevron-forward"} size={us(18)} color={colors.onSurface} />
               </Pressable>
             )}
           </View>

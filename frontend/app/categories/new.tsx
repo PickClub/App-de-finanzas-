@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { View, ScrollView, Pressable, StyleSheet, Alert } from "react-native";
+import { View, ScrollView, StyleSheet, Alert } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -9,6 +10,7 @@ import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
 
+import { us } from "@/src/ui-scale";
 const ICONS = [
   "restaurant-outline", "cart-outline", "pizza-outline", "car-outline",
   "flame-outline", "home-outline", "flash-outline", "call-outline",
@@ -57,20 +59,20 @@ export default function CategoryForm() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 140, paddingHorizontal: spacing.lg }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: spacing.lg }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+          <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{params.id ? "Editar" : "Nueva"} categoría</Text>
-        {params.id && <Pressable onPress={remove} style={styles.backBtn}><Ionicons name="trash-outline" size={22} color={colors.expenseRed} /></Pressable>}
+        {params.id && <Pressable onPress={remove} style={styles.backBtn}><Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} /></Pressable>}
       </View>
 
       <Text style={styles.label}>Nombre</Text>
       <TextInput value={name} onChangeText={setName} placeholder="Ej. Comida" placeholderTextColor={colors.muted} style={styles.input} />
 
       <Text style={styles.label}>Tipo</Text>
-      <View style={{ flexDirection: "row", gap: 10 }}>
+      <View style={{ flexDirection: "row", gap: us(10) }}>
         {(["expense", "income"] as const).map((t) => (
           <Pressable key={t} onPress={() => setType(t)} style={[styles.typeBtn, type === t && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
             <Text style={{ color: type === t ? "#fff" : colors.onSurface, fontWeight: "700" }}>{t === "expense" ? "Gasto" : "Ingreso"}</Text>
@@ -79,18 +81,18 @@ export default function CategoryForm() {
       </View>
 
       <Text style={styles.label}>Icono</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(10) }}>
         {ICONS.map((ic) => (
           <Pressable key={ic} onPress={() => setIcon(ic)} style={[styles.iconOpt, icon === ic && { borderColor: color, borderWidth: 2 }]}>
-            <IconTile icon={ic} tint={color} size={36} />
+            <IconTile icon={ic} tint={color} size={us(36)} />
           </Pressable>
         ))}
       </View>
 
       <Text style={styles.label}>Color</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(10) }}>
         {COLORS.map((c) => (
-          <Pressable key={c} onPress={() => setColor(c)} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: c, borderWidth: color === c ? 3 : 0, borderColor: colors.onSurface }} />
+          <Pressable key={c} onPress={() => setColor(c)} style={{ width: us(40), height: us(40), borderRadius: us(20), backgroundColor: c, borderWidth: color === c ? us(3) : 0, borderColor: colors.onSurface }} />
         ))}
       </View>
 

@@ -1,0 +1,109 @@
+/**
+ * Central UI scale.
+ *
+ * One nominal factor (UI_SCALE) shrinks the app's visual dimensions. Every
+ * dimension is scaled EXACTLY ONCE:
+ *   - theme `makeStyles` sheets and the two raw StyleSheet sheets pass through
+ *     `scaleStyles` (spacing / radius tokens stay BASE values, so a style like
+ *     `padding: spacing.lg` is scaled here and nowhere else);
+ *   - inline JSX sizes / icon sizes use `us()` / `ufs()` at the call site;
+ *   - values measured at runtime (onLayout, measureInWindow, Dimensions,
+ *     safe-area insets) are NEVER scaled.
+ *
+ * Preserved as-is: strings/percentages, flex*, aspectRatio, opacity, zIndex,
+ * elevation, durations, angles, progress, hairline borders (<= 2) and
+ * pill radii (>= 999).
+ *
+ * Text legibility: small text is reduced less (see `ufs`). System font
+ * scaling (allowFontScaling) is untouched.
+ */
+import type { ImageStyle, TextStyle, ViewStyle } from "react-native";
+
+export const UI_SCALE = 0.8;
+
+/** Scale a dimension (width, padding, icon size…). */
+export const us = (v: number): number => Math.round(v * UI_SCALE * 100) / 100;
+
+/**
+ * Scale a font size with a legibility floor for small text:
+ *   effective = max(v * UI_SCALE, min(v, 9 + (v - 9) / 2))
+ * Monotonic, so the hierarchy is kept. Examples at 0.8:
+ *   9→9 · 10→9.5 · 11→10 · 11.5→10.25 · 12→10.5 · 12.5→10.75 · 13→11 ·
+ *   14→11.5 · 15→12 · 16→12.8 · 18→14.4 · 28→22.4
+ * Sizes < 9 are left unchanged.
+ */
+export const ufs = (v: number): number => {
+  if (v <= 0) return v;
+  const floor = Math.min(v, 9 + (v - 9) / 2);
+  return Math.round(Math.max(v * UI_SCALE, floor) * 100) / 100;
+};
+
+/** hitSlop that grows an element of the given effective size to `min` (44). */
+export const touchSlop = (w: number, h: number = w, min = 44) => {
+  const x = Math.max(0, Math.ceil((min - w) / 2));
+  const y = Math.max(0, Math.ceil((min - h) / 2));
+  return { top: y, bottom: y, left: x, right: x };
+};
+
+const DIMENSION_KEYS = new Set([
+  "width", "height", "minWidth", "maxWidth", "minHeight", "maxHeight",
+  "margin", "marginTop", "marginBottom", "marginLeft", "marginRight",
+  "marginHorizontal", "marginVertical", "marginStart", "marginEnd",
+  "padding", "paddingTop", "paddingBottom", "paddingLeft", "paddingRight",
+  "paddingHorizontal", "paddingVertical", "paddingStart", "paddingEnd",
+  "gap", "rowGap", "columnGap",
+  "top", "bottom", "left", "right", "start", "end",
+  "shadowRadius", "textShadowRadius",
+]);
+const RADIUS_KEYS = new Set([
+  "borderRadius", "borderTopLeftRadius", "borderTopRightRadius",
+  "borderBottomLeftRadius", "borderBottomRightRadius",
+  "borderTopStartRadius", "borderTopEndRadius", "borderBottomStartRadius", "borderBottomEndRadius",
+]);
+const BORDER_KEYS = new Set([
+  "borderWidth", "borderTopWidth", "borderBottomWidth", "borderLeftWidth", "borderRightWidth",
+]);
+const PILL = 999;
+const HAIRLINE = 2;
+
+type AnyStyle = ViewStyle & TextStyle & ImageStyle & Record<string, any>;
+
+/** Scale one style object (returns a new object; input untouched). */
+export function scaleStyle<T extends Record<string, any>>(style: T): T {
+  if (!style || typeof style !== "object" || Array.isArray(style)) return style;
+  const src = style as AnyStyle;
+  const out: Record<string, any> = {};
+  // Text metrics follow the effective font ratio so line boxes stay coherent.
+  const fsRatio = typeof src.fontSize === "number" && src.fontSize > 0 ? ufs(src.fontSize) / src.fontSize : UI_SCALE;
+  for (const k of Object.keys(src)) {
+    const v = src[k];
+    if (typeof v === "number") {
+      if (k === "fontSize") out[k] = ufs(v);
+      else if (k === "lineHeight" || k === "letterSpacing") out[k] = Math.round(v * fsRatio * 100) / 100;
+      else if (DIMENSION_KEYS.has(k)) out[k] = us(v);
+      else if (RADIUS_KEYS.has(k)) out[k] = v >= PILL ? v : us(v);
+      else if (BORDER_KEYS.has(k)) out[k] = v <= HAIRLINE ? v : us(v);
+      else out[k] = v;
+    } else if (k === "shadowOffset" || k === "textShadowOffset") {
+      out[k] = v && typeof v === "object" ? { width: us(v.width || 0), height: us(v.height || 0) } : v;
+    } else if (k === "transform" && Array.isArray(v)) {
+      out[k] = v.map((t: any) => {
+        if (t && typeof t === "object") {
+          if (typeof t.translateX === "number") return { translateX: us(t.translateX) };
+          if (typeof t.translateY === "number") return { translateY: us(t.translateY) };
+        }
+        return t;
+      });
+    } else {
+      out[k] = v;
+    }
+  }
+  return out as T;
+}
+
+/** Scale every entry of a style-sheet factory result. */
+export function scaleStyles<T extends Record<string, any>>(sheet: T): T {
+  const out: Record<string, any> = {};
+  for (const k of Object.keys(sheet)) out[k] = scaleStyle(sheet[k]);
+  return out as T;
+}

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { View, ScrollView, Pressable, StyleSheet, Animated, Easing, Platform } from "react-native";
+import { View, ScrollView, StyleSheet, Animated, Easing, Platform } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -13,6 +14,7 @@ import { ProgressRing } from "@/src/components/ProgressRing";
 import { IconTile } from "@/src/components/ui";
 import { LockToggle, useLock } from "@/src/lock";
 
+import { us, ufs } from "@/src/ui-scale";
 const TABS = [
   { id: "all", label: "Todos" },
   { id: "paid", label: "Pagados" },
@@ -218,13 +220,13 @@ export default function Debts() {
     <View style={{ flex: 1, backgroundColor: P.page }}>
       <ScrollView
         style={{ flex: 1, backgroundColor: "transparent" }}
-        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 140 }}
+        contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140) }}
         showsVerticalScrollIndicator={false}
       >
         {/* Header — compact, title + subtitle, lock + add */}
         <View style={styles.headerRow}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={22} color={P.text} />
+            <Ionicons name="chevron-back" size={us(22)} color={P.text} />
           </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>Deudas y préstamos</Text>
@@ -236,7 +238,7 @@ export default function Debts() {
             onPress={() => router.push("/debts/new")}
             style={[styles.addBtn, { backgroundColor: P.green }]}
           >
-            <Ionicons name="add" size={22} color="#fff" />
+            <Ionicons name="add" size={us(22)} color="#fff" />
           </Pressable>
         </View>
 
@@ -275,7 +277,7 @@ export default function Debts() {
             ) : (
               <>
                 <View style={styles.summaryLeft}>
-                  <ProgressRing size={116} stroke={11} progress={summary.pct * entryT} color={P.ring} trackColor={P.ringTrack}>
+                  <ProgressRing size={us(116)} stroke={us(11)} progress={summary.pct * entryT} color={P.ring} trackColor={P.ringTrack}>
                     <Text style={styles.sumPct}>{summaryPct}%</Text>
                     <Text style={styles.sumPctSub}>Pagado</Text>
                   </ProgressRing>
@@ -301,7 +303,7 @@ export default function Debts() {
 
             {/* Flip indicator — subtle swap icon, both faces, inside card bounds */}
             <View pointerEvents="none" style={styles.flipHint}>
-              <Ionicons name="swap-horizontal" size={15} color={P.muted} />
+              <Ionicons name="swap-horizontal" size={us(15)} color={P.muted} />
             </View>
           </Animated.View>
         </Pressable>
@@ -323,7 +325,7 @@ export default function Debts() {
         </View>
 
         {/* Debt cards */}
-        <View style={{ paddingHorizontal: spacing.lg, gap: 12 }}>
+        <View style={{ paddingHorizontal: us(spacing.lg), gap: us(12) }}>
           {filtered.map((d) => {
             const p = d.original_amount > 0 ? d.total_paid / d.original_amount : 0;
             const pctInt = Math.round(p * 100);
@@ -342,13 +344,13 @@ export default function Debts() {
 
                 {/* top row */}
                 <View style={styles.cardTop}>
-                  <IconTile icon={d.icon} tint={accent} size={44} />
-                  <View style={{ flex: 1, marginLeft: 12 }}>
+                  <IconTile icon={d.icon} tint={accent} size={us(44)} />
+                  <View style={{ flex: 1, marginLeft: us(12) }}>
                     <Text style={styles.debtName}>{d.name}</Text>
                     <View style={styles.subRow}>
                       <View style={[styles.statusPill, { backgroundColor: statusColor + "22" }]}>
                         <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-                        <Text style={{ color: statusColor, fontSize: 11, fontWeight: "700" }}>
+                        <Text style={{ color: statusColor, fontSize: ufs(11), fontWeight: "700" }}>
                           {isPaid ? "Pagada" : "Activa"}
                         </Text>
                       </View>
@@ -357,7 +359,7 @@ export default function Debts() {
                       </Text>
                     </View>
                   </View>
-                  <ProgressRing size={52} stroke={6} progress={p * entryT} color={accent} trackColor={accent + "22"}>
+                  <ProgressRing size={us(52)} stroke={us(6)} progress={p * entryT} color={accent} trackColor={accent + "22"}>
                     <Text style={[styles.ringPctSmall, { color: P.text }]}>{pctInt}%</Text>
                   </ProgressRing>
                 </View>
@@ -367,7 +369,7 @@ export default function Debts() {
                   <View style={styles.amountCol}>
                     <View style={styles.amountHead}>
                       <View style={[styles.amountIcon, { backgroundColor: P.red + "1F" }]}>
-                        <Ionicons name="document-text" size={11} color={P.red} />
+                        <Ionicons name="document-text" size={us(11)} color={P.red} />
                       </View>
                       <Text style={styles.amountLabel}>Pendiente</Text>
                     </View>
@@ -378,7 +380,7 @@ export default function Debts() {
                   <View style={styles.amountCol}>
                     <View style={styles.amountHead}>
                       <View style={[styles.amountIcon, { backgroundColor: accent + "1F" }]}>
-                        <Ionicons name="checkmark-circle" size={12} color={accent} />
+                        <Ionicons name="checkmark-circle" size={us(12)} color={accent} />
                       </View>
                       <Text style={styles.amountLabel}>Pagado</Text>
                     </View>
@@ -389,7 +391,7 @@ export default function Debts() {
                   <View style={styles.amountCol}>
                     <View style={styles.amountHead}>
                       <View style={[styles.amountIcon, { backgroundColor: P.green + "1F" }]}>
-                        <Ionicons name="stats-chart" size={11} color={P.green} />
+                        <Ionicons name="stats-chart" size={us(11)} color={P.green} />
                       </View>
                       <Text style={styles.amountLabel}>Total</Text>
                     </View>
@@ -416,15 +418,15 @@ export default function Debts() {
           })}
 
           {filtered.length === 0 && (
-            <View style={{ alignItems: "center", padding: 40 }}>
-              <Ionicons name="cash-outline" size={48} color={P.muted} />
-              <Text style={{ color: P.muted, marginTop: 10 }}>Sin deudas en esta vista</Text>
+            <View style={{ alignItems: "center", padding: us(40) }}>
+              <Ionicons name="cash-outline" size={us(48)} color={P.muted} />
+              <Text style={{ color: P.muted, marginTop: us(10) }}>Sin deudas en esta vista</Text>
             </View>
           )}
 
           {/* Add debt */}
           <Pressable testID="add-debt-inline" onPress={() => router.push("/debts/new")} style={styles.addRow}>
-            <Ionicons name="add" size={20} color={P.green} />
+            <Ionicons name="add" size={us(20)} color={P.green} />
             <Text style={styles.addRowText}>Agregar nueva deuda o préstamo</Text>
           </Pressable>
         </View>
@@ -494,7 +496,7 @@ function MetricRow({
   return (
     <View style={[styles.metricRow, last && { paddingBottom: 0 }]}>
       <View style={[styles.metricIcon, { backgroundColor: tint + "22" }]}>
-        <Ionicons name={icon} size={13} color={tint} />
+        <Ionicons name={icon} size={us(13)} color={tint} />
       </View>
       <Text style={styles.metricLabel}>{label}</Text>
       <Text style={[styles.metricValue, { color: valueColor }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
@@ -529,7 +531,7 @@ function BackBlock({
   return (
     <View style={styles.backBlock}>
       <View style={[styles.backIcon, { backgroundColor: accent + "22" }]}>
-        <Ionicons name={icon} size={15} color={accent} />
+        <Ionicons name={icon} size={us(15)} color={accent} />
       </View>
       <Text style={styles.backBlockTitle}>{title}</Text>
       <Text style={[styles.backBlockTotal, { color: accent }]} numberOfLines={1} adjustsFontSizeToFit>{total}</Text>

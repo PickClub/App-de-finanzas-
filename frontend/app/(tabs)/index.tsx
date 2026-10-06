@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { View, ScrollView, Pressable, StyleSheet, RefreshControl, Dimensions, Platform, Animated as RNAnimated } from "react-native";
+import { View, ScrollView, StyleSheet, RefreshControl, Dimensions, Platform, Animated as RNAnimated } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Animated, {
   useSharedValue,
@@ -27,6 +28,7 @@ import { useLock } from "@/src/lock";
 import { WalletIcon, ChartIcon, HandCoinIcon } from "@/src/components/animated-section-icons";
 import { DateRangeSheet, type DateRange } from "@/src/components/date-range-sheet";
 
+import { us, ufs } from "@/src/ui-scale";
 // --- HOME-ONLY color redesign (light mode only) ---------------------------
 // These tokens SHADOW the global theme ONLY on the Home screen in light mode,
 // so no other screen/tab is affected and dark mode keeps its existing look.
@@ -94,14 +96,18 @@ function accountTypeLabel(t: string) {
 
 
 // Donut geometry for "Distribución de mis cuentas" (module constants).
-const DONUT_SIZE = 132;
-const DONUT_STROKE = 20;
+// BASE values feed makeStyles (scaled once there: 132 -> 105.6, 20 -> 16).
+// Effective values drive the SVG geometry so ring, wrap and center overlay match.
+const DONUT_BASE = 132;
+const DONUT_STROKE_BASE = 20;
+const DONUT_SIZE = us(DONUT_BASE);
+const DONUT_STROKE = us(DONUT_STROKE_BASE);
 
 // Compact circular progress indicator for the Deudas tiles. Uses react-native-svg
 // (already a dependency). No gradient / glow / heavy shadow — secondary info only.
 function DebtRing({ pct, color, track, display }: { pct: number; color: string; track: string; display?: string }) {
-  const size = 42;
-  const stroke = 4.5;
+  const size = us(42);
+  const stroke = us(4.5);
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
   const p = Math.max(0, Math.min(100, pct));
@@ -123,7 +129,7 @@ function DebtRing({ pct, color, track, display }: { pct: number; color: string; 
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </Svg>
-      <Text style={{ position: "absolute", fontSize: 10.5, fontWeight: "800", color }}>
+      <Text style={{ position: "absolute", fontSize: ufs(10.5), fontWeight: "800", color }}>
         {display !== undefined ? display : `${Math.round(p)}%`}
       </Text>
     </View>
@@ -136,8 +142,8 @@ function DebtRing({ pct, color, track, display }: { pct: number; color: string; 
 // NOT change the card's number color. Width is measured so dots stay circular.
 function StatSpark({ color, data }: { color: string; data: number[] }) {
   const [w, setW] = useState(0);
-  const h = 26;
-  const padY = 4;
+  const h = us(26);
+  const padY = us(4);
   const n = data.length;
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -297,19 +303,19 @@ function SectionHeader({
         ) : iconKind === "hand" ? (
           <HandCoinIcon color={iconColor} play={playSignal} />
         ) : (
-          <Ionicons name={icon as any} size={18} color={iconColor} />
+          <Ionicons name={icon as any} size={us(18)} color={iconColor} />
         )}
       </View>
-      <View style={{ flex: 1, marginLeft: 10 }}>
+      <View style={{ flex: 1, marginLeft: us(10) }}>
         <Text style={styles.mrTitle}>{title}</Text>
         <Text style={styles.mrSubtitle}>{subtitle}</Text>
       </View>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: us(8) }}>
         {right}
         {onSeeAll && (
           <Pressable testID={seeAllTestID} onPress={onSeeAll} style={styles.seeAllBtn}>
             <Text style={styles.seeAllText}>{t("common.seeAll")}</Text>
-            <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
+            <Ionicons name="chevron-forward" size={us(14)} color={colors.brandPrimary} />
           </Pressable>
         )}
       </View>
@@ -351,7 +357,7 @@ function MRPill({
   };
   const content = (
     <>
-      <Ionicons name={icon as any} size={13} color={active ? "#fff" : iconColor} />
+      <Ionicons name={icon as any} size={us(13)} color={active ? "#fff" : iconColor} />
       <Text style={[styles.mrPillText, active && styles.mrPillTextActive]}>{label}</Text>
     </>
   );
@@ -405,7 +411,7 @@ function MRIconPill({
         onPressOut={pressOut}
         style={[styles.mrIconPill, active && styles.mrIconPillActive]}
       >
-        <Ionicons name="calendar-outline" size={15} color={active ? activeColor : idleColor} />
+        <Ionicons name="calendar-outline" size={us(15)} color={active ? activeColor : idleColor} />
       </Pressable>
     </RNAnimated.View>
   );
@@ -583,7 +589,7 @@ export default function Home() {
     <Animated.ScrollView
       testID="home-scroll"
       style={{ flex: 1, backgroundColor: "transparent" }}
-      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: spacing.lg }}
+      contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(spacing.lg) }}
       onScroll={scrollHandler}
       scrollEventThrottle={16}
       onLayout={(e) => {
@@ -603,7 +609,7 @@ export default function Home() {
       {/* Header — compact balance + growth (greeting removed) */}
       <View style={styles.header}>
         <View style={styles.balanceIconTile}>
-          <Ionicons name="wallet-outline" size={20} color={colors.brandPrimary} />
+          <Ionicons name="wallet-outline" size={us(20)} color={colors.brandPrimary} />
         </View>
         <View style={styles.balanceBlock}>
           <Text
@@ -618,7 +624,7 @@ export default function Home() {
           <View style={styles.growthRow}>
             <Ionicons
               name={growthPositive ? "arrow-up" : "arrow-down"}
-              size={15}
+              size={us(15)}
               color={growthPositive ? colors.incomeGreen : colors.expenseRed}
             />
             <Text style={[styles.growthText, { color: growthPositive ? colors.incomeGreen : colors.expenseRed }]}>
@@ -627,7 +633,7 @@ export default function Home() {
           </View>
         </View>
         <Pressable testID="notifications-btn" style={styles.roundIcon}>
-          <Ionicons name="notifications-outline" size={22} color={colors.onSurface} />
+          <Ionicons name="notifications-outline" size={us(22)} color={colors.onSurface} />
         </Pressable>
         <Pressable testID="profile-more-btn" onPress={() => router.push("/more")} style={styles.avatar}>
           <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>
@@ -641,12 +647,12 @@ export default function Home() {
 
       {/* Mis cuentas */}
       <View
-        style={{ paddingTop: spacing.lg }}
+        style={{ paddingTop: us(spacing.lg) }}
         onLayout={(e) => {
           accountsY.value = e.nativeEvent.layout.y;
         }}
       >
-        <View style={{ paddingHorizontal: spacing.lg }}>
+        <View style={{ paddingHorizontal: us(spacing.lg) }}>
           <SectionHeader
             icon="wallet-outline"
             iconKind="wallet"
@@ -660,7 +666,7 @@ export default function Home() {
             focusId={focusId}
             right={
               <Pressable testID="toggle-hide-btn" onPress={() => setHidden((h) => !h)} hitSlop={8}>
-                <Ionicons name={hidden ? "eye-off-outline" : "eye-outline"} size={20} color={colors.muted} />
+                <Ionicons name={hidden ? "eye-off-outline" : "eye-outline"} size={us(20)} color={colors.muted} />
               </Pressable>
             }
           />
@@ -701,16 +707,16 @@ export default function Home() {
                         />
                         <Ionicons
                           name={a.icon as any}
-                          size={58}
+                          size={us(58)}
                           color="rgba(255,255,255,0.12)"
                           style={styles.walletWatermark}
                         />
                         <View style={styles.walletTopRow}>
                           <View style={styles.walletIconBox}>
-                            <Ionicons name={a.icon as any} size={14} color="#fff" />
+                            <Ionicons name={a.icon as any} size={us(14)} color="#fff" />
                           </View>
                           <View style={[styles.walletArrow, { backgroundColor: darken(ac, 0.16) }]}>
-                            <Ionicons name="chevron-forward" size={12} color="#fff" />
+                            <Ionicons name="chevron-forward" size={us(12)} color="#fff" />
                           </View>
                         </View>
                         <View style={styles.walletTextWrap}>
@@ -733,7 +739,7 @@ export default function Home() {
                   onPress={() => router.push("/accounts/new")}
                   style={[styles.walletAddCard, (pageAccounts.length + 1) % 3 === 0 && styles.walletCardLast]}
                 >
-                  <Ionicons name="add" size={22} color={colors.brandPrimary} />
+                  <Ionicons name="add" size={us(22)} color={colors.brandPrimary} />
                   <Text style={styles.walletAddText}>{t("home.addAccount")}</Text>
                   {acctPageCount > 1 && (
                     <View style={styles.walletDots} pointerEvents="none">
@@ -757,7 +763,7 @@ export default function Home() {
 
       {/* Resumen del mes */}
       <View
-        style={{ paddingHorizontal: spacing.lg, marginTop: spacing.lg }}
+        style={{ paddingHorizontal: us(spacing.lg), marginTop: us(spacing.lg) }}
         onLayout={(e) => {
           summaryY.value = e.nativeEvent.layout.y;
         }}
@@ -781,7 +787,7 @@ export default function Home() {
         {/* Balance del mes (net = income - expense) — number in dark/black */}
         <View style={styles.statCard}>
           <View style={[styles.statBadge, { backgroundColor: scheme === "dark" ? colors.brandPrimary + "26" : "#DCE9DD" }]}>
-            <Ionicons name="wallet-outline" size={16} color={scheme === "dark" ? colors.brandPrimary : "#126046"} />
+            <Ionicons name="wallet-outline" size={us(16)} color={scheme === "dark" ? colors.brandPrimary : "#126046"} />
           </View>
           <Text style={styles.statTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Balance del mes", "Month balance")}</Text>
           <Text style={[styles.statAmount, { color: colors.onSurface }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
@@ -795,7 +801,7 @@ export default function Home() {
         {/* Total gastado — soft / desaturated red */}
         <View style={styles.statCard}>
           <View style={[styles.statBadge, { backgroundColor: colors.expenseRed + (scheme === "dark" ? "26" : "1F") }]}>
-            <Ionicons name="trending-down" size={16} color={colors.expenseRed} />
+            <Ionicons name="trending-down" size={us(16)} color={colors.expenseRed} />
           </View>
           <Text style={styles.statTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Total gastado", "Total spent")}</Text>
           <Text style={[styles.statAmount, { color: lighten(colors.expenseRed, 0.16) }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
@@ -809,7 +815,7 @@ export default function Home() {
         {/* Total ingresado — green */}
         <View style={styles.statCard}>
           <View style={[styles.statBadge, { backgroundColor: colors.incomeGreen + (scheme === "dark" ? "26" : "1F") }]}>
-            <Ionicons name="trending-up" size={16} color={colors.incomeGreen} />
+            <Ionicons name="trending-up" size={us(16)} color={colors.incomeGreen} />
           </View>
           <Text style={styles.statTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Total ingresado", "Total income")}</Text>
           <Text style={[styles.statAmount, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
@@ -829,7 +835,7 @@ export default function Home() {
             <Text style={styles.distTitle}>{l10n("Distribución de mis cuentas", "My accounts distribution")}</Text>
             <Pressable style={styles.distSeePill} onPress={() => router.push("/accounts")} hitSlop={8}>
               <Text style={styles.distSeeText}>{l10n("Ver cuentas", "View accounts")}</Text>
-              <Ionicons name="chevron-forward" size={13} color={scheme === "dark" ? colors.brandPrimary : "#126046"} />
+              <Ionicons name="chevron-forward" size={us(13)} color={scheme === "dark" ? colors.brandPrimary : "#126046"} />
             </Pressable>
           </View>
           <View style={styles.distBody}>
@@ -862,7 +868,7 @@ export default function Home() {
                         startFrac={startFrac}
                         frac={frac}
                         circ={circ}
-                        gapPx={distAccounts.length > 1 ? 3 : 0}
+                        gapPx={distAccounts.length > 1 ? us(3) : 0}
                         progress={donutProgress}
                       />
                     );
@@ -872,9 +878,9 @@ export default function Home() {
               <View style={styles.distCenter} pointerEvents="none">
                 <Ionicons
                   name="layers"
-                  size={18}
+                  size={us(18)}
                   color={scheme === "dark" ? colors.brandPrimary : "#126046"}
-                  style={{ marginBottom: 2 }}
+                  style={{ marginBottom: us(2) }}
                 />
                 <Text style={styles.distCenterVal} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55}>
                   {hidden ? "••••" : formatCurrencyInt(distTotal)}
@@ -896,7 +902,7 @@ export default function Home() {
                     >
                       <View style={[styles.distDot, { backgroundColor: ac }]} />
                       <View style={[styles.distRowIcon, { backgroundColor: ac + "1A" }]}>
-                        <Ionicons name={a.icon as any} size={12} color={ac} />
+                        <Ionicons name={a.icon as any} size={us(12)} color={ac} />
                       </View>
                       <Text style={styles.distName}>{a.name}</Text>
                       <Text style={styles.distBalance}>
@@ -923,13 +929,13 @@ export default function Home() {
       <View style={styles.sectionDivider} />
 
       {/* Recent transactions — "Movimientos recientes" */}
-      <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}>
+      <View style={{ paddingHorizontal: us(spacing.lg), marginTop: us(spacing.xl) }}>
         {/* Section header */}
         <View style={styles.mrHeader}>
           <View style={styles.mrIconTile}>
-            <Ionicons name="layers-outline" size={18} color={colors.brandPrimary} />
+            <Ionicons name="layers-outline" size={us(18)} color={colors.brandPrimary} />
           </View>
-          <View style={{ flex: 1, marginLeft: 10 }}>
+          <View style={{ flex: 1, marginLeft: us(10) }}>
             <Text style={styles.mrTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
               {t("home.recentMovements")} <Text style={styles.mrTitleAccent}>{t("home.recentMovementsAccent")}</Text>
             </Text>
@@ -937,10 +943,10 @@ export default function Home() {
               {t("home.recentMovementsSubtitle")}
             </Text>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: us(8) }}>
             <Pressable testID="see-all-tx" onPress={() => router.push("/(tabs)/transactions")} style={styles.seeAllBtn}>
               <Text style={styles.seeAllText}>{t("common.seeAll")}</Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
+              <Ionicons name="chevron-forward" size={us(14)} color={colors.brandPrimary} />
             </Pressable>
           </View>
         </View>
@@ -983,7 +989,7 @@ export default function Home() {
         {/* List card */}
         <Animated.View style={styles.mrCard} layout={LinearTransition.duration(260)}>
           {recent.length === 0 && (
-            <Text style={{ color: colors.muted, textAlign: "center", padding: spacing.lg }}>
+            <Text style={{ color: colors.muted, textAlign: "center", padding: us(spacing.lg) }}>
               {t("home.noMovements")}
             </Text>
           )}
@@ -1006,11 +1012,11 @@ export default function Home() {
                   onPress={guard(() => router.push(`/transactions/${item.id}`))}
                   style={styles.mrRow}
                 >
-                  <IconTile icon={iconName} tint={tint} size={36} />
-                  <View style={{ flex: 1, marginLeft: 10 }}>
+                  <IconTile icon={iconName} tint={tint} size={us(36)} />
+                  <View style={{ flex: 1, marginLeft: us(10) }}>
                     <Text style={styles.mrName}>{item.name}</Text>
                     <View style={styles.mrTimeRow}>
-                      <Ionicons name="time-outline" size={12} color={colors.muted} />
+                      <Ionicons name="time-outline" size={us(12)} color={colors.muted} />
                       <Text style={styles.mrTime}>{formatDateTime(item.date)}</Text>
                     </View>
                   </View>
@@ -1018,7 +1024,7 @@ export default function Home() {
                     <Text style={[styles.mrBadgeText, { color: badgeColor }]}>{badgeLabel}</Text>
                   </View>
                   <Text style={[styles.mrAmount, { color }]}>{sign}{formatCurrency(item.amount)}</Text>
-                  <Ionicons name="chevron-forward" size={15} color={colors.muted} style={{ marginLeft: 4 }} />
+                  <Ionicons name="chevron-forward" size={us(15)} color={colors.muted} style={{ marginLeft: us(4) }} />
                 </Pressable>
               </Animated.View>
             );
@@ -1031,7 +1037,7 @@ export default function Home() {
 
       {/* Deudas */}
       <View
-        style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}
+        style={{ paddingHorizontal: us(spacing.lg), marginTop: us(spacing.xl) }}
         onLayout={(e) => {
           debtsY.value = e.nativeEvent.layout.y;
         }}
@@ -1051,17 +1057,17 @@ export default function Home() {
       </View>
 
       {/* Debts card */}
-      <View style={{ paddingHorizontal: spacing.lg }}>
+      <View style={{ paddingHorizontal: us(spacing.lg) }}>
         <Pressable testID="debts-card" onPress={() => router.push("/debts")} style={styles.debtCard}>
           <View style={styles.debtQuadRow}>
             <View style={[styles.debtQuadTile, styles.debtTileNeutral]}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: us(5) }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.expenseRed + "14" }]}>
-                  <Ionicons name="arrow-up" size={15} color={colors.expenseRed} />
+                  <Ionicons name="arrow-up" size={us(15)} color={colors.expenseRed} />
                 </View>
                 <Text style={[styles.debtQuadLabel, { flex: 1 }]}>{t("home.iOwe")}</Text>
                 <View style={styles.debtArrowBtn}>
-                  <Ionicons name="chevron-forward" size={11} color={colors.muted} />
+                  <Ionicons name="chevron-forward" size={us(11)} color={colors.muted} />
                 </View>
               </View>
               <View style={styles.debtBodyRow}>
@@ -1075,13 +1081,13 @@ export default function Home() {
               </View>
             </View>
             <View style={[styles.debtQuadTile, styles.debtTileNeutral]}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: us(5) }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.incomeGreen + "14" }]}>
-                  <Ionicons name="arrow-down" size={15} color={colors.incomeGreen} />
+                  <Ionicons name="arrow-down" size={us(15)} color={colors.incomeGreen} />
                 </View>
                 <Text style={[styles.debtQuadLabel, { flex: 1 }]}>{t("home.owedToMe")}</Text>
                 <View style={styles.debtArrowBtn}>
-                  <Ionicons name="chevron-forward" size={11} color={colors.muted} />
+                  <Ionicons name="chevron-forward" size={us(11)} color={colors.muted} />
                 </View>
               </View>
               <View style={styles.debtBodyRow}>
@@ -1097,13 +1103,13 @@ export default function Home() {
           </View>
           <View style={styles.debtQuadRow}>
             <View style={[styles.debtQuadTile, styles.debtTileNeutral]}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: us(5) }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.statsPurple + "14" }]}>
-                  <Ionicons name="card" size={15} color={colors.statsPurple} />
+                  <Ionicons name="card" size={us(15)} color={colors.statsPurple} />
                 </View>
                 <Text style={[styles.debtQuadLabel, { flex: 1 }]}>{t("home.paidThisMonth")}</Text>
                 <View style={styles.debtArrowBtn}>
-                  <Ionicons name="chevron-forward" size={11} color={colors.muted} />
+                  <Ionicons name="chevron-forward" size={us(11)} color={colors.muted} />
                 </View>
               </View>
               <View style={styles.debtBodyRow}>
@@ -1117,17 +1123,17 @@ export default function Home() {
               </View>
             </View>
             <View style={[styles.debtQuadTile, styles.debtTileNeutral]}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: us(5) }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.brandSecondary + "14" }]}>
-                  <Ionicons name="calendar-outline" size={15} color={colors.brandSecondary} />
+                  <Ionicons name="calendar-outline" size={us(15)} color={colors.brandSecondary} />
                 </View>
                 <Text style={[styles.debtQuadLabel, { flex: 1 }]}>{t("home.nextPayment")}</Text>
                 <View style={styles.debtArrowBtn}>
-                  <Ionicons name="chevron-forward" size={11} color={colors.muted} />
+                  <Ionicons name="chevron-forward" size={us(11)} color={colors.muted} />
                 </View>
               </View>
               <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.debtDecorCalendar}>
-                <Ionicons name="calendar-outline" size={66} color={colors.brandSecondary} />
+                <Ionicons name="calendar-outline" size={us(66)} color={colors.brandSecondary} />
               </View>
               {summary?.debts?.next_payment ? (
                 <>
@@ -1525,11 +1531,11 @@ const useStyles = makeStyles((colors, scheme) => {
   },
   distSeeText: { fontSize: 12, fontWeight: "700", color: accentGreen },
   distBody: { flexDirection: "row", alignItems: "center", gap: 10 },
-  distDonutWrap: { width: DONUT_SIZE, height: DONUT_SIZE, alignItems: "center", justifyContent: "center" },
+  distDonutWrap: { width: DONUT_BASE, height: DONUT_BASE, alignItems: "center", justifyContent: "center" },
   // Explicit overlay the exact size of the donut (StyleSheet.absoluteFillObject
   // no longer exists in RN 0.86 native, which dropped this block below the ring).
-  distCenter: { position: "absolute", top: 0, left: 0, width: DONUT_SIZE, height: DONUT_SIZE, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
-  distCenterVal: { fontSize: 19, fontWeight: "800", color: wallText, letterSpacing: -0.5, textAlign: "center", maxWidth: DONUT_SIZE - DONUT_STROKE * 2 },
+  distCenter: { position: "absolute", top: 0, left: 0, width: DONUT_BASE, height: DONUT_BASE, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+  distCenterVal: { fontSize: 19, fontWeight: "800", color: wallText, letterSpacing: -0.5, textAlign: "center", maxWidth: DONUT_BASE - DONUT_STROKE_BASE * 2 },
   distCenterLabel: { fontSize: 11, color: wallMuted, fontWeight: "600", marginTop: 1 },
   distList: { flex: 1, minWidth: 0 },
   distRow: { flexDirection: "row", alignItems: "center", paddingVertical: 5 },

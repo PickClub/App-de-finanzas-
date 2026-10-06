@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { View, ScrollView, Pressable, StyleSheet, Modal, KeyboardAvoidingView, Platform } from "react-native";
+import { View, ScrollView, StyleSheet, Modal, KeyboardAvoidingView, Platform } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,6 +12,7 @@ import { formatCurrency } from "@/src/format";
 import { ProgressBar } from "@/src/components/ProgressBar";
 import { IconTile } from "@/src/components/ui";
 
+import { us, ufs } from "@/src/ui-scale";
 export default function Budgets() {
   const { colors } = useTheme();
   const styles = useStyles();
@@ -59,14 +61,14 @@ export default function Budgets() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 140, paddingHorizontal: spacing.lg }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: spacing.lg }}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
           </Pressable>
           <Text style={styles.title}>Presupuestos</Text>
           <Pressable testID="add-budget" onPress={() => setModalOpen(true)} style={[styles.backBtn, { backgroundColor: colors.brandPrimary }]}>
-            <Ionicons name="add" size={22} color="#fff" />
+            <Ionicons name="add" size={us(22)} color="#fff" />
           </Pressable>
         </View>
 
@@ -77,19 +79,19 @@ export default function Budgets() {
           return (
             <View key={b.id} style={styles.card}>
               <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <IconTile icon={cat?.icon || "pie-chart-outline"} tint={cat?.color || colors.brandPrimary} size={42} />
-                <View style={{ flex: 1, marginLeft: 12 }}>
+                <IconTile icon={cat?.icon || "pie-chart-outline"} tint={cat?.color || colors.brandPrimary} size={us(42)} />
+                <View style={{ flex: 1, marginLeft: us(12) }}>
                   <Text style={styles.cardTitle}>{b.name}</Text>
                   <Text style={styles.cardSub}>Mensual · {cat?.name || ""}</Text>
                 </View>
-                <Text style={{ fontSize: 14, fontWeight: "800", color: alert ? colors.expenseRed : colors.onSurface }}>
+                <Text style={{ fontSize: ufs(14), fontWeight: "800", color: alert ? colors.expenseRed : colors.onSurface }}>
                   {formatCurrency(b.spent)} / {formatCurrency(b.amount_limit)}
                 </Text>
               </View>
-              <View style={{ marginTop: 12 }}>
-                <ProgressBar progress={p} color={alert ? colors.expenseRed : cat?.color || colors.brandPrimary} height={10} />
+              <View style={{ marginTop: us(12) }}>
+                <ProgressBar progress={p} color={alert ? colors.expenseRed : cat?.color || colors.brandPrimary} height={us(10)} />
               </View>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: us(6) }}>
                 <Text style={styles.small}>Disponible: {formatCurrency(Math.max(0, b.amount_limit - b.spent))}</Text>
                 <Text style={styles.small}>{Math.round(p * 100)}% usado</Text>
               </View>
@@ -108,11 +110,11 @@ export default function Budgets() {
             <Text style={styles.label}>Límite mensual</Text>
             <TextInput value={limit} onChangeText={setLimit} placeholder="0.00" placeholderTextColor={colors.muted} keyboardType="decimal-pad" style={styles.input} />
             <Text style={styles.label}>Categoría</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: us(10) }}>
               {cats.filter((c: any) => c.type === "expense").map((c: any) => (
                 <Pressable key={c.id} onPress={() => setCategoryId(c.id)} style={[styles.catChip, categoryId === c.id && { borderColor: c.color, borderWidth: 2 }]}>
-                  <IconTile icon={c.icon} tint={c.color} size={32} />
-                  <Text style={{ fontSize: 11, color: colors.onSurface, fontWeight: "600", marginTop: 4 }}>{c.name}</Text>
+                  <IconTile icon={c.icon} tint={c.color} size={us(32)} />
+                  <Text style={{ fontSize: ufs(11), color: colors.onSurface, fontWeight: "600", marginTop: us(4) }}>{c.name}</Text>
                 </Pressable>
               ))}
             </ScrollView>

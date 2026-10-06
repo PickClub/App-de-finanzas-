@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { View, ScrollView, Pressable, StyleSheet, Alert } from "react-native";
+import { View, ScrollView, StyleSheet, Alert } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -11,6 +12,7 @@ import { IconTile } from "@/src/components/ui";
 import { AppSheet, ConfirmSheet } from "@/src/components/sheets";
 import { formatCurrency } from "@/src/format";
 
+import { us } from "@/src/ui-scale";
 const TYPE_LABEL: Record<string, string> = {
   income: "Ingreso",
   expense: "Gasto",
@@ -110,15 +112,15 @@ export default function TransactionDetail() {
 
   if (!tx) {
     return (
-      <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.screen, { paddingTop: insets.top + us(8) }]}>
         <View style={styles.header}>
           <Pressable testID="back-btn" onPress={() => router.back()} style={styles.circleBtn}>
-            <Ionicons name="chevron-back" size={22} color={colors.onSurface} />
+            <Ionicons name="chevron-back" size={us(22)} color={colors.onSurface} />
           </Pressable>
           <Text style={styles.headerTitle}>Detalle del movimiento</Text>
           <View style={styles.circleBtn} />
         </View>
-        <Text style={{ color: colors.muted, textAlign: "center", marginTop: 40 }}>
+        <Text style={{ color: colors.muted, textAlign: "center", marginTop: us(40) }}>
           {txQ.isLoading ? "Cargando…" : "Movimiento no encontrado"}
         </Text>
       </View>
@@ -245,24 +247,24 @@ export default function TransactionDetail() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.screen, { paddingTop: insets.top + us(8) }]}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable testID="back-btn" onPress={() => router.back()} style={styles.circleBtn}>
-          <Ionicons name="chevron-back" size={22} color={colors.onSurface} />
+          <Ionicons name="chevron-back" size={us(22)} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.headerTitle}>Detalle del movimiento</Text>
         <Pressable testID="more-btn" onPress={() => setMoreOpen(true)} style={styles.circleBtn}>
-          <Ionicons name="ellipsis-horizontal" size={20} color={colors.onSurface} />
+          <Ionicons name="ellipsis-horizontal" size={us(20)} color={colors.onSurface} />
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40 }}>
+      <ScrollView contentContainerStyle={{ padding: us(spacing.lg), paddingBottom: insets.bottom + us(40) }}>
         {/* Summary card */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryTop}>
-            <IconTile icon={iconName} tint={iconTint} size={48} />
-            <View style={{ flex: 1, marginLeft: 12 }}>
+            <IconTile icon={iconName} tint={iconTint} size={us(48)} />
+            <View style={{ flex: 1, marginLeft: us(12) }}>
               <Text style={styles.summaryName}>{tx.name}</Text>
               <Text style={styles.summaryDate}>{fmtDateTime(tx.date)}</Text>
             </View>
@@ -327,7 +329,7 @@ export default function TransactionDetail() {
         {/* Registered note */}
         <View style={styles.noteBox}>
           <View style={[styles.noteIcon, { backgroundColor: colors.statsPurple + "1A" }]}>
-            <Ionicons name="information-circle-outline" size={18} color={colors.statsPurple} />
+            <Ionicons name="information-circle-outline" size={us(18)} color={colors.statsPurple} />
           </View>
           <Text style={styles.noteText}>Este movimiento ya está registrado en tus saldos y estadísticas.</Text>
         </View>
@@ -336,23 +338,23 @@ export default function TransactionDetail() {
       {/* ===== Más opciones menu ===== */}
       <AppSheet visible={moreOpen} onClose={() => setMoreOpen(false)} testID="more-sheet">
         <Text style={styles.sheetTitle}>Más opciones</Text>
-        <View style={{ marginTop: 6 }}>
+        <View style={{ marginTop: us(6) }}>
           {menu.map((m) => (
             <Pressable key={m.key} testID={`menu-${m.key}`} onPress={m.onPress} style={styles.menuRow}>
               <View style={[styles.menuIcon, { backgroundColor: m.tint + "1A" }]}>
-                <Ionicons name={m.icon as any} size={19} color={m.tint} />
+                <Ionicons name={m.icon as any} size={us(19)} color={m.tint} />
               </View>
               <Text style={styles.menuLabel}>{m.label}</Text>
-              <Ionicons name="chevron-forward" size={17} color={colors.muted} />
+              <Ionicons name="chevron-forward" size={us(17)} color={colors.muted} />
             </Pressable>
           ))}
           <View style={styles.menuSeparator} />
           <Pressable testID="menu-delete" onPress={() => afterMenu(() => setConfirmDel(true))} style={styles.menuRow}>
             <View style={[styles.menuIcon, { backgroundColor: colors.expenseRed + "1A" }]}>
-              <Ionicons name="trash-outline" size={19} color={colors.expenseRed} />
+              <Ionicons name="trash-outline" size={us(19)} color={colors.expenseRed} />
             </View>
             <Text style={[styles.menuLabel, { color: colors.expenseRed }]}>Eliminar movimiento</Text>
-            <Ionicons name="chevron-forward" size={17} color={colors.expenseRed + "99"} />
+            <Ionicons name="chevron-forward" size={us(17)} color={colors.expenseRed + "99"} />
           </Pressable>
         </View>
         <Pressable onPress={() => setMoreOpen(false)} style={[styles.cancelRow, { backgroundColor: colors.surfaceTertiary }]}>
@@ -412,13 +414,13 @@ export default function TransactionDetail() {
       <AppSheet visible={catOpen} onClose={() => setCatOpen(false)} testID="category-sheet">
         <View style={{ alignItems: "center" }}>
           <View style={[styles.confirmIconSm, { backgroundColor: colors.brandSecondary + "1F" }]}>
-            <Ionicons name="pricetag-outline" size={24} color={colors.brandSecondary} />
+            <Ionicons name="pricetag-outline" size={us(24)} color={colors.brandSecondary} />
           </View>
           <Text style={styles.catTitle}>Cambiar categoría</Text>
           <Text style={styles.catSubtitle}>Selecciona una nueva categoría para este movimiento.</Text>
         </View>
         <View style={styles.searchBox}>
-          <Ionicons name="search" size={16} color={colors.muted} />
+          <Ionicons name="search" size={us(16)} color={colors.muted} />
           <TextInput
             testID="cat-search"
             value={catSearch}
@@ -428,7 +430,7 @@ export default function TransactionDetail() {
             style={styles.searchInput}
           />
         </View>
-        <ScrollView style={{ maxHeight: 260, marginTop: 8 }} keyboardShouldPersistTaps="handled">
+        <ScrollView style={{ maxHeight: us(260), marginTop: us(8) }} keyboardShouldPersistTaps="handled">
           {catList.map((c: any) => {
             const selected = pickedCat === c.id;
             return (
@@ -438,14 +440,14 @@ export default function TransactionDetail() {
                 onPress={() => setPickedCat(c.id)}
                 style={[styles.catRow, selected && { backgroundColor: c.color + "14" }]}
               >
-                <IconTile icon={c.icon} tint={c.color} size={34} />
+                <IconTile icon={c.icon} tint={c.color} size={us(34)} />
                 <Text style={styles.catRowText}>{c.name}</Text>
-                {selected && <Ionicons name="checkmark-circle" size={20} color={colors.incomeGreen} />}
+                {selected && <Ionicons name="checkmark-circle" size={us(20)} color={colors.incomeGreen} />}
               </Pressable>
             );
           })}
           {catList.length === 0 && (
-            <Text style={{ color: colors.muted, textAlign: "center", padding: 16 }}>Sin resultados</Text>
+            <Text style={{ color: colors.muted, textAlign: "center", padding: us(16) }}>Sin resultados</Text>
           )}
         </ScrollView>
         <Pressable
@@ -475,7 +477,7 @@ export default function TransactionDetail() {
       <AppSheet visible={recurOpen} onClose={() => setRecurOpen(false)} testID="recurring-sheet">
         <View style={{ alignItems: "center" }}>
           <View style={[styles.confirmIconSm, { backgroundColor: colors.incomeGreen + "1F" }]}>
-            <Ionicons name="sync-outline" size={24} color={colors.incomeGreen} />
+            <Ionicons name="sync-outline" size={us(24)} color={colors.incomeGreen} />
           </View>
           <Text style={styles.catTitle}>Configurar recurrencia</Text>
           <Text style={styles.catSubtitle}>Elige la frecuencia y las fechas para automatizar este movimiento.</Text>
@@ -492,7 +494,7 @@ export default function TransactionDetail() {
                 onPress={() => setRecurFreq(f.key)}
                 style={[styles.freqChip, active && { borderColor: colors.incomeGreen, backgroundColor: colors.incomeGreen + "12" }]}
               >
-                <Ionicons name={f.icon as any} size={17} color={active ? colors.incomeGreen : colors.muted} />
+                <Ionicons name={f.icon as any} size={us(17)} color={active ? colors.incomeGreen : colors.muted} />
                 <Text style={[styles.freqText, active && { color: colors.incomeGreen }]}>{f.label}</Text>
               </Pressable>
             );
@@ -533,7 +535,7 @@ export default function TransactionDetail() {
             onPress={() => setRecurNoEnd((v) => !v)}
             style={[styles.toggle, recurNoEnd && { backgroundColor: colors.incomeGreen }]}
           >
-            <View style={[styles.toggleKnob, recurNoEnd && { transform: [{ translateX: 18 }] }]} />
+            <View style={[styles.toggleKnob, recurNoEnd && { transform: [{ translateX: us(18) }] }]} />
           </Pressable>
         </View>
         {recurNoEnd ? (
@@ -571,14 +573,14 @@ function DateStepper({ value, onChange, minDate, styles, colors, testID }: any) 
         onPress={() => canGoBack && onChange(addDays(value, -1))}
         style={[styles.stepBtn, !canGoBack && { opacity: 0.35 }]}
       >
-        <Ionicons name="chevron-back" size={18} color={colors.onSurface} />
+        <Ionicons name="chevron-back" size={us(18)} color={colors.onSurface} />
       </Pressable>
       <View style={styles.dateStepperCenter}>
-        <Ionicons name="calendar-outline" size={16} color={colors.muted} />
+        <Ionicons name="calendar-outline" size={us(16)} color={colors.muted} />
         <Text style={styles.dateStepperText}>{fmtDay(value)}</Text>
       </View>
       <Pressable testID={`${testID}-next`} onPress={() => onChange(addDays(value, 1))} style={styles.stepBtn}>
-        <Ionicons name="chevron-forward" size={18} color={colors.onSurface} />
+        <Ionicons name="chevron-forward" size={us(18)} color={colors.onSurface} />
       </Pressable>
     </View>
   );
@@ -596,13 +598,13 @@ function InfoRow({
   const body = (
     <>
       <View style={[styles.infoIcon, { backgroundColor: tint + "1A" }]}>
-        <Ionicons name={icon} size={17} color={tint} />
+        <Ionicons name={icon} size={us(17)} color={tint} />
       </View>
-      <View style={{ flex: 1, marginLeft: 12 }}>
+      <View style={{ flex: 1, marginLeft: us(12) }}>
         <Text style={styles.infoLabel}>{label}</Text>
         <Text style={styles.infoValue}>{value}</Text>
       </View>
-      {onPress && <Ionicons name="chevron-forward" size={17} color={colors.muted} />}
+      {onPress && <Ionicons name="chevron-forward" size={us(17)} color={colors.muted} />}
     </>
   );
   if (onPress) {

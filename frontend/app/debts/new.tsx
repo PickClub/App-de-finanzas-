@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, ScrollView, Pressable, StyleSheet, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import { View, ScrollView, StyleSheet, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from "react-native-reanimated";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -10,6 +11,7 @@ import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
 
+import { us, ufs } from "@/src/ui-scale";
 const COLORS = ["#F5B83B", "#FF654A", "#D95345", "#4C83EA", "#8F5BE8", "#29C4A9", "#2FA47C"];
 const ICONS = ["cash-outline", "card-outline", "car-outline", "home-outline", "person-outline", "briefcase-outline", "gift-outline"];
 const FREQ = [
@@ -59,9 +61,9 @@ function SelectCard({
     >
       <Animated.View style={[styles.selCard, aStyle]}>
         <View style={[styles.selBand, { backgroundColor: bandBg }]} pointerEvents="none" />
-        <Ionicons name="wallet-outline" size={58} color={accent} style={styles.selBandIcon} />
+        <Ionicons name="wallet-outline" size={us(58)} color={accent} style={styles.selBandIcon} />
         <View style={[styles.selCircle, { backgroundColor: circleBg }]}>
-          <Ionicons name={arrowIcon as any} size={28} color={accent} />
+          <Ionicons name={arrowIcon as any} size={us(28)} color={accent} />
         </View>
         <Text style={styles.selCardTitle}>{title}</Text>
         <Text style={styles.selCardSub}>{subtitle}</Text>
@@ -116,17 +118,17 @@ export default function NewDebt() {
 
   if (!step2) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.surface, paddingTop: insets.top + 8 }}>
+      <View style={{ flex: 1, backgroundColor: colors.surface, paddingTop: insets.top + us(8) }}>
         <View style={styles.headerRow}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
           </Pressable>
           <Text style={styles.title}>Nueva deuda</Text>
-          <View style={{ width: 40 }} />
+          <View style={{ width: us(40) }} />
         </View>
         <View style={styles.selWrap}>
           <View style={[styles.selIconTile, { backgroundColor: colors.incomeGreen + "1A" }]}>
-            <Ionicons name="wallet-outline" size={28} color={forest} />
+            <Ionicons name="wallet-outline" size={us(28)} color={forest} />
           </View>
           <Text style={styles.selHeading}>¿Qué quieres registrar?</Text>
           <Text style={styles.selSubheading}>Selecciona el tipo de deuda</Text>
@@ -161,13 +163,13 @@ export default function NewDebt() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 140, paddingHorizontal: spacing.lg }}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
         <View style={styles.headerRow}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
           </Pressable>
           <Text style={styles.title}>{direction === "i_owe" ? "Yo debo" : "Me deben"}</Text>
-          <View style={{ width: 40 }} />
+          <View style={{ width: us(40) }} />
         </View>
 
         <Text style={styles.label}>Nombre</Text>
@@ -177,16 +179,16 @@ export default function NewDebt() {
         <TextInput value={person} onChangeText={setPerson} placeholder="Nombre" placeholderTextColor={colors.muted} style={styles.input} />
 
         <Text style={styles.label}>Monto</Text>
-        <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.muted} style={[styles.input, { fontSize: 22, fontWeight: "800" }]} />
+        <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.muted} style={[styles.input, { fontSize: ufs(22), fontWeight: "800" }]} />
 
         <Text style={styles.label}>Pago mínimo</Text>
         <TextInput value={minPay} onChangeText={setMinPay} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.muted} style={styles.input} />
 
         <Text style={styles.label}>Frecuencia</Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(8) }}>
           {FREQ.map((f) => (
             <Pressable key={f.id} onPress={() => setFrequency(f.id)} style={[styles.freqChip, frequency === f.id && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
-              <Text style={{ color: frequency === f.id ? "#fff" : colors.onSurface, fontWeight: "700", fontSize: 12 }}>{f.label}</Text>
+              <Text style={{ color: frequency === f.id ? "#fff" : colors.onSurface, fontWeight: "700", fontSize: ufs(12) }}>{f.label}</Text>
             </Pressable>
           ))}
         </View>
@@ -195,23 +197,23 @@ export default function NewDebt() {
         <TextInput value={interest} onChangeText={setInterest} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted} style={styles.input} />
 
         <Text style={styles.label}>Icono</Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(10) }}>
           {ICONS.map((ic) => (
             <Pressable key={ic} onPress={() => setIcon(ic)} style={[styles.iconOpt, icon === ic && { borderColor: color, borderWidth: 2 }]}>
-              <IconTile icon={ic} tint={color} size={34} />
+              <IconTile icon={ic} tint={color} size={us(34)} />
             </Pressable>
           ))}
         </View>
 
         <Text style={styles.label}>Color</Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(10) }}>
           {COLORS.map((c) => (
-            <Pressable key={c} onPress={() => setColor(c)} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: c, borderWidth: color === c ? 3 : 0, borderColor: colors.onSurface }} />
+            <Pressable key={c} onPress={() => setColor(c)} style={{ width: us(40), height: us(40), borderRadius: us(20), backgroundColor: c, borderWidth: color === c ? us(3) : 0, borderColor: colors.onSurface }} />
           ))}
         </View>
 
         <Text style={styles.label}>Notas</Text>
-        <TextInput value={notes} onChangeText={setNotes} multiline placeholder="Opcional" placeholderTextColor={colors.muted} style={[styles.input, { minHeight: 60 }]} />
+        <TextInput value={notes} onChangeText={setNotes} multiline placeholder="Opcional" placeholderTextColor={colors.muted} style={[styles.input, { minHeight: us(60) }]} />
 
         <Pressable testID="save-debt" onPress={save} style={styles.saveBtn}>
           <Text style={styles.saveText}>Guardar deuda</Text>

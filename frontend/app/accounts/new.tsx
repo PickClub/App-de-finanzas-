@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { View, ScrollView, Pressable, StyleSheet, Alert } from "react-native";
+import { View, ScrollView, StyleSheet, Alert } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -10,6 +11,7 @@ import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { IconTile } from "@/src/components/ui";
 
+import { us, ufs } from "@/src/ui-scale";
 const TYPE_IDS = [
   { id: "cash", icon: "cash-outline" },
   { id: "checking", icon: "card-outline" },
@@ -77,15 +79,15 @@ export default function AccountForm() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 140, paddingHorizontal: spacing.lg }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: spacing.lg }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+          <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{params.id ? t("accounts.editAccount") : t("accounts.newAccount")}</Text>
         {params.id && (
           <Pressable onPress={remove} style={styles.backBtn}>
-            <Ionicons name="trash-outline" size={22} color={colors.expenseRed} />
+            <Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} />
           </Pressable>
         )}
       </View>
@@ -100,16 +102,16 @@ export default function AccountForm() {
       <View style={styles.grid}>
         {TYPE_IDS.map((ty) => (
           <Pressable key={ty.id} onPress={() => { setType(ty.id); setIcon(ty.icon); }} style={[styles.gridItem, type === ty.id && { borderColor: color, borderWidth: 2 }]}>
-            <IconTile icon={ty.icon} tint={color} size={38} />
-            <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: 6, fontSize: 12 }}>{t(`accounts.types.${ty.id}`)}</Text>
+            <IconTile icon={ty.icon} tint={color} size={us(38)} />
+            <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: us(6), fontSize: ufs(12) }}>{t(`accounts.types.${ty.id}`)}</Text>
           </Pressable>
         ))}
       </View>
 
       <Text style={styles.label}>{t("accounts.color")}</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(10) }}>
         {COLORS.map((c) => (
-          <Pressable key={c} onPress={() => setColor(c)} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: c, borderWidth: color === c ? 3 : 0, borderColor: colors.onSurface }} />
+          <Pressable key={c} onPress={() => setColor(c)} style={{ width: us(40), height: us(40), borderRadius: us(20), backgroundColor: c, borderWidth: color === c ? us(3) : 0, borderColor: colors.onSurface }} />
         ))}
       </View>
 

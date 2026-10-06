@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, ScrollView, Pressable, StyleSheet, Modal, KeyboardAvoidingView, Platform } from "react-native";
+import { View, ScrollView, StyleSheet, Modal, KeyboardAvoidingView, Platform } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,6 +12,7 @@ import { formatCurrency } from "@/src/format";
 import { ProgressRing } from "@/src/components/ProgressRing";
 import { IconTile } from "@/src/components/ui";
 
+import { us } from "@/src/ui-scale";
 const COLORS = ["#29C4A9", "#4C83EA", "#FF654A", "#F5B83B", "#8F5BE8", "#2FA47C"];
 const ICONS = ["flag-outline", "desktop-outline", "airplane-outline", "shield-checkmark-outline", "car-outline", "home-outline", "gift-outline", "school-outline"];
 
@@ -39,14 +41,14 @@ export default function Goals() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 140, paddingHorizontal: spacing.lg }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: spacing.lg }}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
           </Pressable>
           <Text style={styles.title}>Metas de ahorro</Text>
           <Pressable testID="add-goal" onPress={() => setOpen(true)} style={[styles.backBtn, { backgroundColor: colors.brandPrimary }]}>
-            <Ionicons name="add" size={22} color="#fff" />
+            <Ionicons name="add" size={us(22)} color="#fff" />
           </Pressable>
         </View>
 
@@ -55,15 +57,15 @@ export default function Goals() {
             const p = Math.min(1, g.current_amount / g.target_amount);
             return (
               <View key={g.id} style={styles.card}>
-                <ProgressRing progress={p} color={g.color} size={90} stroke={10}>
+                <ProgressRing progress={p} color={g.color} size={us(90)} stroke={us(10)}>
                   <View style={{ alignItems: "center" }}>
-                    <IconTile icon={g.icon} tint={g.color} size={36} />
+                    <IconTile icon={g.icon} tint={g.color} size={us(36)} />
                   </View>
                 </ProgressRing>
                 <Text style={styles.name}>{g.name}</Text>
                 <Text style={styles.amt}>{formatCurrency(g.current_amount)}</Text>
                 <Text style={styles.of}>de {formatCurrency(g.target_amount)}</Text>
-                <Text style={{ color: g.color, fontWeight: "800", marginTop: 4 }}>{Math.round(p * 100)}%</Text>
+                <Text style={{ color: g.color, fontWeight: "800", marginTop: us(4) }}>{Math.round(p * 100)}%</Text>
               </View>
             );
           })}
@@ -72,7 +74,7 @@ export default function Goals() {
 
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "#00000055" }}>
-          <ScrollView style={styles.sheet} contentContainerStyle={{ paddingBottom: 40 }}>
+          <ScrollView style={styles.sheet} contentContainerStyle={{ paddingBottom: us(40) }}>
             <View style={styles.sheetHandle} />
             <Text style={styles.title}>Nueva meta</Text>
             <Text style={styles.label}>Nombre</Text>
@@ -82,17 +84,17 @@ export default function Goals() {
             <Text style={styles.label}>Ya ahorrado</Text>
             <TextInput value={current} onChangeText={setCurrent} placeholder="0.00" placeholderTextColor={colors.muted} keyboardType="decimal-pad" style={styles.input} />
             <Text style={styles.label}>Icono</Text>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(10) }}>
               {ICONS.map((ic) => (
                 <Pressable key={ic} onPress={() => setIcon(ic)} style={[styles.iconOpt, icon === ic && { borderColor: color, borderWidth: 2 }]}>
-                  <IconTile icon={ic} tint={color} size={34} />
+                  <IconTile icon={ic} tint={color} size={us(34)} />
                 </Pressable>
               ))}
             </View>
             <Text style={styles.label}>Color</Text>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(10) }}>
               {COLORS.map((c) => (
-                <Pressable key={c} onPress={() => setColor(c)} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: c, borderWidth: color === c ? 3 : 0, borderColor: colors.onSurface }} />
+                <Pressable key={c} onPress={() => setColor(c)} style={{ width: us(40), height: us(40), borderRadius: us(20), backgroundColor: c, borderWidth: color === c ? us(3) : 0, borderColor: colors.onSurface }} />
               ))}
             </View>
             <Pressable testID="save-goal" onPress={save} style={styles.saveBtn}>

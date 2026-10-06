@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { View, ScrollView, Pressable, Platform, ActivityIndicator } from "react-native";
+import { View, ScrollView, Platform, ActivityIndicator } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -11,6 +12,7 @@ import { useTranslation } from "@/src/i18n";
 import { formatCurrencyInt, formatDateLong } from "@/src/format";
 import { IconTile } from "@/src/components/ui";
 
+import { us } from "@/src/ui-scale";
 // Mirror the Home square-card color logic so the detail accents match the card
 // EXACTLY (legacy name overrides on light; raw stored color otherwise). This is
 // a presentation-only helper — it reads the account's REAL stored color.
@@ -40,7 +42,7 @@ function InfoRow({ styles, tileBg, iconColor, icon, label, value, rightNode }: a
   return (
     <View style={styles.infoRow}>
       <View style={[styles.infoTile, { backgroundColor: tileBg }]}>
-        <Ionicons name={icon} size={18} color={iconColor} />
+        <Ionicons name={icon} size={us(18)} color={iconColor} />
       </View>
       <Text style={styles.infoLabel}>{label}</Text>
       {rightNode ? rightNode : <Text style={styles.infoValue}>{value}</Text>}
@@ -83,10 +85,10 @@ export default function AccountDetail() {
 
   if (!account) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.surface, paddingTop: insets.top + 8 }}>
+      <View style={{ flex: 1, backgroundColor: colors.surface, paddingTop: insets.top + us(8) }}>
         <View style={styles.headerRow}>
           <Pressable testID="acc-detail-back" onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
           </Pressable>
         </View>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
@@ -106,16 +108,16 @@ export default function AccountDetail() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <ScrollView
         contentContainerStyle={{
-          paddingTop: insets.top + 8,
-          paddingBottom: insets.bottom + 28,
-          paddingHorizontal: spacing.lg,
+          paddingTop: insets.top + us(8),
+          paddingBottom: insets.bottom + us(28),
+          paddingHorizontal: us(spacing.lg),
         }}
         showsVerticalScrollIndicator={false}
       >
         {/* 1. Header */}
         <View style={styles.headerRow}>
           <Pressable testID="acc-detail-back" onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
           </Pressable>
           <View style={{ flex: 1 }} />
         </View>
@@ -123,9 +125,9 @@ export default function AccountDetail() {
         {/* Identity */}
         <View style={styles.identityRow}>
           <View style={[styles.identityIcon, { backgroundColor: ac }]}>
-            <Ionicons name={iconName as any} size={30} color="#fff" />
+            <Ionicons name={iconName as any} size={us(30)} color="#fff" />
           </View>
-          <View style={{ flex: 1, marginLeft: 16, minWidth: 0 }}>
+          <View style={{ flex: 1, marginLeft: us(16), minWidth: 0 }}>
             <Text style={styles.accName}>{account.name}</Text>
             <View style={styles.typeRow}>
               <View style={[styles.typeDot, { backgroundColor: ac }]} />
@@ -137,7 +139,7 @@ export default function AccountDetail() {
         {/* 2. Current balance */}
         <View style={[styles.card, styles.balanceCard]}>
           <View style={[styles.balanceGlow, { backgroundColor: ac + "14" }]} pointerEvents="none" />
-          <Ionicons name="wallet-outline" size={92} color={ac} style={styles.balanceWallet} />
+          <Ionicons name="wallet-outline" size={us(92)} color={ac} style={styles.balanceWallet} />
           <Text style={styles.balanceLabel}>{t("accounts.currentBalance")}</Text>
           <Text style={styles.balanceValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
             {formatCurrencyInt(account.current_balance || 0)}
@@ -186,7 +188,7 @@ export default function AccountDetail() {
               hitSlop={8}
             >
               <Text style={[styles.seeText, { color: forest }]}>{t("common.seeAll")}</Text>
-              <Ionicons name="chevron-forward" size={14} color={forest} />
+              <Ionicons name="chevron-forward" size={us(14)} color={forest} />
             </Pressable>
           </View>
           {accountTx.length === 0 && <Text style={styles.emptyTx}>{t("home.noMovements")}</Text>}
@@ -206,15 +208,15 @@ export default function AccountDetail() {
                   onPress={() => router.push(`/transactions/${item.id}`)}
                   style={styles.txRow}
                 >
-                  <IconTile icon={ic} tint={tint} size={36} />
-                  <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
+                  <IconTile icon={ic} tint={tint} size={us(36)} />
+                  <View style={{ flex: 1, marginLeft: us(10), minWidth: 0 }}>
                     <Text style={styles.txName}>{item.name}</Text>
                     <Text style={styles.txDate}>{formatDateLong(item.date)}</Text>
                   </View>
                   <Text style={[styles.txAmount, { color: amtColor }]}>
                     {sign}{formatCurrencyInt(item.amount)}
                   </Text>
-                  <Ionicons name="chevron-forward" size={15} color={colors.muted} style={{ marginLeft: 4 }} />
+                  <Ionicons name="chevron-forward" size={us(15)} color={colors.muted} style={{ marginLeft: us(4) }} />
                 </Pressable>
               </View>
             );
@@ -227,7 +229,7 @@ export default function AccountDetail() {
           onPress={() => router.push(`/accounts/new?id=${account.id}`)}
           style={[styles.editBtn, { backgroundColor: ac }]}
         >
-          <Ionicons name="create-outline" size={20} color="#fff" />
+          <Ionicons name="create-outline" size={us(20)} color="#fff" />
           <Text style={styles.editText}>{t("accounts.editAccount")}</Text>
         </Pressable>
       </ScrollView>

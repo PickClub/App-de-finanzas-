@@ -1,11 +1,12 @@
 import React from "react";
 import { View } from "react-native";
 import { useTheme } from "@/src/theme";
+import { us } from "@/src/ui-scale";
 
 export function ProgressBar({
   progress,
   color,
-  height = 8,
+  height = us(8),
   trackColor,
 }: {
   progress: number;

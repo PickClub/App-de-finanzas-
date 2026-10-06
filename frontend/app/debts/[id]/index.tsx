@@ -1,5 +1,6 @@
 import React from "react";
-import { View, ScrollView, Pressable, StyleSheet, Alert } from "react-native";
+import { View, ScrollView, StyleSheet, Alert } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -11,6 +12,7 @@ import { formatCurrencyInt, formatDateLong } from "@/src/format";
 import { ProgressRing } from "@/src/components/ProgressRing";
 import { IconTile } from "@/src/components/ui";
 
+import { us, ufs } from "@/src/ui-scale";
 export default function DebtDetail() {
   const { colors } = useTheme();
   const styles = useStyles();
@@ -41,29 +43,29 @@ export default function DebtDetail() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 140 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140) }}>
       <View style={styles.headerRow}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+          <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{d.name}</Text>
         <Pressable onPress={remove} style={styles.backBtn}>
-          <Ionicons name="trash-outline" size={22} color={colors.expenseRed} />
+          <Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} />
         </Pressable>
       </View>
 
       <View style={[styles.hero, { backgroundColor: d.color + "22" }]}>
-        <ProgressRing progress={progress} color={d.color} size={140} stroke={14}>
+        <ProgressRing progress={progress} color={d.color} size={us(140)} stroke={us(14)}>
           <View style={{ alignItems: "center" }}>
-            <Text style={{ color: colors.muted, fontSize: 12, fontWeight: "600" }}>Pagado</Text>
-            <Text style={{ color: colors.onSurface, fontSize: 22, fontWeight: "800" }}>
+            <Text style={{ color: colors.muted, fontSize: ufs(12), fontWeight: "600" }}>Pagado</Text>
+            <Text style={{ color: colors.onSurface, fontSize: ufs(22), fontWeight: "800" }}>
               {Math.round(progress * 100)}%
             </Text>
           </View>
         </ProgressRing>
-        <View style={{ flexDirection: "row", marginTop: 16, alignItems: "center", gap: 10 }}>
-          <IconTile icon={d.icon} tint={d.color} size={36} />
-          <Text style={{ fontSize: 15, color: colors.onSurface, fontWeight: "700" }}>
+        <View style={{ flexDirection: "row", marginTop: us(16), alignItems: "center", gap: us(10) }}>
+          <IconTile icon={d.icon} tint={d.color} size={us(36)} />
+          <Text style={{ fontSize: ufs(15), color: colors.onSurface, fontWeight: "700" }}>
             {d.direction === "i_owe" ? "Yo debo a " : "Me debe "} {d.person || ""}
           </Text>
         </View>
@@ -112,7 +114,7 @@ export default function DebtDetail() {
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Estado</Text>
           <View style={[styles.badge, { backgroundColor: d.status === "paid" ? colors.incomeGreen + "22" : colors.brandPrimary + "22" }]}>
-            <Text style={{ color: d.status === "paid" ? colors.incomeGreen : colors.brandPrimary, fontWeight: "800", fontSize: 12 }}>
+            <Text style={{ color: d.status === "paid" ? colors.incomeGreen : colors.brandPrimary, fontWeight: "800", fontSize: ufs(12) }}>
               {d.status === "paid" ? "PAGADA ✓" : "ACTIVA"}
             </Text>
           </View>
@@ -125,24 +127,24 @@ export default function DebtDetail() {
         onPress={() => router.push(`/debts/${d.id}/pay`)}
         style={[styles.payBtn, d.status === "paid" && { opacity: 0.5 }]}
       >
-        <Ionicons name="add-circle-outline" size={22} color="#fff" />
+        <Ionicons name="add-circle-outline" size={us(22)} color="#fff" />
         <Text style={styles.payText}>Registrar pago</Text>
       </Pressable>
 
-      <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.xl }}>
-        <Text style={{ fontSize: 16, fontWeight: "800", color: colors.onSurface, marginBottom: 10 }}>Historial de pagos</Text>
+      <View style={{ paddingHorizontal: us(spacing.lg), marginTop: us(spacing.xl) }}>
+        <Text style={{ fontSize: ufs(16), fontWeight: "800", color: colors.onSurface, marginBottom: us(10) }}>Historial de pagos</Text>
         <View style={styles.historyCard}>
           {(paysQ.data || []).map((p: any) => (
             <View key={p.id} style={styles.histRow}>
-              <Ionicons name="checkmark-circle" size={22} color={colors.incomeGreen} />
-              <View style={{ flex: 1, marginLeft: 10 }}>
+              <Ionicons name="checkmark-circle" size={us(22)} color={colors.incomeGreen} />
+              <View style={{ flex: 1, marginLeft: us(10) }}>
                 <Text style={{ fontWeight: "700", color: colors.onSurface }}>{formatCurrencyInt(p.amount)}</Text>
-                <Text style={{ color: colors.muted, fontSize: 12 }}>{formatDateLong(p.date)}</Text>
+                <Text style={{ color: colors.muted, fontSize: ufs(12) }}>{formatDateLong(p.date)}</Text>
               </View>
             </View>
           ))}
           {(!paysQ.data || paysQ.data.length === 0) && (
-            <Text style={{ color: colors.muted, textAlign: "center", padding: 16 }}>Sin pagos registrados</Text>
+            <Text style={{ color: colors.muted, textAlign: "center", padding: us(16) }}>Sin pagos registrados</Text>
           )}
         </View>
       </View>

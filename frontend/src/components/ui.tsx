@@ -1,13 +1,15 @@
 import React from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useTheme, radius } from "@/src/theme";
 
+import { us, ufs } from "@/src/ui-scale";
 export function IconTile({
   icon,
   tint,
-  size = 44,
+  size = us(44),
   iconSize,
 }: {
   icon: string;
@@ -48,8 +50,8 @@ export function Chip({
       testID={testID}
       onPress={onPress}
       style={{
-        height: 36,
-        paddingHorizontal: 16,
+        height: us(36),
+        paddingHorizontal: us(16),
         borderRadius: radius.pill,
         alignItems: "center",
         justifyContent: "center",
@@ -62,7 +64,7 @@ export function Chip({
       <Text
         style={{
           color: active ? colors.onBrandPrimary : colors.onSurface,
-          fontSize: 13,
+          fontSize: ufs(13),
           fontWeight: "600",
         }}
       >

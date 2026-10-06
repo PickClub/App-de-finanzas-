@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Pressable, StyleSheet } from "react-native";
+import { View, StyleSheet } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { AppSheet } from "@/src/components/sheets";
 import { useTheme, radius } from "@/src/theme";
 
+import { us, scaleStyles } from "@/src/ui-scale";
 export type DateRange = { start: number; end: number };
 
 const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
@@ -151,7 +153,7 @@ export function DateRangeSheet({
     <AppSheet visible={visible} onClose={onClose} testID="date-range-sheet">
       {/* Header */}
       <View style={st.headRow}>
-        <View style={{ flex: 1, paddingRight: 12 }}>
+        <View style={{ flex: 1, paddingRight: us(12) }}>
           <Text style={[st.title, { color: colors.onSurface }]}>Selecciona un período</Text>
           <Text style={[st.subtitle, { color: colors.muted }]}>
             Elige un rango de fechas para filtrar tus movimientos.
@@ -163,7 +165,7 @@ export function DateRangeSheet({
           style={[st.closeBtn, { backgroundColor: colors.surfaceTertiary }]}
           hitSlop={8}
         >
-          <Ionicons name="close" size={18} color={colors.muted} />
+          <Ionicons name="close" size={us(18)} color={colors.muted} />
         </Pressable>
       </View>
 
@@ -175,7 +177,7 @@ export function DateRangeSheet({
           style={[st.navBtn, { backgroundColor: colors.surfaceTertiary }]}
           hitSlop={8}
         >
-          <Ionicons name="chevron-back" size={18} color={colors.onSurface} />
+          <Ionicons name="chevron-back" size={us(18)} color={colors.onSurface} />
         </Pressable>
         <Text style={[st.monthLabel, { color: colors.onSurface }]}>
           {MONTHS[viewMonth.getMonth()]} {viewMonth.getFullYear()}
@@ -186,7 +188,7 @@ export function DateRangeSheet({
           style={[st.navBtn, { backgroundColor: colors.surfaceTertiary }]}
           hitSlop={8}
         >
-          <Ionicons name="chevron-forward" size={18} color={colors.onSurface} />
+          <Ionicons name="chevron-forward" size={us(18)} color={colors.onSurface} />
         </Pressable>
       </View>
 
@@ -242,7 +244,7 @@ export function DateRangeSheet({
       <Text style={[st.selLabel, { color: colors.muted }]}>Período seleccionado</Text>
       <View style={[st.summaryRow, { backgroundColor: colors.surfaceTertiary, borderColor: gridLine }]}>
         <View style={[st.summaryIcon, { backgroundColor: mint }]}>
-          <Ionicons name="calendar-outline" size={16} color={green} />
+          <Ionicons name="calendar-outline" size={us(16)} color={green} />
         </View>
         <Text style={[st.summaryText, { color: colors.onSurface }]}>
           {summaryText}
@@ -265,7 +267,7 @@ export function DateRangeSheet({
   );
 }
 
-const st = StyleSheet.create({
+const st = StyleSheet.create(scaleStyles({
   headRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 14 },
   title: { fontSize: 20, fontWeight: "800", letterSpacing: -0.3 },
   subtitle: { fontSize: 13, marginTop: 4, lineHeight: 18 },
@@ -301,4 +303,4 @@ const st = StyleSheet.create({
     alignItems: "center",
   },
   applyText: { color: "#FFFFFF", fontWeight: "800", fontSize: 16 },
-});
+}));

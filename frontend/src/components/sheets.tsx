@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Pressable, Modal, Animated, Easing, StyleSheet, Dimensions } from "react-native";
+import { View, Modal, Animated, Easing, StyleSheet, Dimensions } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, radius, spacing } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 
+import { us, scaleStyles } from "@/src/ui-scale";
 const { height: SCREEN_H } = Dimensions.get("window");
 
 /**
@@ -64,7 +66,7 @@ export function AppSheet({
             {
               backgroundColor: colors.surface,
               borderColor: colors.border,
-              paddingBottom: insets.bottom + spacing.lg,
+              paddingBottom: insets.bottom + us(spacing.lg),
               transform: [{ translateY: ty }],
             },
           ]}
@@ -111,7 +113,7 @@ export function ConfirmSheet({
     <AppSheet visible={visible} onClose={onClose} testID="confirm-sheet">
       <View style={s.confirmBody}>
         <View style={[s.confirmIcon, { backgroundColor: main + "1F" }]}>
-          <Ionicons name={icon as any} size={30} color={main} />
+          <Ionicons name={icon as any} size={us(30)} color={main} />
         </View>
         <Text style={[s.confirmTitle, { color: colors.onSurface }]}>{title}</Text>
         <Text style={[s.confirmDesc, { color: colors.muted }]}>{description}</Text>
@@ -126,7 +128,7 @@ export function ConfirmSheet({
   );
 }
 
-const s = StyleSheet.create({
+const s = StyleSheet.create(scaleStyles({
   root: { flex: 1, justifyContent: "flex-end" },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(20,16,12,0.45)" },
   sheet: {
@@ -150,4 +152,4 @@ const s = StyleSheet.create({
   primaryText: { color: "#fff", fontWeight: "800", fontSize: 15.5 },
   cancelBtn: { alignSelf: "stretch", marginTop: 10, paddingVertical: 15, borderRadius: radius.pill, alignItems: "center" },
   cancelText: { fontWeight: "800", fontSize: 15.5 },
-});
+}));

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Tabs, useRouter } from "expo-router";
-import { Pressable, View, BackHandler } from "react-native";
+import { View, BackHandler } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Animated, {
   useSharedValue,
@@ -20,6 +21,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, makeStyles } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 
+import { us, touchSlop } from "@/src/ui-scale";
+
+// Effective (already scaled) geometry used by JS/worklet math. Styles keep base
+// values and are scaled once by makeStyles; these mirror those effective sizes.
+const DOT = us(5); // shared active indicator (styles.dot / dotIndicator)
+const ANCHOR_HALF = us(52) / 2; // centerAnchor / actionAnchor are 52 base
+const LIFT = us(50); // center button + fan rise
+const FAN_MAX = us(160);
+const FAN_MARGIN = us(45);
+const ACTION_SLOP = touchSlop(us(52)); // keeps each quick action >= 44
 // Bottom-bar tab definitions (icons keep the app's existing solid Ionicons
 // language). Order is fixed: Cuentas · IA · (centro) · Informes · Más.
 // `labelKey` points at the i18n key; the visible label is translated at render.
@@ -81,10 +92,11 @@ function TabButton({
       accessibilityState={isFocused ? { selected: true } : {}}
       onPress={onPress}
       onLayout={onLayout}
+      hitSlop={{ top: 4, bottom: 4 }}
       style={styles.item}
     >
       <Animated.View style={iconStyle}>
-        <Ionicons name={icon as any} size={22} color={tint} />
+        <Ionicons name={icon as any} size={us(22)} color={tint} />
       </Animated.View>
       <Text style={[styles.label, { color: tint }]} numberOfLines={1}>{label}</Text>
       {/* Transparent placeholder preserves the exact column height; the visible
@@ -147,7 +159,7 @@ function CustomTabBar({ state, navigation, centerSlot, barRef, measureCenter }: 
     (name: string, e: any) => {
       const { x, width, y, height } = e.nativeEvent.layout;
       centers.current[name] = x + width / 2;
-      dotY.current = y + height - 5; // dot sits at the very bottom of the column
+      dotY.current = y + height - DOT; // dot sits at the very bottom of the column
       if (name === activeName) moveIndicator(false);
     },
     [activeName, moveIndicator],
@@ -156,7 +168,7 @@ function CustomTabBar({ state, navigation, centerSlot, barRef, measureCenter }: 
   const indicatorStyle = useAnimatedStyle(() => ({
     opacity: indicatorOpacity.value,
     transform: [
-      { translateX: indicatorX.value - 2.5 },
+      { translateX: indicatorX.value - DOT / 2 },
       { translateY: indicatorY.value },
     ],
   }));
@@ -240,7 +252,7 @@ const RadialAction = React.memo(function RadialAction({
   const { colors } = useTheme();
   const angle = (155 - index * 32.5) * Math.PI / 180;
   const available = geometry ? Math.min(geometry.x, geometry.width - geometry.x) : 0;
-  const fanRadius = Math.max(0, Math.min(160, (available - 45) / Math.cos(25 * Math.PI / 180)));
+  const fanRadius = Math.max(0, Math.min(FAN_MAX, (available - FAN_MARGIN) / Math.cos(25 * Math.PI / 180)));
   const dx = Math.cos(angle) * fanRadius;
   const dy = -Math.sin(angle) * fanRadius;
   const actionStyle = useAnimatedStyle(() => {
@@ -250,24 +262,24 @@ const RadialAction = React.memo(function RadialAction({
       opacity: spread,
       transform: [
         { translateX: dx * spread },
-        { translateY: -50 * rise + dy * spread },
+        { translateY: -LIFT * rise + dy * spread },
         { scale: 0.75 + 0.25 * spread },
       ],
     };
   });
   return (
     <Animated.View
-      style={[styles.actionAnchor, { left: (geometry?.x ?? 0) - 26, top: (geometry?.y ?? 0) - 26 }, actionStyle]}
+      style={[styles.actionAnchor, { left: (geometry?.x ?? 0) - ANCHOR_HALF, top: (geometry?.y ?? 0) - ANCHOR_HALF }, actionStyle]}
       pointerEvents={enabled ? "auto" : "none"}
       accessibilityElementsHidden={!enabled}
       importantForAccessibility={enabled ? "auto" : "no-hide-descendants"}
     >
       <Pressable testID={`quick-${item.label}`} accessibilityRole="button"
         accessibilityLabel={item.label} disabled={!enabled}
-        onPress={() => onSelect(item.route)} style={styles.actionTouch}>
+        onPress={() => onSelect(item.route)} hitSlop={ACTION_SLOP} style={styles.actionTouch}>
         <View style={[styles.actionCircle, { backgroundColor: colors.surface }]}>
           <View style={[styles.actionTint, { backgroundColor: item.color + "22" }]}>
-            <Ionicons name={item.icon as any} size={23} color={item.color} />
+            <Ionicons name={item.icon as any} size={us(23)} color={item.color} />
           </View>
         </View>
         <Text style={styles.actionLabel} numberOfLines={2}>{item.label}</Text>
@@ -347,7 +359,7 @@ function QuickMenu({ geometry }: { geometry: CenterGeometry | null }) {
   }, [active, close]);
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: 0.368 * phase(progress.value, 0, 1) }));
-  const centerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -50 * phase(progress.value, 0, 0.65) }] }));
+  const centerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -LIFT * phase(progress.value, 0, 0.65) }] }));
   const walletStyle = useAnimatedStyle(() => ({ opacity: 1 - phase(progress.value, 0.1, 0.6) }));
   const closeStyle = useAnimatedStyle(() => ({
     opacity: phase(progress.value, 0.1, 0.6),
@@ -377,7 +389,7 @@ function QuickMenu({ geometry }: { geometry: CenterGeometry | null }) {
           Its closed coordinates come from the original bottom-bar slot. */}
       <Animated.View pointerEvents={geometry ? "box-none" : "none"}
         style={[styles.centerAnchor, {
-          left: (geometry?.x ?? 0) - 26, top: (geometry?.y ?? 0) - 26,
+          left: (geometry?.x ?? 0) - ANCHOR_HALF, top: (geometry?.y ?? 0) - ANCHOR_HALF,
           opacity: geometry ? 1 : 0,
         }, centerStyle]}>
         <Pressable testID="fab-add-btn" accessibilityRole="button"
@@ -386,13 +398,13 @@ function QuickMenu({ geometry }: { geometry: CenterGeometry | null }) {
           hitSlop={5} onPress={toggle} style={styles.centerBtn}>
           <View style={[styles.centerCircle, { marginTop: 0 }]}>
             <Animated.View pointerEvents="none" style={[styles.centerVisual, walletStyle]}>
-              <Ionicons name="wallet" size={22} color={centerIconCol} />
+              <Ionicons name="wallet" size={us(22)} color={centerIconCol} />
               <View style={styles.plusBadge}>
-                <Ionicons name="add" size={11} color="#FFFFFF" />
+                <Ionicons name="add" size={us(11)} color="#FFFFFF" />
               </View>
             </Animated.View>
             <Animated.View pointerEvents="none" style={[styles.centerVisual, closeStyle]}>
-              <Ionicons name="add" size={26} color={centerIconCol} />
+              <Ionicons name="add" size={us(26)} color={centerIconCol} />
             </Animated.View>
           </View>
         </Pressable>

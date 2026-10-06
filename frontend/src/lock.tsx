@@ -7,13 +7,15 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Animated, Easing, Pressable, StyleSheet, View, type GestureResponderEvent } from "react-native";
+import { Animated, Easing, StyleSheet, View, type GestureResponderEvent } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import * as Haptics from "expo-haptics";
 import { useTheme, makeStyles, radius } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
 
+import { us } from "@/src/ui-scale";
 type LockContextValue = {
   locked: boolean;
   toggle: () => void;
@@ -118,7 +120,7 @@ function FlashDot({ x, y }: { x: number; y: number }) {
     ]).start();
   }, [scale, opacity, inner]);
 
-  const SIZE = 84;
+  const SIZE = us(84);
   return (
     <View
       pointerEvents="none"
@@ -147,9 +149,9 @@ function FlashDot({ x, y }: { x: number; y: number }) {
       />
       <Animated.View
         style={{
-          width: 22,
-          height: 22,
-          borderRadius: 11,
+          width: us(22),
+          height: us(22),
+          borderRadius: us(11),
           backgroundColor: colors.brandPrimary,
           alignItems: "center",
           justifyContent: "center",
@@ -157,7 +159,7 @@ function FlashDot({ x, y }: { x: number; y: number }) {
           opacity,
         }}
       >
-        <Ionicons name="lock-closed" size={12} color="#fff" />
+        <Ionicons name="lock-closed" size={us(12)} color="#fff" />
       </Animated.View>
     </View>
   );
@@ -174,13 +176,13 @@ export function LockToggle({ testID, compact }: { testID?: string; compact?: boo
       hitSlop={8}
       style={[
         styles.toggle,
-        compact && { paddingHorizontal: 8, height: 30 },
+        compact && { paddingHorizontal: us(8), height: us(30) },
         locked ? styles.toggleOn : styles.toggleOff,
       ]}
     >
       <Ionicons
         name={locked ? "lock-closed" : "lock-open-outline"}
-        size={compact ? 14 : 15}
+        size={us(compact ? 14 : 15)}
         color={locked ? "#fff" : colors.onSurface}
       />
       {!compact && (

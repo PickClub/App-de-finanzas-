@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Pressable, ScrollView } from "react-native";
+import { View, ScrollView } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,6 +8,7 @@ import { useRouter } from "expo-router";
 import { useTheme, makeStyles, radius } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 
+import { us } from "@/src/ui-scale";
 type Tile = {
   icon: string;
   label: string;
@@ -57,13 +59,13 @@ export default function More() {
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.container,
-          { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 132 },
+          { paddingTop: insets.top + us(14), paddingBottom: insets.bottom + us(132) },
         ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
         <View style={styles.header}>
-          <View style={{ flex: 1, paddingRight: 12 }}>
+          <View style={{ flex: 1, paddingRight: us(12) }}>
             <Text style={styles.title}>{t("more.title")}</Text>
             <Text style={styles.subtitle}>
               {t("more.headerSubtitle")}
@@ -75,22 +77,22 @@ export default function More() {
             style={({ pressed }) => [styles.profilePill, pressed && styles.pressed]}
           >
             <View style={styles.avatar}>
-              <Ionicons name="person" size={16} color={colors.brandPrimary} />
+              <Ionicons name="person" size={us(16)} color={colors.brandPrimary} />
             </View>
-            <View style={{ marginHorizontal: 8 }}>
+            <View style={{ marginHorizontal: us(8) }}>
               <Text style={styles.profileHi}>{t("more.greeting")}</Text>
               <Text style={styles.profileName}>{t("more.defaultUser")}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+            <Ionicons name="chevron-forward" size={us(16)} color={colors.muted} />
           </Pressable>
         </View>
 
         {/* Premium banner */}
         <Pressable testID="more-premium" style={({ pressed }) => [styles.banner, pressed && styles.pressed]}>
           <View style={styles.bannerIcon}>
-            <Ionicons name="ribbon" size={26} color={colors.brandPrimary} />
+            <Ionicons name="ribbon" size={us(26)} color={colors.brandPrimary} />
           </View>
-          <View style={{ flex: 1, marginHorizontal: 14 }}>
+          <View style={{ flex: 1, marginHorizontal: us(14) }}>
             <Text style={styles.bannerTitle}>{t("more.premiumTitle")}</Text>
             <Text style={styles.bannerSub}>
               {t("more.premiumSubtitleFull")}
@@ -118,9 +120,9 @@ export default function More() {
                 >
                   <View style={styles.tileTop}>
                     <View style={[styles.tileIcon, { backgroundColor: it.color + "2E" }]}>
-                      <Ionicons name={it.icon as any} size={20} color={it.color} />
+                      <Ionicons name={it.icon as any} size={us(20)} color={it.color} />
                     </View>
-                    <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+                    <Ionicons name="chevron-forward" size={us(16)} color={colors.muted} />
                   </View>
                   <Text style={styles.tileLabel}>{it.label}</Text>
                   <Text style={styles.tileSub}>{it.subtitle}</Text>
@@ -144,13 +146,13 @@ export default function More() {
               style={({ pressed }) => [styles.appRow, i < APP.length - 1 && styles.appRowBorder, pressed && styles.pressed]}
             >
               <View style={[styles.appIcon, { backgroundColor: it.color + "24" }]}>
-                <Ionicons name={it.icon as any} size={19} color={it.color} />
+                <Ionicons name={it.icon as any} size={us(19)} color={it.color} />
               </View>
-              <View style={{ flex: 1, marginLeft: 14 }}>
+              <View style={{ flex: 1, marginLeft: us(14) }}>
                 <Text style={styles.appLabel}>{it.label}</Text>
                 <Text style={styles.appSub}>{it.subtitle}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={19} color={colors.muted} />
+              <Ionicons name="chevron-forward" size={us(19)} color={colors.muted} />
             </Pressable>
           ))}
         </View>
@@ -158,9 +160,9 @@ export default function More() {
         {/* Suggestion */}
         <Pressable testID="more-suggestion" style={({ pressed }) => [styles.suggestion, pressed && styles.pressed]}>
           <View style={styles.suggIcon}>
-            <Ionicons name="bulb-outline" size={22} color={colors.success} />
+            <Ionicons name="bulb-outline" size={us(22)} color={colors.success} />
           </View>
-          <View style={{ flex: 1, marginHorizontal: 14 }}>
+          <View style={{ flex: 1, marginHorizontal: us(14) }}>
             <Text style={styles.suggTitle}>{t("more.suggestionTitle")}</Text>
             <Text style={styles.suggSub}>{t("more.suggestionSubFull")}</Text>
           </View>

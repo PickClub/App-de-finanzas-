@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
-import { View, ScrollView, Pressable, StyleSheet } from "react-native";
+import { View, ScrollView, StyleSheet } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,6 +11,7 @@ import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
 import { LockToggle, useLock } from "@/src/lock";
 
+import { us } from "@/src/ui-scale";
 export default function Categories() {
   const { colors } = useTheme();
   const styles = useStyles();
@@ -46,7 +48,7 @@ export default function Categories() {
           onPress={guard(() => router.push(`/categories/new?id=${c.id}`))}
           style={styles.gridItem}
         >
-          <IconTile icon={c.icon} tint={c.color} size={52} />
+          <IconTile icon={c.icon} tint={c.color} size={us(52)} />
           <Text style={styles.name}>{c.name}</Text>
         </Pressable>
       ))}
@@ -54,15 +56,15 @@ export default function Categories() {
   );
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 140, paddingHorizontal: spacing.lg }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.lg }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: us(10), marginBottom: us(spacing.lg) }}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+          <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>Categorías</Text>
         <LockToggle testID="lock-cats" compact />
         <Pressable testID="add-category" onPress={() => router.push("/categories/new")} style={[styles.backBtn, { backgroundColor: colors.brandPrimary }]}>
-          <Ionicons name="add" size={22} color="#fff" />
+          <Ionicons name="add" size={us(22)} color="#fff" />
         </Pressable>
       </View>
 
@@ -79,7 +81,7 @@ export default function Categories() {
 
       {income.length > 0 && (
         <>
-          <View style={[styles.sectionHead, { marginTop: spacing.md }]}>
+          <View style={[styles.sectionHead, { marginTop: us(spacing.md) }]}>
             <View style={[styles.dot, { backgroundColor: colors.incomeGreen }]} />
             <Text style={styles.section}>Ingresos</Text>
             <Text style={styles.count}>{income.length}</Text>
@@ -89,7 +91,7 @@ export default function Categories() {
       )}
 
       <Pressable testID="restore-categories" onPress={restore} style={styles.restoreBtn}>
-        <Ionicons name="refresh-outline" size={18} color={colors.brandPrimary} />
+        <Ionicons name="refresh-outline" size={us(18)} color={colors.brandPrimary} />
         <Text style={styles.restoreText}>Restaurar predeterminadas</Text>
       </Pressable>
     </ScrollView>

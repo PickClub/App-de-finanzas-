@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { View, ScrollView, StyleSheet, FlatList, Pressable, Modal, KeyboardAvoidingView, Platform } from "react-native";
+import { View, ScrollView, StyleSheet, FlatList, Modal, KeyboardAvoidingView, Platform } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import { useQuery } from "@tanstack/react-query";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -11,6 +12,7 @@ import { formatCurrency, formatDate } from "@/src/format";
 import { IconTile, Chip } from "@/src/components/ui";
 import { LockToggle, useLock } from "@/src/lock";
 
+import { us, ufs } from "@/src/ui-scale";
 const TYPE_FILTERS = [
   { id: "all", label: "Todos" },
   { id: "income", label: "Ingresos" },
@@ -82,8 +84,8 @@ export default function Transactions() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+      <View style={[styles.header, { paddingTop: insets.top + us(12) }]}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: us(10) }}>
           <Text style={styles.title}>Movimientos</Text>
           <LockToggle testID="lock-tx" compact />
           <Pressable
@@ -91,7 +93,7 @@ export default function Transactions() {
             onPress={() => setFiltersOpen(true)}
             style={styles.filterBtn}
           >
-            <Ionicons name="options-outline" size={18} color={colors.onSurface} />
+            <Ionicons name="options-outline" size={us(18)} color={colors.onSurface} />
             {activeAdvanced > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>{activeAdvanced}</Text>
@@ -100,7 +102,7 @@ export default function Transactions() {
           </Pressable>
         </View>
         <View style={styles.searchWrap}>
-          <Ionicons name="search" size={18} color={colors.muted} />
+          <Ionicons name="search" size={us(18)} color={colors.muted} />
           <TextInput
             testID="search-input"
             value={q}
@@ -111,15 +113,15 @@ export default function Transactions() {
           />
           {q.length > 0 && (
             <Pressable onPress={() => setQ("")} hitSlop={8}>
-              <Ionicons name="close-circle" size={18} color={colors.muted} />
+              <Ionicons name="close-circle" size={us(18)} color={colors.muted} />
             </Pressable>
           )}
         </View>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 8 }}
-          style={{ marginTop: spacing.md, height: 44 }}
+          contentContainerStyle={{ paddingHorizontal: us(spacing.lg), gap: us(8) }}
+          style={{ marginTop: us(spacing.md), height: us(44) }}
         >
           {TYPE_FILTERS.map((f) => (
             <Chip
@@ -136,8 +138,8 @@ export default function Transactions() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 8 }}
-            style={{ marginTop: 6, height: 40 }}
+            contentContainerStyle={{ paddingHorizontal: us(spacing.lg), gap: us(8) }}
+            style={{ marginTop: us(6), height: us(40) }}
           >
             {accountId && (
               <ActiveTag
@@ -167,7 +169,7 @@ export default function Transactions() {
               />
             )}
             <Pressable testID="clear-filters" onPress={clearAll} style={styles.clearBtn}>
-              <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 12 }}>Limpiar</Text>
+              <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: ufs(12) }}>Limpiar</Text>
             </Pressable>
           </ScrollView>
         )}
@@ -176,11 +178,11 @@ export default function Transactions() {
       <FlatList
         data={data}
         keyExtractor={(i) => i.id}
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: 140 }}
+        contentContainerStyle={{ padding: us(spacing.lg), paddingBottom: us(140) }}
         ListEmptyComponent={
-          <View style={{ alignItems: "center", padding: spacing.xxl }}>
-            <Ionicons name="documents-outline" size={48} color={colors.muted} />
-            <Text style={{ color: colors.muted, marginTop: 10 }}>Sin movimientos</Text>
+          <View style={{ alignItems: "center", padding: us(spacing.xxl) }}>
+            <Ionicons name="documents-outline" size={us(48)} color={colors.muted} />
+            <Text style={{ color: colors.muted, marginTop: us(10) }}>Sin movimientos</Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -200,14 +202,14 @@ export default function Transactions() {
               onPress={guard(() => router.push(`/transactions/${item.id}`))}
               style={styles.row}
             >
-              <IconTile icon={iconName} tint={tint} size={44} />
-              <View style={{ flex: 1, marginLeft: 12 }}>
+              <IconTile icon={iconName} tint={tint} size={us(44)} />
+              <View style={{ flex: 1, marginLeft: us(12) }}>
                 <Text style={styles.name}>{item.name}</Text>
                 <Text style={styles.sub}>
                   {cat?.name || item.type} {acc ? `· ${acc.name}` : ""} · {formatDate(item.date)}
                 </Text>
               </View>
-              <Text style={{ color, fontWeight: "800", fontSize: 15 }}>
+              <Text style={{ color, fontWeight: "800", fontSize: ufs(15) }}>
                 {sign}{formatCurrency(item.amount)}
               </Text>
             </Pressable>
@@ -223,11 +225,11 @@ export default function Transactions() {
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Filtros</Text>
               <Pressable onPress={() => setFiltersOpen(false)} testID="close-filters" hitSlop={8}>
-                <Ionicons name="close" size={24} color={colors.onSurface} />
+                <Ionicons name="close" size={us(24)} color={colors.onSurface} />
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
+            <ScrollView contentContainerStyle={{ paddingBottom: us(20) }}>
               <Text style={styles.sheetLabel}>Cuenta</Text>
               <View style={styles.optRow}>
                 <FilterPill
@@ -306,10 +308,10 @@ function ActiveTag({
   const styles = useStyles();
   return (
     <View testID={testID} style={[styles.activeTag, { borderColor: color + "80", backgroundColor: color + "1A" }]}>
-      <Ionicons name={icon as any} size={13} color={color} />
-      <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 12 }}>{label}</Text>
+      <Ionicons name={icon as any} size={us(13)} color={color} />
+      <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: ufs(12) }}>{label}</Text>
       <Pressable onPress={onRemove} hitSlop={8}>
-        <Ionicons name="close-circle" size={16} color={color} />
+        <Ionicons name="close-circle" size={us(16)} color={color} />
       </Pressable>
     </View>
   );
@@ -328,8 +330,8 @@ function FilterPill({
       onPress={onPress}
       style={[styles.pill, { backgroundColor: bg, borderColor: active ? bg : colors.border }]}
     >
-      {icon && <Ionicons name={icon as any} size={13} color={fg} />}
-      <Text style={{ color: fg, fontWeight: "700", fontSize: 12 }}>{label}</Text>
+      {icon && <Ionicons name={icon as any} size={us(13)} color={fg} />}
+      <Text style={{ color: fg, fontWeight: "700", fontSize: ufs(12) }}>{label}</Text>
     </Pressable>
   );
 }

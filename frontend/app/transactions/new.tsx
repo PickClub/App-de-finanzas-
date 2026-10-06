@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { View, ScrollView, Pressable, StyleSheet, KeyboardAvoidingView, Platform, Alert } from "react-native";
+import { View, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Alert } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -10,6 +11,7 @@ import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
 import { ConfirmSheet } from "@/src/components/sheets";
 
+import { us } from "@/src/ui-scale";
 const TYPE_LABEL: Record<string, string> = {
   income: "Ingreso",
   expense: "Gasto",
@@ -123,19 +125,19 @@ export default function NewTransaction() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={{ flex: 1, backgroundColor: colors.surface }}
     >
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + us(8) }]}>
         <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+          <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{params.id ? "Editar" : "Nuevo"} movimiento</Text>
         {params.id && (
           <Pressable testID="delete-tx" onPress={() => setConfirmDel(true)} style={styles.backBtn}>
-            <Ionicons name="trash-outline" size={22} color={colors.expenseRed} />
+            <Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} />
           </Pressable>
         )}
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 160 }}>
+      <ScrollView contentContainerStyle={{ padding: us(spacing.lg), paddingBottom: us(160) }}>
         {/* type selector */}
         <View style={styles.typeRow}>
           {["expense", "income", "transfer"].map((tp) => (
@@ -174,7 +176,7 @@ export default function NewTransaction() {
         {type !== "transfer" && (
           <>
             <Text style={styles.label}>Categoría</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: us(10), paddingVertical: us(4) }}>
               {cats.map((c: any) => (
                 <Pressable
                   key={c.id}
@@ -182,7 +184,7 @@ export default function NewTransaction() {
                   onPress={() => setCategoryId(c.id)}
                   style={[styles.catChip, categoryId === c.id && { borderColor: c.color, borderWidth: 2 }]}
                 >
-                  <IconTile icon={c.icon} tint={c.color} size={36} />
+                  <IconTile icon={c.icon} tint={c.color} size={us(36)} />
                   <Text style={styles.catText}>{c.name}</Text>
                 </Pressable>
               ))}
@@ -191,7 +193,7 @@ export default function NewTransaction() {
         )}
 
         <Text style={styles.label}>{type === "transfer" ? "Desde cuenta" : "Cuenta"}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: us(10), paddingVertical: us(4) }}>
           {(accQ.data || []).map((a: any) => (
             <Pressable
               key={a.id}
@@ -199,7 +201,7 @@ export default function NewTransaction() {
               onPress={() => setAccountId(a.id)}
               style={[styles.accChip, accountId === a.id && { borderColor: a.color, borderWidth: 2 }]}
             >
-              <IconTile icon={a.icon} tint={a.color} size={30} />
+              <IconTile icon={a.icon} tint={a.color} size={us(30)} />
               <Text style={styles.catText}>{a.name}</Text>
             </Pressable>
           ))}
@@ -208,14 +210,14 @@ export default function NewTransaction() {
         {type === "transfer" && (
           <>
             <Text style={styles.label}>Hacia cuenta</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: us(10), paddingVertical: us(4) }}>
               {(accQ.data || []).map((a: any) => (
                 <Pressable
                   key={a.id}
                   onPress={() => setToAccountId(a.id)}
                   style={[styles.accChip, toAccountId === a.id && { borderColor: a.color, borderWidth: 2 }]}
                 >
-                  <IconTile icon={a.icon} tint={a.color} size={30} />
+                  <IconTile icon={a.icon} tint={a.color} size={us(30)} />
                   <Text style={styles.catText}>{a.name}</Text>
                 </Pressable>
               ))}
@@ -229,7 +231,7 @@ export default function NewTransaction() {
           onChangeText={setNotes}
           placeholder="Opcional"
           placeholderTextColor={colors.muted}
-          style={[styles.input, { minHeight: 60 }]}
+          style={[styles.input, { minHeight: us(60) }]}
           multiline
         />
 

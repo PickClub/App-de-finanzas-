@@ -2,6 +2,7 @@ import React from "react";
 import { View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { useTheme } from "@/src/theme";
+import { us } from "@/src/ui-scale";
 
 type Props = {
   size?: number;
@@ -12,7 +13,7 @@ type Props = {
   children?: React.ReactNode;
 };
 
-export function ProgressRing({ size = 96, stroke = 10, progress, color, trackColor, children }: Props) {
+export function ProgressRing({ size = us(96), stroke = us(10), progress, color, trackColor, children }: Props) {
   const { colors } = useTheme();
   const p = Math.max(0, Math.min(1, progress));
   const r = (size - stroke) / 2;

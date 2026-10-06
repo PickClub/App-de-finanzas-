@@ -1,10 +1,12 @@
 import React from "react";
-import { View, Pressable } from "react-native";
+import { View } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { makeStyles, radius, spacing } from "@/src/theme";
 
+import { us } from "@/src/ui-scale";
 // NOTE: The previous "Movimientos" list screen has been preserved verbatim at
 // `@/src/screens/TransactionsScreen` so its functionality can be reused later.
 // This route now presents the new voice-entry "IA" screen (UI only).
@@ -16,7 +18,7 @@ export default function IA() {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 24 }]}>
+    <View style={[styles.container, { paddingTop: insets.top + us(24) }]}>
       {/* Heading */}
       <Text style={styles.title}>Registra con IA</Text>
       <Text style={styles.subtitle}>Dime un gasto o ingreso</Text>
@@ -31,14 +33,14 @@ export default function IA() {
           onPress={() => {}}
           style={({ pressed }) => [styles.micButton, pressed && { transform: [{ scale: 0.96 }] }]}
         >
-          <Ionicons name="mic" size={52} color="#fff" />
+          <Ionicons name="mic" size={us(52)} color="#fff" />
         </Pressable>
       </View>
 
       {/* Elegant audio waveform */}
       <View style={styles.wave}>
         {WAVE_BARS.map((h, i) => (
-          <View key={i} style={[styles.waveBar, { height: h }]} />
+          <View key={i} style={[styles.waveBar, { height: us(h) }]} />
         ))}
       </View>
 

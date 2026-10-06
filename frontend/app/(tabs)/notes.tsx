@@ -2,11 +2,11 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   ScrollView,
-  Pressable,
   Modal,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
@@ -15,6 +15,7 @@ import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatDateTime } from "@/src/format";
 import { storage } from "@/src/utils/storage";
 
+import { us, ufs } from "@/src/ui-scale";
 // Simple, text-only Notes V1. Persisted locally via the shared storage wrapper
 // (AsyncStorage on native / localStorage on web). Values must be primitives, so
 // the note list is stored as a JSON string. No backend / no financial data.
@@ -116,11 +117,11 @@ function serializeItems(items: ListItem[], mode: ListMode): string {
 // numbered-list icon, so we compose one from the existing type system).
 function OrderedGlyph({ color }: { color: string }) {
   return (
-    <View style={{ width: 20 }}>
+    <View style={{ width: us(20) }}>
       {[1, 2, 3].map((n) => (
-        <View key={n} style={{ flexDirection: "row", alignItems: "center", marginVertical: 1 }}>
-          <Text style={{ fontSize: 8, fontWeight: "800", color, width: 7 }}>{n}</Text>
-          <View style={{ height: 2, flex: 1, borderRadius: 1, backgroundColor: color, marginLeft: 2 }} />
+        <View key={n} style={{ flexDirection: "row", alignItems: "center", marginVertical: us(1) }}>
+          <Text style={{ fontSize: ufs(8), fontWeight: "800", color, width: us(7) }}>{n}</Text>
+          <View style={{ height: us(2), flex: 1, borderRadius: us(1), backgroundColor: color, marginLeft: us(2) }} />
         </View>
       ))}
     </View>
@@ -152,9 +153,9 @@ function ColorSwatch({
       <Animated.View
         style={[
           {
-            width: 46,
-            height: 46,
-            borderRadius: 23,
+            width: us(46),
+            height: us(46),
+            borderRadius: us(23),
             alignItems: "center",
             justifyContent: "center",
             backgroundColor: bg,
@@ -164,7 +165,7 @@ function ColorSwatch({
           aStyle,
         ]}
       >
-        {selected ? <Ionicons name="checkmark" size={16} color={ring} /> : null}
+        {selected ? <Ionicons name="checkmark" size={us(16)} color={ring} /> : null}
       </Animated.View>
     </Pressable>
   );
@@ -368,7 +369,7 @@ export default function Notes() {
         <View style={styles.cardBody}>
           <View style={styles.cardTop}>
             <View style={[styles.cardIcon, { backgroundColor: accent }]}>
-              <Ionicons name={icon as any} size={20} color="#FFFFFF" />
+              <Ionicons name={icon as any} size={us(20)} color="#FFFFFF" />
             </View>
             <Text style={styles.cardTitle}>{note.title}</Text>
             <Pressable
@@ -377,7 +378,7 @@ export default function Notes() {
               onPress={() => setMenuNote(note)}
               style={styles.menuBtn}
             >
-              <Ionicons name="ellipsis-vertical" size={18} color={subColor} />
+              <Ionicons name="ellipsis-vertical" size={us(18)} color={subColor} />
             </Pressable>
           </View>
 
@@ -389,7 +390,7 @@ export default function Notes() {
                     {isCheck ? (
                       <Ionicons
                         name={it.checked ? "checkbox" : "square-outline"}
-                        size={17}
+                        size={us(17)}
                         color={accent}
                         style={styles.itemMark}
                       />
@@ -412,7 +413,7 @@ export default function Notes() {
                 {items.slice(0, 6).map((it, idx) => (
                   <View key={idx} style={styles.itemRow}>
                     {checklist ? (
-                      <Ionicons name="ellipse-outline" size={16} color={accent} style={styles.itemMark} />
+                      <Ionicons name="ellipse-outline" size={us(16)} color={accent} style={styles.itemMark} />
                     ) : (
                       <View style={[styles.itemDot, { backgroundColor: accent }]} />
                     )}
@@ -425,7 +426,7 @@ export default function Notes() {
 
           <View style={styles.cardFooter}>
             <View style={styles.footerLeft}>
-              <Ionicons name="time-outline" size={13} color={subColor} />
+              <Ionicons name="time-outline" size={us(13)} color={subColor} />
               <Text style={styles.cardDate}>{formatDateTime(note.updatedAt)}</Text>
             </View>
             {cats.length > 0 && (
@@ -451,27 +452,27 @@ export default function Notes() {
       <ScrollView
         testID="notes-scroll"
         style={{ flex: 1, backgroundColor: "transparent" }}
-        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 132 }}
+        contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(132) }}
         keyboardShouldPersistTaps="handled"
       >
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headIconTile}>
-            <Ionicons name="document-text" size={22} color={accent} />
+            <Ionicons name="document-text" size={us(22)} color={accent} />
           </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
+          <View style={{ flex: 1, marginLeft: us(12) }}>
             <Text style={styles.title}>Notas</Text>
             <Text style={styles.subtitle}>Tus ideas, tareas y recuerdos en un solo lugar.</Text>
           </View>
           <Pressable testID="notes-new-btn" onPress={() => openEditor(null)} style={styles.newBtn}>
-            <Ionicons name="add" size={18} color="#FFFFFF" />
+            <Ionicons name="add" size={us(18)} color="#FFFFFF" />
             <Text style={styles.newBtnText}>Nueva nota</Text>
           </Pressable>
         </View>
 
         {/* Search */}
         <View style={styles.searchBox}>
-          <Ionicons name="search" size={18} color={subColor} />
+          <Ionicons name="search" size={us(18)} color={subColor} />
           <TextInput
             testID="notes-search"
             value={query}
@@ -482,22 +483,22 @@ export default function Notes() {
           />
           {query ? (
             <Pressable hitSlop={8} onPress={() => setQuery("")}>
-              <Ionicons name="close-circle" size={18} color={subColor} />
+              <Ionicons name="close-circle" size={us(18)} color={subColor} />
             </Pressable>
           ) : (
-            <Ionicons name="options-outline" size={18} color={subColor} />
+            <Ionicons name="options-outline" size={us(18)} color={subColor} />
           )}
         </View>
 
         {notes.length === 0 ? (
           <View style={styles.empty}>
             <View style={styles.emptyIcon}>
-              <Ionicons name="document-text-outline" size={30} color={accent} />
+              <Ionicons name="document-text-outline" size={us(30)} color={accent} />
             </View>
             <Text style={styles.emptyTitle}>No tienes notas todavía</Text>
             <Text style={styles.emptySub}>Crea tu primera nota para empezar.</Text>
             <Pressable testID="notes-empty-new" onPress={() => openEditor(null)} style={styles.emptyBtn}>
-              <Ionicons name="add" size={18} color="#FFFFFF" />
+              <Ionicons name="add" size={us(18)} color="#FFFFFF" />
               <Text style={styles.newBtnText}>Nueva nota</Text>
             </Pressable>
           </View>
@@ -507,14 +508,14 @@ export default function Notes() {
               <>
                 <View style={styles.sectionLabel}>
                   <View style={styles.sectionChip}>
-                    <Ionicons name="pin" size={13} color={accent} />
+                    <Ionicons name="pin" size={us(13)} color={accent} />
                   </View>
                   <Text style={styles.sectionTitle}>Notas fijadas</Text>
                   <Text style={styles.sectionCount}>{pinned.length}</Text>
                   <View style={{ flex: 1 }} />
                   <Pressable testID="notes-ver-todas" hitSlop={6} onPress={() => setQuery("")} style={styles.verTodas}>
                     <Text style={styles.verTodasText}>Ver todas</Text>
-                    <Ionicons name="chevron-forward" size={14} color={subColor} />
+                    <Ionicons name="chevron-forward" size={us(14)} color={subColor} />
                   </Pressable>
                 </View>
                 <View style={styles.cardWrap}>{pinned.map(renderCard)}</View>
@@ -523,14 +524,14 @@ export default function Notes() {
 
             <View style={styles.sectionLabel}>
               <View style={styles.sectionChip}>
-                <Ionicons name="albums-outline" size={13} color={accent} />
+                <Ionicons name="albums-outline" size={us(13)} color={accent} />
               </View>
               <Text style={styles.sectionTitle}>Todas las notas</Text>
               <Text style={styles.sectionCount}>{others.length}</Text>
               <View style={{ flex: 1 }} />
               <Pressable testID="notes-sort" hitSlop={6} onPress={() => setSortNewest((s) => !s)} style={styles.sortPill}>
                 <Text style={styles.sortText}>{sortNewest ? "Más recientes" : "Más antiguas"}</Text>
-                <Ionicons name={sortNewest ? "chevron-down" : "chevron-up"} size={14} color={subColor} />
+                <Ionicons name={sortNewest ? "chevron-down" : "chevron-up"} size={us(14)} color={subColor} />
               </Pressable>
             </View>
             {others.length > 0 ? (
@@ -545,14 +546,14 @@ export default function Notes() {
       {/* Card action menu (three-dot) */}
       <Modal visible={!!menuNote} transparent animationType="fade" onRequestClose={() => setMenuNote(null)}>
         <Pressable style={styles.menuBackdrop} onPress={() => setMenuNote(null)} />
-        <View style={[styles.menuSheet, { paddingBottom: insets.bottom + 12 }]}>
+        <View style={[styles.menuSheet, { paddingBottom: insets.bottom + us(12) }]}>
           <View style={styles.sheetHandle} />
           <Pressable
             testID="note-menu-edit"
             style={styles.menuItem}
             onPress={() => { const n = menuNote; setMenuNote(null); if (n) openEditor(n); }}
           >
-            <Ionicons name="create-outline" size={20} color={titleColor} />
+            <Ionicons name="create-outline" size={us(20)} color={titleColor} />
             <Text style={styles.menuItemText}>Editar</Text>
           </Pressable>
           <Pressable
@@ -560,7 +561,7 @@ export default function Notes() {
             style={styles.menuItem}
             onPress={() => { const n = menuNote; setMenuNote(null); if (n) togglePin(n.id); }}
           >
-            <Ionicons name={menuNote?.pinned ? "pin" : "pin-outline"} size={20} color={titleColor} />
+            <Ionicons name={menuNote?.pinned ? "pin" : "pin-outline"} size={us(20)} color={titleColor} />
             <Text style={styles.menuItemText}>{menuNote?.pinned ? "Desfijar nota" : "Fijar nota"}</Text>
           </Pressable>
           <Pressable
@@ -568,7 +569,7 @@ export default function Notes() {
             style={styles.menuItem}
             onPress={() => { const n = menuNote; setMenuNote(null); if (n) deleteNote(n.id); }}
           >
-            <Ionicons name="trash-outline" size={20} color={colors.expenseRed} />
+            <Ionicons name="trash-outline" size={us(20)} color={colors.expenseRed} />
             <Text style={[styles.menuItemText, { color: colors.expenseRed }]}>Eliminar</Text>
           </Pressable>
         </View>
@@ -586,7 +587,7 @@ export default function Notes() {
             <View style={styles.sheetHead}>
               <Text style={styles.sheetTitle}>{editing ? "Editar nota" : "Nueva nota"}</Text>
               <Pressable testID="notes-editor-close" hitSlop={8} onPress={() => setEditorOpen(false)}>
-                <Ionicons name="close" size={22} color={subColor} />
+                <Ionicons name="close" size={us(22)} color={subColor} />
               </Pressable>
             </View>
 
@@ -606,7 +607,7 @@ export default function Notes() {
                 style={styles.titleInput}
               />
 
-              <Text style={[styles.fieldLabel, { marginTop: 14 }]}>Contenido</Text>
+              <Text style={[styles.fieldLabel, { marginTop: us(14) }]}>Contenido</Text>
               {draftListMode === "plain" ? (
                 <TextInput
                   testID="notes-content-input"
@@ -629,7 +630,7 @@ export default function Notes() {
                           onPress={() => it.id && toggleItemCheck(it.id)}
                           style={styles.editMark}
                         >
-                          <Ionicons name={it.checked ? "checkbox" : "square-outline"} size={22} color={noteGreen} />
+                          <Ionicons name={it.checked ? "checkbox" : "square-outline"} size={us(22)} color={noteGreen} />
                         </Pressable>
                       ) : (
                         <View style={styles.editMark}>
@@ -648,25 +649,25 @@ export default function Notes() {
                         returnKeyType="next"
                       />
                       <Pressable hitSlop={6} onPress={() => it.id && removeItem(it.id)} style={styles.editRemove}>
-                        <Ionicons name="close" size={16} color={subColor} />
+                        <Ionicons name="close" size={us(16)} color={subColor} />
                       </Pressable>
                     </View>
                   ))}
                   <Pressable testID="notes-item-add" onPress={addItem} style={styles.addItemBtn}>
-                    <Ionicons name="add" size={18} color={noteGreen} />
+                    <Ionicons name="add" size={us(18)} color={noteGreen} />
                     <Text style={[styles.addItemText, { color: noteGreen }]}>Agregar elemento</Text>
                   </Pressable>
                 </View>
               )}
 
-              <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Herramientas</Text>
+              <Text style={[styles.fieldLabel, { marginTop: us(16) }]}>Herramientas</Text>
               <View style={styles.toolsRow}>
                 <Pressable
                   testID="notes-tool-check"
                   onPress={() => toggleListMode("check")}
                   style={[styles.toolBtn, draftListMode === "check" && { borderColor: noteGreen, backgroundColor: noteGreen + (isDark ? "24" : "14") }]}
                 >
-                  <Ionicons name="checkbox-outline" size={18} color={draftListMode === "check" ? noteGreen : subColor} />
+                  <Ionicons name="checkbox-outline" size={us(18)} color={draftListMode === "check" ? noteGreen : subColor} />
                   <Text style={[styles.toolText, draftListMode === "check" && { color: noteGreen }]}>Lista de checks</Text>
                 </Pressable>
                 <Pressable
@@ -679,7 +680,7 @@ export default function Notes() {
                 </Pressable>
               </View>
 
-              <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Color de nota</Text>
+              <Text style={[styles.fieldLabel, { marginTop: us(16) }]}>Color de nota</Text>
               <View style={styles.colorRow}>
                 {PALETTE_ORDER.map((key) => {
                   const p = NOTE_PALETTES[key];
@@ -716,14 +717,14 @@ export default function Notes() {
               <View style={styles.sheetActions}>
                 {editing ? (
                   <Pressable testID="notes-delete-btn" style={styles.deleteBtn} onPress={() => setConfirmDelete(true)}>
-                    <Ionicons name="trash-outline" size={18} color={colors.expenseRed} />
+                    <Ionicons name="trash-outline" size={us(18)} color={colors.expenseRed} />
                     <Text style={styles.deleteText}>Eliminar</Text>
                   </Pressable>
                 ) : (
                   <View />
                 )}
                 <Pressable testID="notes-save-btn" style={styles.saveBtn} onPress={saveNote}>
-                  <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                  <Ionicons name="checkmark" size={us(18)} color="#FFFFFF" />
                   <Text style={styles.saveText}>Guardar</Text>
                 </Pressable>
               </View>

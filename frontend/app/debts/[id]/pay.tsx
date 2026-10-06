@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, ScrollView, Pressable, StyleSheet, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import { View, ScrollView, StyleSheet, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -10,6 +11,7 @@ import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatCurrency, formatCurrencyInt } from "@/src/format";
 import { IconTile } from "@/src/components/ui";
 
+import { us, ufs } from "@/src/ui-scale";
 export default function PayDebt() {
   const { colors } = useTheme();
   const styles = useStyles();
@@ -39,18 +41,18 @@ export default function PayDebt() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 140, paddingHorizontal: spacing.lg }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: spacing.lg }}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
           </Pressable>
           <Text style={styles.title}>Registrar pago</Text>
         </View>
 
         <View style={styles.debtCard}>
-          <Text style={{ color: colors.muted, fontSize: 12 }}>Deuda</Text>
-          <Text style={{ fontSize: 18, fontWeight: "800", color: colors.onSurface, marginTop: 2 }}>{d.name}</Text>
-          <Text style={{ fontSize: 13, color: colors.muted, marginTop: 2 }}>
+          <Text style={{ color: colors.muted, fontSize: ufs(12) }}>Deuda</Text>
+          <Text style={{ fontSize: ufs(18), fontWeight: "800", color: colors.onSurface, marginTop: us(2) }}>{d.name}</Text>
+          <Text style={{ fontSize: ufs(13), color: colors.muted, marginTop: us(2) }}>
             Pendiente actual: {formatCurrencyInt(d.remaining_amount)}
           </Text>
         </View>
@@ -63,32 +65,32 @@ export default function PayDebt() {
           keyboardType="decimal-pad"
           placeholder="0.00"
           placeholderTextColor={colors.muted}
-          style={[styles.input, { fontSize: 30, fontWeight: "800" }]}
+          style={[styles.input, { fontSize: ufs(30), fontWeight: "800" }]}
         />
 
         <Text style={styles.label}>Cuenta</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: us(10) }}>
           {(accQ.data || []).map((a: any) => (
             <Pressable key={a.id} onPress={() => setAccountId(a.id)} style={[styles.acc, accountId === a.id && { borderColor: a.color, borderWidth: 2 }]}>
-              <IconTile icon={a.icon} tint={a.color} size={32} />
-              <View style={{ marginLeft: 10 }}>
+              <IconTile icon={a.icon} tint={a.color} size={us(32)} />
+              <View style={{ marginLeft: us(10) }}>
                 <Text style={{ fontWeight: "700", color: colors.onSurface }}>{a.name}</Text>
-                <Text style={{ fontSize: 12, color: colors.muted }}>{formatCurrency(a.current_balance)}</Text>
+                <Text style={{ fontSize: ufs(12), color: colors.muted }}>{formatCurrency(a.current_balance)}</Text>
               </View>
             </Pressable>
           ))}
         </ScrollView>
 
         <Text style={styles.label}>Notas</Text>
-        <TextInput value={notes} onChangeText={setNotes} multiline placeholder="Opcional" placeholderTextColor={colors.muted} style={[styles.input, { minHeight: 60 }]} />
+        <TextInput value={notes} onChangeText={setNotes} multiline placeholder="Opcional" placeholderTextColor={colors.muted} style={[styles.input, { minHeight: us(60) }]} />
 
         {amt > 0 && (
           <View style={styles.preview}>
             <View style={styles.pRow}><Text style={styles.pLabel}>Saldo anterior</Text><Text style={styles.pVal}>{formatCurrencyInt(d.remaining_amount)}</Text></View>
             <View style={styles.pRow}><Text style={styles.pLabel}>Pago</Text><Text style={[styles.pVal, { color: colors.brandPrimary }]}>-{formatCurrencyInt(amt)}</Text></View>
-            <View style={[styles.pRow, { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: 8, marginTop: 4 }]}>
+            <View style={[styles.pRow, { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: us(8), marginTop: us(4) }]}>
               <Text style={[styles.pLabel, { fontWeight: "600", color: colors.onSurface }]}>Nuevo saldo</Text>
-              <Text style={[styles.pVal, { fontSize: 18 }]}>{formatCurrencyInt(newBalance)}</Text>
+              <Text style={[styles.pVal, { fontSize: ufs(18) }]}>{formatCurrencyInt(newBalance)}</Text>
             </View>
           </View>
         )}

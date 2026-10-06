@@ -14,6 +14,7 @@ import React, {
   useState,
 } from "react";
 import { StyleSheet, useColorScheme } from "react-native";
+import { scaleStyles } from "./ui-scale";
 import { storage } from "@/src/utils/storage";
 
 export type ColorScheme = "light" | "dark";
@@ -216,6 +217,7 @@ export function makeStyles<T extends StyleSheet.NamedStyles<T> | StyleSheet.Name
 ): () => T {
   return function useStyles(): T {
     const { colors, scheme } = useTheme();
-    return useMemo(() => StyleSheet.create(factory(colors, scheme)), [colors, scheme]);
+    // Every dimension is scaled once here (UI_SCALE, see src/ui-scale.ts).
+    return useMemo(() => StyleSheet.create(scaleStyles(factory(colors, scheme))), [colors, scheme]);
   };
 }

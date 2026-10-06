@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { View, ScrollView, Pressable, StyleSheet } from "react-native";
+import { View, ScrollView, StyleSheet } from "react-native";
+import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,6 +11,7 @@ import { useTheme, makeStyles, radius, spacing, type ThemeMode } from "@/src/the
 import { useTranslation, useLang, type Lang } from "@/src/i18n";
 import { AppSheet } from "@/src/components/sheets";
 
+import { us, ufs } from "@/src/ui-scale";
 const CURRENCIES = ["USD", "EUR", "MXN", "COP", "ARS", "CLP"];
 
 export default function Settings() {
@@ -47,10 +49,10 @@ export default function Settings() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 140, paddingHorizontal: spacing.lg }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: spacing.lg }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+          <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{t("settings.title")}</Text>
       </View>
@@ -59,7 +61,7 @@ export default function Settings() {
       <TextInput value={name} onChangeText={setName} placeholder={t("settings.namePlaceholder")} placeholderTextColor={colors.muted} style={styles.input} />
 
       <Text style={styles.label}>{t("settings.currency")}</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(8) }}>
         {CURRENCIES.map((c) => (
           <Pressable key={c} onPress={() => setCurrency(c)} style={[styles.currency, currency === c && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
             <Text style={{ color: currency === c ? "#fff" : colors.onSurface, fontWeight: "700" }}>{c}</Text>
@@ -68,7 +70,7 @@ export default function Settings() {
       </View>
 
       <Text style={styles.label}>{t("settings.appearance")}</Text>
-      <View style={{ flexDirection: "row", gap: 8 }}>
+      <View style={{ flexDirection: "row", gap: us(8) }}>
         {THEMES.map((t) => {
           const active = mode === t.id;
           return (
@@ -83,15 +85,15 @@ export default function Settings() {
             >
               <Ionicons
                 name={t.icon as any}
-                size={18}
+                size={us(18)}
                 color={active ? "#fff" : colors.onSurface}
               />
               <Text
                 style={{
                   color: active ? "#fff" : colors.onSurface,
                   fontWeight: "700",
-                  marginTop: 4,
-                  fontSize: 12,
+                  marginTop: us(4),
+                  fontSize: ufs(12),
                 }}
               >
                 {t.label}
@@ -103,13 +105,13 @@ export default function Settings() {
 
       <Text style={styles.label}>{t("settings.language")}</Text>
       <Pressable testID="language-row" onPress={() => setLangOpen(true)} style={styles.langRow}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-          <Ionicons name="language-outline" size={20} color={colors.onSurface} />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: us(12) }}>
+          <Ionicons name="language-outline" size={us(20)} color={colors.onSurface} />
           <Text style={styles.langRowLabel}>{t("settings.language")}</Text>
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: us(6) }}>
           <Text style={styles.langRowValue}>{lang === "es" ? t("settings.spanish") : t("settings.english")}</Text>
-          <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          <Ionicons name="chevron-forward" size={us(18)} color={colors.muted} />
         </View>
       </Pressable>
 
@@ -120,7 +122,7 @@ export default function Settings() {
       <Pressable
         testID="reseed"
         onPress={async () => { await api.seed(); qc.invalidateQueries(); }}
-        style={[styles.saveBtn, { marginTop: 12, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border }]}
+        style={[styles.saveBtn, { marginTop: us(12), backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border }]}
       >
         <Text style={[styles.saveText, { color: colors.onSurface }]}>{t("settings.restoreSampleData")}</Text>
       </Pressable>
@@ -137,7 +139,7 @@ export default function Settings() {
               style={styles.langOption}
             >
               <Text style={[styles.langOptionText, active && { color: colors.brandPrimary, fontWeight: "800" }]}>{l.label}</Text>
-              {active && <Ionicons name="checkmark" size={20} color={colors.brandPrimary} />}
+              {active && <Ionicons name="checkmark" size={us(20)} color={colors.brandPrimary} />}
             </Pressable>
           );
         })}

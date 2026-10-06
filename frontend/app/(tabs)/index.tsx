@@ -23,7 +23,7 @@ import { useTheme, makeStyles, radius, spacing, type ThemeColors } from "@/src/t
 import { formatCurrency, formatCurrencyInt, formatDateLong, formatDateTime, translateCategoryName } from "@/src/format";
 import i18n, { useTranslation } from "@/src/i18n";
 import { IconTile } from "@/src/components/ui";
-import { LockToggle, useLock } from "@/src/lock";
+import { useLock } from "@/src/lock";
 import { WalletIcon, ChartIcon, HandCoinIcon } from "@/src/components/animated-section-icons";
 import { DateRangeSheet, type DateRange } from "@/src/components/date-range-sheet";
 
@@ -895,14 +895,17 @@ export default function Home() {
                       onPress={() => router.push(`/accounts/${a.id}`)}
                     >
                       <View style={[styles.distDot, { backgroundColor: ac }]} />
-                      <View style={styles.distRowText}>
-                        <Text style={styles.distName}>{a.name}</Text>
-                        <Text style={styles.distBalance}>
-                          {hidden ? "••••" : formatCurrencyInt(a?.current_balance || 0)}
-                        </Text>
+                      <View style={[styles.distRowIcon, { backgroundColor: ac + "1A" }]}>
+                        <Ionicons name={a.icon as any} size={12} color={ac} />
                       </View>
-                      <View style={[styles.distPctPill, { backgroundColor: ac + "1A" }]}>
-                        <Text style={[styles.distPct, { color: ac }]}>{hidden ? "••" : `${Math.round(raw)}%`}</Text>
+                      <Text style={styles.distName}>{a.name}</Text>
+                      <Text style={styles.distBalance}>
+                        {hidden ? "••••" : formatCurrencyInt(a?.current_balance || 0)}
+                      </Text>
+                      <View style={styles.distPctCol}>
+                        <View style={[styles.distPctPill, { backgroundColor: ac + "1A" }]}>
+                          <Text style={[styles.distPct, { color: ac }]}>{hidden ? "••" : `${Math.round(raw)}%`}</Text>
+                        </View>
                       </View>
                     </Pressable>
                   </Animated.View>
@@ -927,7 +930,7 @@ export default function Home() {
             <Ionicons name="layers-outline" size={18} color={colors.brandPrimary} />
           </View>
           <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={styles.mrTitle}>
+            <Text style={styles.mrTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
               {t("home.recentMovements")} <Text style={styles.mrTitleAccent}>{t("home.recentMovementsAccent")}</Text>
             </Text>
             <Text style={styles.mrSubtitle}>
@@ -935,7 +938,6 @@ export default function Home() {
             </Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <LockToggle testID="lock-home" compact />
             <Pressable testID="see-all-tx" onPress={() => router.push("/(tabs)/transactions")} style={styles.seeAllBtn}>
               <Text style={styles.seeAllText}>{t("common.seeAll")}</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
@@ -1021,29 +1023,6 @@ export default function Home() {
               </Animated.View>
             );
           })}
-        </Animated.View>
-
-        {/* AI banner — taps through to the IA tab (same route as the mic in the bottom nav) */}
-        <Animated.View layout={LinearTransition.duration(260)}>
-        <Pressable testID="ai-banner" onPress={() => router.push("/(tabs)/transactions")} style={{ marginTop: 8 }}>
-          <LinearGradient
-            colors={scheme === "dark" ? [colors.brandPrimary + "1F", colors.statsPurple + "1F"] : ["#E5F1E7", "#E5F1E7"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.aiBanner}
-          >
-            <View style={styles.aiIcon}>
-              <Ionicons name="sparkles" size={17} color={scheme === "dark" ? colors.brandPrimary : "#147450"} />
-            </View>
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={styles.aiTitle}>{t("home.aiBannerTitle")}</Text>
-              <Text style={styles.aiSub}>{t("home.aiBannerSubtitle")}</Text>
-            </View>
-            <View style={styles.aiChevron}>
-              <Ionicons name="chevron-forward" size={16} color={scheme === "dark" ? colors.brandPrimary : "#126047"} />
-            </View>
-          </LinearGradient>
-        </Pressable>
         </Animated.View>
       </View>
 
@@ -1552,11 +1531,12 @@ const useStyles = makeStyles((colors, scheme) => {
   distCenterLabel: { fontSize: 11, color: wallMuted, fontWeight: "600", marginTop: 1 },
   distList: { flex: 1, minWidth: 0 },
   distRow: { flexDirection: "row", alignItems: "center", paddingVertical: 5 },
-  distDot: { width: 9, height: 9, borderRadius: 4.5, marginRight: 7 },
-  distRowText: { flex: 1, minWidth: 0 },
-  distName: { fontSize: 13, fontWeight: "400", color: wallText },
-  distBalance: { fontSize: 11.5, fontWeight: "600", color: wallMuted, marginTop: 1 },
-  distPctPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginHorizontal: 5 },
+  distDot: { width: 9, height: 9, borderRadius: 4.5, marginRight: 6 },
+  distRowIcon: { width: 18, height: 18, borderRadius: 6, alignItems: "center", justifyContent: "center", marginRight: 5 },
+  distName: { flex: 1, minWidth: 0, fontSize: 13, fontWeight: "400", color: wallText },
+  distBalance: { width: 48, fontSize: 11.5, fontWeight: "600", color: wallMuted, textAlign: "right" },
+  distPctCol: { minWidth: 40, alignItems: "flex-end", marginLeft: 5 },
+  distPctPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   distPct: { fontSize: 11.5, fontWeight: "800" },
   distEmpty: { fontSize: 12, color: wallMuted, paddingVertical: 8 },
   debtCard: {
@@ -1705,22 +1685,5 @@ const useStyles = makeStyles((colors, scheme) => {
   },
   mrBadgeText: { fontSize: 11, fontWeight: "700" },
   mrAmount: { fontWeight: "800", fontSize: 14, letterSpacing: -0.3 },
-  aiBanner: {
-    flexDirection: "row", alignItems: "center",
-    padding: 10, borderRadius: radius.cardLg,
-    borderWidth: 1, borderColor: isDark ? colors.brandPrimary + "3D" : "#BAD7C2",
-  },
-  aiIcon: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: isDark ? colors.brandPrimary + "26" : "#CDE5D3",
-    alignItems: "center", justifyContent: "center",
-  },
-  aiTitle: { fontSize: 13.5, fontWeight: "800", color: isDark ? colors.onSurface : "#193126", letterSpacing: -0.2 },
-  aiSub: { fontSize: 11.5, color: isDark ? colors.muted : "#738078", marginTop: 1 },
-  aiChevron: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: isDark ? colors.brandPrimary + "1F" : "#CFE4D3",
-    alignItems: "center", justifyContent: "center", marginLeft: 8,
-  },
   };
 });

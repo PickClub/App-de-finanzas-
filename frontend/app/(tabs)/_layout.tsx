@@ -367,11 +367,11 @@ function QuickMenu({ geometry }: { geometry: CenterGeometry | null }) {
   }));
 
   const items: QuickAction[] = [
-    { icon: "trending-down-outline", label: t("quickAdd.expense"), color: colors.expenseRed, route: "/transactions/new?type=expense" },
-    { icon: "trending-up-outline", label: t("quickAdd.income"), color: colors.incomeGreen, route: "/transactions/new?type=income" },
-    { icon: "swap-horizontal-outline", label: t("quickAdd.transfer"), color: colors.accountsBlue, route: "/transactions/new?type=transfer" },
-    { icon: "card-outline", label: t("quickAdd.createDebt"), color: colors.statsPurple, route: "/debts/new?direction=i_owe" },
-    { icon: "hand-left-outline", label: t("quickAdd.registerLoan"), color: colors.loansYellow, route: "/debts/new?direction=they_owe" },
+    { icon: "receipt", label: t("quickAdd.expense"), color: colors.expenseRed, route: "/transactions/new?type=expense" },
+    { icon: "trending-up", label: t("quickAdd.income"), color: colors.incomeGreen, route: "/transactions/new?type=income" },
+    { icon: "swap-horizontal", label: t("quickAdd.transfer"), color: colors.accountsBlue, route: "/transactions/new?type=transfer" },
+    { icon: "card", label: t("quickAdd.createDebt"), color: colors.statsPurple, route: "/debts/new?direction=i_owe" },
+    { icon: "cash", label: t("quickAdd.registerLoan"), color: colors.loansYellow, route: "/debts/new?direction=they_owe" },
   ];
 
   return (

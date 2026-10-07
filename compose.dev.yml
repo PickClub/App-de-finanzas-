@@ -1,0 +1,29 @@
+# Development only. No application dotenv, credentials or previous volumes.
+services:
+  mongodb-dev:
+    image: docker.io/library/mongo:8.0.32
+    hostname: mongodb-dev
+    command: ["mongod", "--replSet", "app_finanzas_dev_rs", "--bind_ip", "localhost,mongodb-dev"]
+    ports:
+      - "127.0.0.1:27018:27017"
+    volumes:
+      - development-data:/data/db
+    networks:
+      - development
+    labels:
+      app-finanzas.environment: development
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--host", "127.0.0.1", "--eval", "const h=db.adminCommand({hello:1}); quit(h.isWritablePrimary && h.setName==='app_finanzas_dev_rs' ? 0 : 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+volumes:
+  development-data:
+    name: app_finanzas_local_development_data
+    labels:
+      app-finanzas.environment: development
+
+networks:
+  development:
+    internal: true

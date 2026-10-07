@@ -441,7 +441,7 @@ export default function TabsLayout() {
 
   return (
     <View ref={rootRef} collapsable={false} onLayout={measureCenter} style={{ flex: 1, backgroundColor: colors.surface }}>
-      <Tabs tabBar={renderTabBar} screenOptions={{ headerShown: false }}>
+      <Tabs tabBar={renderTabBar} screenOptions={{ headerShown: false, animation: "none" }}>
         <Tabs.Screen name="index" options={{ title: "Cuentas" }} />
         <Tabs.Screen name="transactions" options={{ title: "IA" }} />
         <Tabs.Screen name="fab" options={{ title: "" }} />

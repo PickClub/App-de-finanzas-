@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, ScrollView, StyleSheet } from "react-native";
+import { Alert, View, ScrollView, StyleSheet } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -121,7 +121,14 @@ export default function Settings() {
 
       <Pressable
         testID="reseed"
-        onPress={async () => { await api.seed(); qc.invalidateQueries(); }}
+        onPress={async () => {
+          try {
+            await api.seed();
+            qc.invalidateQueries();
+          } catch (error) {
+            Alert.alert("Error", error instanceof Error ? error.message : String(error));
+          }
+        }}
         style={[styles.saveBtn, { marginTop: us(12), backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border }]}
       >
         <Text style={[styles.saveText, { color: colors.onSurface }]}>{t("settings.restoreSampleData")}</Text>

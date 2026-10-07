@@ -1,12 +1,16 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, Header, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import os, logging, uuid
+import os, logging, uuid, hashlib, json, math
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Literal
 from datetime import datetime, timezone
+from pymongo import ReadPreference
+from pymongo.errors import DuplicateKeyError, PyMongoError
+from pymongo.read_concern import ReadConcern
+from pymongo.write_concern import WriteConcern
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -87,6 +91,7 @@ class Transaction(BaseModel):
     account_id: Optional[str] = None
     to_account_id: Optional[str] = None
     debt_id: Optional[str] = None
+    debt_payment_id: Optional[str] = None
     notes: Optional[str] = None
     created_at: str = Field(default_factory=now_iso)
 
@@ -226,14 +231,23 @@ class DebtPayment(BaseModel):
     date: str = Field(default_factory=now_iso)
     account_id: Optional[str] = None
     notes: Optional[str] = None
+    transaction_id: Optional[str] = None
 
 
 class DebtPaymentCreate(BaseModel):
     debt_id: str
-    amount: float
+    amount: float = Field(gt=0, allow_inf_nan=False)
     date: Optional[str] = None
     account_id: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def serializable_invalid_amount(cls, value):
+        # Keep NaN/Infinity out of FastAPI's JSON validation-error response.
+        if isinstance(value, float) and not math.isfinite(value):
+            return str(value)
+        return value
 
 
 class UserUpdate(BaseModel):
@@ -255,13 +269,13 @@ async def ensure_user():
     return u
 
 
-async def recompute_account_balance(account_id: str):
+async def recompute_account_balance(account_id: str, session=None):
     """Recompute an account's current balance from its initial + transactions."""
-    acc = await db.accounts.find_one({"id": account_id}, PROJ)
+    acc = await db.accounts.find_one({"id": account_id}, PROJ, session=session)
     if not acc:
         return
     balance = acc["initial_balance"]
-    async for tx in db.transactions.find({"user_id": DEFAULT_USER_ID}, PROJ):
+    async for tx in db.transactions.find({"user_id": DEFAULT_USER_ID}, PROJ, session=session):
         t = tx["type"]
         amt = tx["amount"]
         if tx.get("account_id") == account_id:
@@ -273,22 +287,128 @@ async def recompute_account_balance(account_id: str):
                 balance -= amt
         if tx.get("to_account_id") == account_id and t == "transfer":
             balance += amt
-    await db.accounts.update_one({"id": account_id}, {"$set": {"current_balance": round(balance, 2)}})
+    await db.accounts.update_one({"id": account_id}, {"$set": {"current_balance": round(balance, 2)}}, session=session)
 
 
-async def recompute_debt(debt_id: str):
-    d = await db.debts.find_one({"id": debt_id}, PROJ)
+async def recompute_debt(debt_id: str, session=None):
+    d = await db.debts.find_one({"id": debt_id}, PROJ, session=session)
     if not d:
         return
     total_paid = 0.0
-    async for p in db.debt_payments.find({"debt_id": debt_id}, PROJ):
+    async for p in db.debt_payments.find({"debt_id": debt_id, "deleted": {"$ne": True}}, PROJ, session=session):
         total_paid += p["amount"]
     remaining = max(0.0, d["original_amount"] - total_paid)
     status = "paid" if remaining <= 0.0001 else "active"
     await db.debts.update_one(
         {"id": debt_id},
         {"$set": {"total_paid": round(total_paid, 2), "remaining_amount": round(remaining, 2), "status": status}},
+        session=session,
     )
+
+
+async def payment_transaction(operation):
+    """Never fall back to partial writes on a standalone/unavailable MongoDB."""
+    for attempt in range(2):
+        try:
+            async with await client.start_session() as session:
+                return await session.with_transaction(
+                    operation,
+                    read_concern=ReadConcern("snapshot"),
+                    write_concern=WriteConcern("majority"),
+                    read_preference=ReadPreference.PRIMARY,
+                )
+        except DuplicateKeyError:
+            # A concurrent request may have committed the same idempotency key.
+            if attempt == 0:
+                continue
+            raise HTTPException(409, "Conflicto de operación; reintenta con la misma clave.")
+        except PyMongoError:
+            # A lost commit response can mean all writes committed. Do not claim
+            # rollback here: callers must reuse their Idempotency-Key on retry.
+            raise HTTPException(503, "No se pudo confirmar la operación atómica. MongoDB debe admitir transacciones; reintenta con la misma Idempotency-Key.")
+
+
+async def validate_payment(debt_id, amount, account_id, session, replacing=None):
+    if not math.isfinite(amount) or amount <= 0:
+        raise HTTPException(422, "El importe debe ser positivo y finito.")
+    debt = await db.debts.find_one({"id": debt_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+    if not debt:
+        raise HTTPException(404, "Debt not found")
+    if debt["direction"] not in ("i_owe", "they_owe") or not math.isfinite(debt["original_amount"]):
+        raise HTTPException(409, "La deuda requiere revisión antes de registrar pagos.")
+    if account_id is not None:
+        account = await db.accounts.find_one({"id": account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        if not account:
+            raise HTTPException(404, "Account not found")
+    paid = 0.0
+    async for payment in db.debt_payments.find({"debt_id": debt_id, "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ, session=session):
+        if payment["id"] != replacing:
+            paid += payment["amount"]
+    if amount > debt["original_amount"] - paid + 1e-9:
+        raise HTTPException(422, "El pago supera el saldo pendiente.")
+    return debt
+
+
+async def payment_movement(payment, session):
+    """Legacy records have no reliable one-to-one link; never guess by amount."""
+    tid = payment.get("transaction_id")
+    if not tid:
+        raise HTTPException(409, "Pago antiguo sin vínculo individual: requiere conciliación antes de editar o borrar.")
+    tx = await db.transactions.find_one({"id": tid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+    if not tx or tx.get("debt_payment_id") != payment["id"] or any(
+        tx.get(field) != payment.get(field) for field in ("debt_id", "amount", "account_id")
+    ):
+        raise HTTPException(409, "El vínculo del pago requiere conciliación.")
+    debt = await db.debts.find_one({"id": payment["debt_id"], "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+    if not debt:
+        raise HTTPException(409, "La deuda del pago no existe; requiere conciliación.")
+    expected_type = "debt_payment" if debt["direction"] == "i_owe" else "income"
+    if debt["direction"] not in ("i_owe", "they_owe") or tx["type"] != expected_type or tx.get("to_account_id"):
+        raise HTTPException(409, "El tipo del movimiento no coincide con su deuda.")
+    if payment.get("account_id") and not await db.accounts.find_one({"id": payment["account_id"], "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+        raise HTTPException(409, "La cuenta del pago no existe; requiere conciliación.")
+    return tx
+
+
+async def remove_payment(pid, session):
+    payment = await db.debt_payments.find_one({"id": pid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+    if not payment or payment.get("deleted"):
+        return {"ok": True}
+    tx = await payment_movement(payment, session)
+    await db.transactions.delete_one({"id": tx["id"], "user_id": DEFAULT_USER_ID}, session=session)
+    if payment.get("request_fingerprint"):
+        # Retain a tombstone so a delayed POST retry cannot resurrect a payment.
+        await db.debt_payments.update_one({"id": pid, "user_id": DEFAULT_USER_ID}, {"$set": {"deleted": True}}, session=session)
+    else:
+        await db.debt_payments.delete_one({"id": pid, "user_id": DEFAULT_USER_ID}, session=session)
+    await recompute_debt(payment["debt_id"], session=session)
+    if payment.get("account_id"):
+        await recompute_account_balance(payment["account_id"], session=session)
+    return {"ok": True}
+
+
+async def edit_payment_movement(tid, data):
+    async def operation(session):
+        old = await db.transactions.find_one({"id": tid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        if not old:
+            raise HTTPException(404, "Not found")
+        payment = await db.debt_payments.find_one({"id": old.get("debt_payment_id"), "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ, session=session)
+        if not payment or (await payment_movement(payment, session))["id"] != tid:
+            raise HTTPException(409, "El movimiento requiere conciliación con su pago.")
+        if data.debt_id not in (None, payment["debt_id"]) or data.type != old["type"] or data.to_account_id is not None:
+            raise HTTPException(409, "No se puede cambiar la deuda ni el tipo de un pago vinculado.")
+        await validate_payment(payment["debt_id"], data.amount, data.account_id, session, replacing=payment["id"])
+        payload = data.model_dump()
+        payload.update(debt_id=payment["debt_id"], date=data.date or old["date"])
+        await db.transactions.update_one({"id": tid, "user_id": DEFAULT_USER_ID}, {"$set": payload}, session=session)
+        await db.debt_payments.update_one({"id": payment["id"], "user_id": DEFAULT_USER_ID}, {"$set": {
+            field: payload[field] for field in ("amount", "date", "account_id", "notes")
+        }}, session=session)
+        await recompute_debt(payment["debt_id"], session=session)
+        for aid in sorted({payment.get("account_id"), data.account_id} - {None}):
+            await recompute_account_balance(aid, session=session)
+        return await db.transactions.find_one({"id": tid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+    return await payment_transaction(operation)
 
 
 # ---------- Routes ----------
@@ -335,8 +455,14 @@ async def update_account(account_id: str, data: AccountCreate):
 
 @api.delete("/accounts/{account_id}")
 async def delete_account(account_id: str):
-    await db.accounts.delete_one({"id": account_id})
-    return {"ok": True}
+    async def operation(session):
+        if await db.debt_payments.find_one({"account_id": account_id, "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ, session=session):
+            raise HTTPException(409, "La cuenta tiene pagos vinculados; anúlalos antes de borrarla.")
+        if await db.transactions.find_one({"account_id": account_id, "user_id": DEFAULT_USER_ID, "debt_id": {"$ne": None}}, PROJ, session=session):
+            raise HTTPException(409, "La cuenta tiene movimientos de deuda; requieren conciliación antes de borrarla.")
+        await db.accounts.delete_one({"id": account_id, "user_id": DEFAULT_USER_ID}, session=session)
+        return {"ok": True}
+    return await payment_transaction(operation)
 
 
 # Categories
@@ -442,6 +568,8 @@ async def list_transactions(limit: int = 500):
 
 @api.post("/transactions")
 async def create_transaction(data: TransactionCreate):
+    if data.debt_id or data.type == "debt_payment":
+        raise HTTPException(409, "Registra los pagos mediante /api/debt-payments para mantener su vínculo.")
     payload = data.model_dump()
     if not payload.get("date"):
         payload["date"] = now_iso()
@@ -459,6 +587,10 @@ async def update_transaction(tid: str, data: TransactionCreate):
     old = await db.transactions.find_one({"id": tid}, PROJ)
     if not old:
         raise HTTPException(404, "Not found")
+    if old.get("debt_payment_id"):
+        return await edit_payment_movement(tid, data)
+    if old.get("debt_id") or data.debt_id or data.type == "debt_payment":
+        raise HTTPException(409, "El movimiento requiere un vínculo individual con su pago antes de editarlo.")
     payload = data.model_dump()
     if not payload.get("date"):
         payload["date"] = old.get("date", now_iso())
@@ -472,6 +604,18 @@ async def update_transaction(tid: str, data: TransactionCreate):
 @api.delete("/transactions/{tid}")
 async def delete_transaction(tid: str):
     old = await db.transactions.find_one({"id": tid}, PROJ)
+    if old and old.get("debt_payment_id"):
+        async def operation(session):
+            current = await db.transactions.find_one({"id": tid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+            if not current:
+                return {"ok": True}
+            payment = await db.debt_payments.find_one({"id": current["debt_payment_id"], "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ, session=session)
+            if not payment or payment.get("transaction_id") != tid:
+                raise HTTPException(409, "El movimiento requiere conciliación con su pago.")
+            return await remove_payment(payment["id"], session)
+        return await payment_transaction(operation)
+    if old and old.get("debt_id"):
+        raise HTTPException(409, "Movimiento antiguo sin vínculo individual: requiere conciliación antes de borrar.")
     if old:
         await db.transactions.delete_one({"id": tid})
         for aid in {old.get("account_id"), old.get("to_account_id")}:
@@ -586,66 +730,90 @@ async def create_debt(data: DebtCreate):
 
 @api.put("/debts/{did}")
 async def update_debt(did: str, data: DebtCreate):
-    await db.debts.update_one({"id": did}, {"$set": data.model_dump()})
-    await recompute_debt(did)
-    return await db.debts.find_one({"id": did}, PROJ)
+    async def operation(session):
+        old = await db.debts.find_one({"id": did, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        if not old:
+            raise HTTPException(404, "Debt not found")
+        payments = db.debt_payments.find({"debt_id": did, "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ, session=session)
+        paid, has_payments = 0.0, False
+        async for payment in payments:
+            paid += payment["amount"]
+            has_payments = True
+        if has_payments and data.direction != old["direction"]:
+            raise HTTPException(409, "No se puede cambiar la dirección de una deuda con pagos.")
+        if not math.isfinite(data.original_amount) or data.original_amount < paid or data.original_amount < 0:
+            raise HTTPException(422, "El importe de la deuda no puede ser menor que lo pagado.")
+        payload = data.model_dump()
+        payload["start_date"] = data.start_date or old["start_date"]
+        await db.debts.update_one({"id": did, "user_id": DEFAULT_USER_ID}, {"$set": payload}, session=session)
+        await recompute_debt(did, session=session)
+        return await db.debts.find_one({"id": did, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+    return await payment_transaction(operation)
 
 
 @api.delete("/debts/{did}")
 async def delete_debt(did: str):
-    await db.debts.delete_one({"id": did})
-    await db.debt_payments.delete_many({"debt_id": did})
-    return {"ok": True}
+    async def operation(session):
+        if await db.debt_payments.find_one({"debt_id": did, "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ, session=session) or await db.transactions.find_one({"debt_id": did, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+            raise HTTPException(409, "La deuda tiene pagos o movimientos vinculados; anúlalos antes de borrarla.")
+        await db.debts.delete_one({"id": did, "user_id": DEFAULT_USER_ID}, session=session)
+        return {"ok": True}
+    return await payment_transaction(operation)
 
 
 # Debt Payments
 @api.get("/debts/{did}/payments")
 async def list_debt_payments(did: str):
-    return await db.debt_payments.find({"debt_id": did}, PROJ).sort("date", -1).to_list(500)
+    payments = await db.debt_payments.find({"debt_id": did, "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ).sort("date", -1).to_list(500)
+    return [DebtPayment(**payment).model_dump() for payment in payments]
 
 
 @api.post("/debt-payments")
-async def create_debt_payment(data: DebtPaymentCreate):
-    debt = await db.debts.find_one({"id": data.debt_id}, PROJ)
-    if not debt:
-        raise HTTPException(404, "Debt not found")
+async def create_debt_payment(
+    data: DebtPaymentCreate,
+    idempotency_key: Optional[str] = Header(default=None, min_length=1, max_length=128),
+):
+    # IDs and request fingerprint stay stable across transaction retries.
+    pid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:debt-payment:{idempotency_key}")) if idempotency_key else new_id()
+    tid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"debt-payment-movement:{pid}"))
+    fingerprint = hashlib.sha256(json.dumps(data.model_dump(), sort_keys=True, allow_nan=False).encode()).hexdigest()
     payload = data.model_dump()
-    if not payload.get("date"):
-        payload["date"] = now_iso()
-    p = DebtPayment(user_id=DEFAULT_USER_ID, **payload).model_dump()
-    await db.debt_payments.insert_one(p)
+    payload["date"] = data.date or now_iso()
 
-    # Create a transaction entry
-    if debt["direction"] == "i_owe":
-        tx_type = "debt_payment"
-    else:
-        tx_type = "income"
-    tx = Transaction(
-        user_id=DEFAULT_USER_ID,
-        name=f"Pago: {debt['name']}",
-        amount=payload["amount"],
-        type=tx_type,
-        date=payload["date"],
-        account_id=payload.get("account_id"),
-        debt_id=data.debt_id,
-        notes=payload.get("notes"),
-    ).model_dump()
-    await db.transactions.insert_one(tx)
-    if payload.get("account_id"):
-        await recompute_account_balance(payload["account_id"])
-    await recompute_debt(data.debt_id)
-    return {k: v for k, v in p.items() if k != "_id"}
+    async def operation(session):
+        previous = await db.debt_payments.find_one({"_id": pid, "user_id": DEFAULT_USER_ID}, session=session)
+        if previous:
+            if previous.get("request_fingerprint") != fingerprint:
+                raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
+            if previous.get("deleted"):
+                raise HTTPException(409, "La operación ya fue anulada; no se volverá a crear.")
+            return DebtPayment(**previous).model_dump()
+        debt = await validate_payment(data.debt_id, data.amount, data.account_id, session)
+        payment = DebtPayment(id=pid, transaction_id=tid, user_id=DEFAULT_USER_ID, **payload).model_dump()
+        tx = Transaction(
+            id=tid, debt_payment_id=pid, user_id=DEFAULT_USER_ID,
+            name=f"Pago: {debt['name']}", amount=data.amount,
+            type="debt_payment" if debt["direction"] == "i_owe" else "income",
+            date=payload["date"], account_id=data.account_id,
+            debt_id=data.debt_id, notes=data.notes,
+        ).model_dump()
+        # MongoDB's existing unique _id index also arbitrates concurrent retries.
+        stored_payment = dict(payment, _id=pid)
+        if idempotency_key:
+            stored_payment["request_fingerprint"] = fingerprint
+        await db.debt_payments.insert_one(stored_payment, session=session)
+        await db.transactions.insert_one(dict(tx, _id=tid), session=session)
+        await recompute_debt(data.debt_id, session=session)
+        if data.account_id:
+            await recompute_account_balance(data.account_id, session=session)
+        return payment
+
+    return await payment_transaction(operation)
 
 
 @api.delete("/debt-payments/{pid}")
 async def delete_debt_payment(pid: str):
-    p = await db.debt_payments.find_one({"id": pid}, PROJ)
-    if p:
-        await db.debt_payments.delete_one({"id": pid})
-        await recompute_debt(p["debt_id"])
-        if p.get("account_id"):
-            await recompute_account_balance(p["account_id"])
-    return {"ok": True}
+    return await payment_transaction(lambda session: remove_payment(pid, session))
 
 
 # Reports summary
@@ -673,7 +841,7 @@ async def summary():
     i_owe = sum(d["remaining_amount"] for d in debts if d["direction"] == "i_owe")
     they_owe = sum(d["remaining_amount"] for d in debts if d["direction"] == "they_owe")
     paid_this_month = 0.0
-    async for p in db.debt_payments.find({"user_id": DEFAULT_USER_ID}, PROJ):
+    async for p in db.debt_payments.find({"user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ):
         try:
             d = datetime.fromisoformat(p["date"].replace("Z", "+00:00"))
             if d.year == now.year and d.month == now.month:
@@ -703,127 +871,13 @@ async def summary():
     }
 
 
-# Seed demo
+# Demo loading stays disabled until it has an isolated data store.
 @api.post("/seed")
 async def seed():
-    await ensure_user()
-    # Clean
-    await db.accounts.delete_many({"user_id": DEFAULT_USER_ID})
-    await db.categories.delete_many({"user_id": DEFAULT_USER_ID})
-    await db.transactions.delete_many({"user_id": DEFAULT_USER_ID})
-    await db.debts.delete_many({"user_id": DEFAULT_USER_ID})
-    await db.debt_payments.delete_many({"user_id": DEFAULT_USER_ID})
-    await db.budgets.delete_many({"user_id": DEFAULT_USER_ID})
-    await db.saving_goals.delete_many({"user_id": DEFAULT_USER_ID})
-
-    accounts_data = [
-        {"name": "Chase Checking", "type": "checking", "initial_balance": 2450, "color": "#4C83EA", "icon": "card-outline"},
-        {"name": "Efectivo", "type": "cash", "initial_balance": 350, "color": "#2FA47C", "icon": "cash-outline"},
-        {"name": "Ahorros", "type": "savings", "initial_balance": 8000, "color": "#29C4A9", "icon": "wallet-outline"},
-    ]
-    accounts = []
-    for a in accounts_data:
-        acc = Account(user_id=DEFAULT_USER_ID, current_balance=a["initial_balance"], **a).model_dump()
-        await db.accounts.insert_one(acc)
-        accounts.append(acc)
-
-    cats_data = [
-        ("Comida", "expense", "restaurant-outline", "#FF8A3D"),
-        ("Supermercado", "expense", "cart-outline", "#F5B83B"),
-        ("Restaurantes", "expense", "pizza-outline", "#FF654A"),
-        ("Transporte", "expense", "car-outline", "#4C83EA"),
-        ("Gasolina", "expense", "flame-outline", "#D95345"),
-        ("Casa", "expense", "home-outline", "#8F5BE8"),
-        ("Servicios", "expense", "flash-outline", "#F5B83B"),
-        ("Teléfono", "expense", "call-outline", "#29C4A9"),
-        ("Internet", "expense", "wifi-outline", "#4C83EA"),
-        ("Entretenimiento", "expense", "musical-notes-outline", "#8F5BE8"),
-        ("Compras", "expense", "bag-outline", "#FF8A3D"),
-        ("Salud", "expense", "medkit-outline", "#D95345"),
-        ("Trabajo", "expense", "briefcase-outline", "#27221F"),
-        ("Educación", "expense", "school-outline", "#4C83EA"),
-        ("Viajes", "expense", "airplane-outline", "#29C4A9"),
-        ("Salario", "income", "cash-outline", "#2FA47C"),
-        ("Propinas", "income", "star-outline", "#F5B83B"),
-        ("Otros", "expense", "ellipsis-horizontal-outline", "#8E8883"),
-    ]
-    cats = []
-    for name, typ, icon, color in cats_data:
-        c = Category(user_id=DEFAULT_USER_ID, name=name, type=typ, icon=icon, color=color).model_dump()
-        await db.categories.insert_one(c)
-        cats.append(c)
-
-    cat_by = {c["name"]: c["id"] for c in cats}
-
-    txs = [
-        ("Salario", 600, "income", cat_by["Salario"], accounts[0]["id"]),
-        ("Supermercado semanal", 82.50, "expense", cat_by["Supermercado"], accounts[0]["id"]),
-        ("Café", 4.50, "expense", cat_by["Restaurantes"], accounts[1]["id"]),
-        ("Gasolina", 45.00, "expense", cat_by["Gasolina"], accounts[0]["id"]),
-        ("Netflix", 15.99, "expense", cat_by["Entretenimiento"], accounts[0]["id"]),
-    ]
-    for name, amt, typ, cid, aid in txs:
-        tx = Transaction(
-            user_id=DEFAULT_USER_ID, name=name, amount=amt, type=typ,
-            category_id=cid, account_id=aid,
-        ).model_dump()
-        await db.transactions.insert_one(tx)
-
-    # Debts
-    debts_data = [
-        {"name": "Tarjeta Chase", "direction": "i_owe", "person": "Chase Bank",
-         "original_amount": 2500, "minimum_payment": 200, "due_date": "2026-06-15T00:00:00+00:00",
-         "color": "#D95345", "icon": "card-outline"},
-        {"name": "Préstamo automóvil", "direction": "i_owe", "person": "Toyota Financial",
-         "original_amount": 12000, "minimum_payment": 350, "due_date": "2026-06-25T00:00:00+00:00",
-         "color": "#8F5BE8", "icon": "car-outline"},
-        {"name": "Carlos me debe", "direction": "they_owe", "person": "Carlos",
-         "original_amount": 1000, "minimum_payment": 100, "due_date": "2026-07-10T00:00:00+00:00",
-         "color": "#F5B83B", "icon": "person-outline"},
-    ]
-    for d in debts_data:
-        debt = Debt(user_id=DEFAULT_USER_ID, remaining_amount=d["original_amount"], **d).model_dump()
-        await db.debts.insert_one(debt)
-
-    # Sample payments
-    all_debts = await db.debts.find({"user_id": DEFAULT_USER_ID}, PROJ).to_list(10)
-    chase = next(x for x in all_debts if x["name"] == "Tarjeta Chase")
-    p = DebtPayment(debt_id=chase["id"], amount=700, account_id=accounts[0]["id"]).model_dump()
-    await db.debt_payments.insert_one(p)
-    car = next(x for x in all_debts if x["name"] == "Préstamo automóvil")
-    p2 = DebtPayment(debt_id=car["id"], amount=3600, account_id=accounts[0]["id"]).model_dump()
-    await db.debt_payments.insert_one(p2)
-    carlos = next(x for x in all_debts if x["name"] == "Carlos me debe")
-    p3 = DebtPayment(debt_id=carlos["id"], amount=300, account_id=accounts[1]["id"]).model_dump()
-    await db.debt_payments.insert_one(p3)
-
-    for d in all_debts:
-        await recompute_debt(d["id"])
-
-    # Budgets
-    budgets_data = [
-        {"name": "Restaurantes", "amount_limit": 400, "period": "monthly", "category_id": cat_by["Restaurantes"]},
-        {"name": "Supermercado", "amount_limit": 500, "period": "monthly", "category_id": cat_by["Supermercado"]},
-        {"name": "Entretenimiento", "amount_limit": 150, "period": "monthly", "category_id": cat_by["Entretenimiento"]},
-    ]
-    for b in budgets_data:
-        bud = Budget(user_id=DEFAULT_USER_ID, start_date=now_iso(), **b).model_dump()
-        await db.budgets.insert_one(bud)
-
-    # Goals
-    goals_data = [
-        {"name": "PC nueva", "target_amount": 3000, "current_amount": 1500, "priority": "medium", "color": "#4C83EA", "icon": "desktop-outline"},
-        {"name": "Viaje", "target_amount": 2000, "current_amount": 900, "priority": "medium", "color": "#29C4A9", "icon": "airplane-outline"},
-        {"name": "Fondo de emergencia", "target_amount": 10000, "current_amount": 4000, "priority": "high", "color": "#FF654A", "icon": "shield-checkmark-outline"},
-    ]
-    for g in goals_data:
-        goal = SavingGoal(user_id=DEFAULT_USER_ID, **g).model_dump()
-        await db.saving_goals.insert_one(goal)
-
-    for a in accounts:
-        await recompute_account_balance(a["id"])
-
-    return {"ok": True, "seeded": True}
+    raise HTTPException(
+        status_code=403,
+        detail="La carga de datos demo está deshabilitada para proteger tus datos.",
+    )
 
 
 app.include_router(api)

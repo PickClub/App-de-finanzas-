@@ -1,9 +1,7 @@
 from fastapi import FastAPI, APIRouter, Header, HTTPException
-from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import os, logging, uuid, hashlib, json, math
-from pathlib import Path
+import logging, uuid, hashlib, json, math
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Literal
 from datetime import datetime, timezone
@@ -12,12 +10,14 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
 
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / ".env")
+if __package__:
+    from .config import load_settings
+else:
+    from config import load_settings
 
-mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ["DB_NAME"]]
+settings = load_settings()
+client = AsyncIOMotorClient(settings.mongo_url)
+db = client[settings.db_name]
 
 app = FastAPI(title="MoneyFlow API")
 api = APIRouter(prefix="/api")
@@ -885,12 +885,12 @@ app.include_router(api)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
+    allow_origins=list(settings.cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger(__name__)
 
 

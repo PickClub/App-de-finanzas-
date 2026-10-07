@@ -7,6 +7,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/src/api";
+import { useResourceDeletion, useMissingResource } from "@/src/use-resource-deletion";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
 import { AppSheet, ConfirmSheet } from "@/src/components/sheets";
@@ -70,6 +71,7 @@ export default function TransactionDetail() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
+  const deletion = useResourceDeletion("/(tabs)", [["transactions"], ["accounts"], ["debts"], ["debt"], ["debt-payments"], ["summary"]]);
 
   const txQ = useQuery({ queryKey: ["transactions"], queryFn: api.listTransactions });
   const catQ = useQuery({ queryKey: ["categories"], queryFn: api.listCategories });
@@ -110,7 +112,9 @@ export default function TransactionDetail() {
     return q ? all.filter((c: any) => c.name.toLowerCase().includes(q)) : all;
   }, [catQ.data, tx, catSearch]);
 
-  if (!tx) {
+  useMissingResource(txQ.isSuccess && !tx, deletion.unavailable);
+
+  if (!tx || deletion.deleted.current) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top + us(8) }]}>
         <View style={styles.header}>
@@ -137,24 +141,20 @@ export default function TransactionDetail() {
 
   // --- Actions (reuse existing update/delete/create logic) ---
   const doEdit = () => {
+    if (deletion.locked.current) return;
     setConfirmEdit(false);
     router.push(`/transactions/new?id=${tx.id}`);
   };
   const doDuplicate = () => {
+    if (deletion.locked.current) return;
     setConfirmDup(false);
     router.push(`/transactions/new?dupFrom=${tx.id}`);
   };
   const doDelete = async () => {
-    try {
-      await api.deleteTransaction(tx.id);
-      qc.invalidateQueries();
-      setConfirmDel(false);
-      router.back();
-    } catch (e: any) {
-      Alert.alert("Error", e.message);
-    }
+    await deletion.remove(() => api.deleteTransaction(tx.id));
   };
   const saveCategory = async () => {
+    if (deletion.locked.current) return;
     if (!pickedCat) return;
     try {
       await api.updateTransaction(tx.id, {
@@ -176,6 +176,7 @@ export default function TransactionDetail() {
   };
 
   const openCategorySheet = () => {
+    if (deletion.locked.current) return;
     setPickedCat(tx.category_id);
     setCatSearch("");
     setMoreOpen(false);
@@ -197,7 +198,7 @@ export default function TransactionDetail() {
   };
 
   const saveRecurring = async () => {
-    if (recurSaving) return;
+    if (recurSaving || deletion.locked.current) return;
     setRecurSaving(true);
     try {
       await api.createRecurring({
@@ -242,12 +243,13 @@ export default function TransactionDetail() {
   ];
 
   function afterMenu(fn: () => void) {
+    if (deletion.locked.current) return;
     setMoreOpen(false);
-    setTimeout(fn, 180);
+    setTimeout(() => { if (!deletion.locked.current) fn(); }, 180);
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top + us(8) }]}>
+    <View pointerEvents={deletion.busy ? "none" : "auto"} style={[styles.screen, { paddingTop: insets.top + us(8) }]}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable testID="back-btn" onPress={() => router.back()} style={styles.circleBtn}>

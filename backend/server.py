@@ -265,7 +265,7 @@ async def ensure_user():
     if not u:
         user = User(id=DEFAULT_USER_ID, name="Usuario").model_dump()
         await db.users.insert_one(user)
-        return user
+        return {key: value for key, value in user.items() if key != "_id"}
     return u
 
 
@@ -375,6 +375,8 @@ async def remove_payment(pid, session):
     if not payment or payment.get("deleted"):
         return {"ok": True}
     tx = await payment_movement(payment, session)
+    if await db.recurring_templates.find_one({"source_transaction_id": tx["id"]}, PROJ, session=session):
+        raise HTTPException(409, "El movimiento de este pago es origen de una recurrencia. Elimina primero esa configuración de recurrencia.")
     await db.transactions.delete_one({"id": tx["id"], "user_id": DEFAULT_USER_ID}, session=session)
     if payment.get("request_fingerprint"):
         # Retain a tombstone so a delayed POST retry cannot resurrect a payment.
@@ -456,10 +458,16 @@ async def update_account(account_id: str, data: AccountCreate):
 @api.delete("/accounts/{account_id}")
 async def delete_account(account_id: str):
     async def operation(session):
-        if await db.debt_payments.find_one({"account_id": account_id, "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ, session=session):
-            raise HTTPException(409, "La cuenta tiene pagos vinculados; anúlalos antes de borrarla.")
-        if await db.transactions.find_one({"account_id": account_id, "user_id": DEFAULT_USER_ID, "debt_id": {"$ne": None}}, PROJ, session=session):
-            raise HTTPException(409, "La cuenta tiene movimientos de deuda; requieren conciliación antes de borrarla.")
+        if await db.debt_payments.find_one({"account_id": account_id, "deleted": {"$ne": True}}, PROJ, session=session):
+            raise HTTPException(409, "La cuenta tiene pagos vinculados. Anúlalos primero desde el historial de la deuda antes de borrar la cuenta.")
+        for field in ("account_id", "to_account_id"):
+            if await db.transactions.find_one({field: account_id}, PROJ, session=session):
+                raise HTTPException(409, "Esta cuenta tiene movimientos vinculados. Elimina o resuelve primero sus movimientos; los pagos se anulan desde el historial de deuda.")
+        for collection, fields, label in ((db.debts, ("account_id",), "deudas"),
+                                          (db.recurring_templates, ("account_id", "to_account_id"), "recurrencias")):
+            for field in fields:
+                if await collection.find_one({field: account_id}, PROJ, session=session):
+                    raise HTTPException(409, f"Esta cuenta está vinculada a {label}. Resuelve ese vínculo antes de eliminarla.")
         await db.accounts.delete_one({"id": account_id, "user_id": DEFAULT_USER_ID}, session=session)
         return {"ok": True}
     return await payment_transaction(operation)
@@ -486,8 +494,14 @@ async def update_category(cid: str, data: CategoryCreate):
 
 @api.delete("/categories/{cid}")
 async def delete_category(cid: str):
-    await db.categories.delete_one({"id": cid})
-    return {"ok": True}
+    async def operation(session):
+        for collection, label in ((db.transactions, "movimientos"), (db.budgets, "presupuestos"),
+                                  (db.debts, "deudas"), (db.recurring_templates, "recurrencias")):
+            if await collection.find_one({"category_id": cid}, PROJ, session=session):
+                raise HTTPException(409, f"Esta categoría está utilizada por {label}. Resuelve sus referencias antes de eliminarla.")
+        await db.categories.delete_one({"id": cid}, session=session)
+        return {"ok": True}
+    return await payment_transaction(operation)
 
 
 # Default category catalog (name, icon, soft color). Additive only — this does
@@ -604,6 +618,8 @@ async def update_transaction(tid: str, data: TransactionCreate):
 @api.delete("/transactions/{tid}")
 async def delete_transaction(tid: str):
     old = await db.transactions.find_one({"id": tid}, PROJ)
+    if old and await db.recurring_templates.find_one({"source_transaction_id": tid}, PROJ):
+        raise HTTPException(409, "Este movimiento es origen de una recurrencia. Elimina primero esa configuración de recurrencia.")
     if old and old.get("debt_payment_id"):
         async def operation(session):
             current = await db.transactions.find_one({"id": tid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)

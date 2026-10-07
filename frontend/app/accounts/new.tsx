@@ -7,6 +7,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/src/api";
+import { useAccountDeletionExit } from "@/src/account-deletion-navigation";
+import { useResourceDeletion } from "@/src/use-resource-deletion";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { IconTile } from "@/src/components/ui";
@@ -30,6 +32,10 @@ export default function AccountForm() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
+  const exitAfterRemoval = useAccountDeletionExit(params.id);
+  const deletion = useResourceDeletion("/accounts", [["accounts"], ["transactions"], ["categories"], ["debts"], ["debt-payments"], ["debt"], ["summary"]], exitAfterRemoval);
+  const [loadedId, setResourceLoaded] = useState<string>();
+  const resourceLoaded = loadedId === params.id;
 
   const [name, setName] = useState("");
   const [type, setType] = useState("cash");
@@ -41,18 +47,21 @@ export default function AccountForm() {
     if (params.id) {
       api.listAccounts().then((all) => {
         const a = all.find((x: any) => x.id === params.id);
+        if (!a) { deletion.unavailable(); return; }
         if (a) {
+          setResourceLoaded(params.id);
           setName(a.name);
           setType(a.type);
           setBalance(String(a.initial_balance));
           setColor(a.color);
           setIcon(a.icon);
         }
-      });
+      }).catch((error) => Alert.alert("No se pudo cargar", error instanceof Error ? error.message : "Inténtalo de nuevo."));
     }
   }, [params.id]);
 
   const save = async () => {
+    if (deletion.locked.current || (params.id && !resourceLoaded)) return;
     if (!name.trim()) {
       Alert.alert(t("errors.nameRequired"));
       return;
@@ -73,20 +82,20 @@ export default function AccountForm() {
 
   const remove = async () => {
     if (!params.id) return;
-    await api.deleteAccount(params.id as string);
-    qc.invalidateQueries();
-    router.back();
+    await deletion.remove(() => api.deleteAccount(params.id as string));
   };
 
+  if (params.id && (!resourceLoaded || deletion.deleted.current)) return <View />;
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+    <ScrollView pointerEvents={deletion.busy ? "none" : "auto"} style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{params.id ? t("accounts.editAccount") : t("accounts.newAccount")}</Text>
         {params.id && (
-          <Pressable onPress={remove} style={styles.backBtn}>
+          <Pressable onPress={remove} disabled={deletion.busy} style={styles.backBtn}>
             <Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} />
           </Pressable>
         )}

@@ -5,6 +5,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
@@ -211,6 +212,9 @@ export default function Notes() {
   const [draftItems, setDraftItems] = useState<ListItem[]>([]);
   const [draftPalette, setDraftPalette] = useState<PaletteKey | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const noteDeleting = React.useRef(false);
+  const deletedNotes = React.useRef(new Set<string>());
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   // Load (or seed on first run).
   useEffect(() => {
@@ -234,13 +238,16 @@ export default function Notes() {
   }, []);
 
   const persist = useCallback((next: Note[]) => {
-    setNotes(next);
-    storage.setItem(STORAGE_KEY, JSON.stringify(next));
+    if (noteDeleting.current) return;
+    const available = next.filter((note) => !deletedNotes.current.has(note.id));
+    setNotes(available);
+    storage.setItem(STORAGE_KEY, JSON.stringify(available));
   }, []);
 
   const tintOf = useCallback((c: string) => c + (isDark ? "22" : "14"), [isDark]);
 
   const openEditor = (note: Note | null) => {
+    if (noteDeleting.current || (note && deletedNotes.current.has(note.id))) return;
     setEditing(note);
     setDraftTitle(note?.title || "");
     const mode: ListMode = note?.listMode || "plain";
@@ -285,6 +292,7 @@ export default function Notes() {
     setDraftItems((items) => (items.length > 1 ? items.filter((i) => i.id !== id) : items));
 
   const saveNote = () => {
+    if (noteDeleting.current || (editing && deletedNotes.current.has(editing.id))) return;
     const title = draftTitle.trim();
     const content = draftListMode === "plain" ? draftContent.trim() : serializeItems(draftItems, draftListMode);
     if (!title && !content) {
@@ -322,9 +330,25 @@ export default function Notes() {
     persist(notes.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
   };
 
-  const deleteNote = (id: string) => {
-    persist(notes.filter((n) => n.id !== id));
-    setEditorOpen(false);
+  const deleteNote = async (id: string) => {
+    if (noteDeleting.current || deletedNotes.current.has(id)) return;
+    noteDeleting.current = true;
+    setDeleteBusy(true);
+    try {
+      const next = notes.filter((n) => n.id !== id);
+      if (!await storage.setItem(STORAGE_KEY, JSON.stringify(next))) throw new Error("No se pudo guardar la eliminación de la nota.");
+      deletedNotes.current.add(id);
+      setNotes(next);
+      setEditorOpen(false);
+      setEditing(null);
+      setMenuNote(null);
+      setConfirmDelete(false);
+    } catch (error) {
+      Alert.alert("No se pudo eliminar", error instanceof Error ? error.message : "Inténtalo de nuevo.");
+    } finally {
+      noteDeleting.current = false;
+      setDeleteBusy(false);
+    }
   };
 
   const filtered = useMemo(() => {
@@ -566,6 +590,7 @@ export default function Notes() {
           </Pressable>
           <Pressable
             testID="note-menu-delete"
+            disabled={deleteBusy}
             style={styles.menuItem}
             onPress={() => { const n = menuNote; setMenuNote(null); if (n) deleteNote(n.id); }}
           >
@@ -707,6 +732,7 @@ export default function Notes() {
                 </Pressable>
                 <Pressable
                   testID="notes-confirm-delete"
+                  disabled={deleteBusy}
                   style={styles.confirmDelBtn}
                   onPress={() => editing && deleteNote(editing.id)}
                 >
@@ -716,7 +742,7 @@ export default function Notes() {
             ) : (
               <View style={styles.sheetActions}>
                 {editing ? (
-                  <Pressable testID="notes-delete-btn" style={styles.deleteBtn} onPress={() => setConfirmDelete(true)}>
+                  <Pressable testID="notes-delete-btn" disabled={deleteBusy} style={styles.deleteBtn} onPress={() => setConfirmDelete(true)}>
                     <Ionicons name="trash-outline" size={us(18)} color={colors.expenseRed} />
                     <Text style={styles.deleteText}>Eliminar</Text>
                   </Pressable>

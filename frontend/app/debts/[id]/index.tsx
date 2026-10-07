@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, StyleSheet, Alert } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
@@ -6,7 +6,7 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/src/api";
+import { api, ApiError } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatCurrencyInt, formatDateLong } from "@/src/format";
 import { ProgressRing } from "@/src/components/ProgressRing";
@@ -20,24 +20,76 @@ export default function DebtDetail() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
+  const processing = useRef(false);
+  const deleted = useRef(false);
+  const [busy, setBusy] = useState(false);
   const debtQ = useQuery({ queryKey: ["debt", params.id], queryFn: () => api.getDebt(params.id as string), enabled: !!params.id });
   const paysQ = useQuery({ queryKey: ["debt-payments", params.id], queryFn: () => api.listDebtPayments(params.id as string), enabled: !!params.id });
+  const missing = debtQ.error instanceof ApiError && debtQ.error.status === 404;
+  useEffect(() => {
+    if (!missing || deleted.current) return;
+    deleted.current = true;
+    processing.current = true;
+    Alert.alert("Deuda no disponible", "Esta deuda ya no existe. Volverás a Deudas.");
+    router.dismissTo("/debts");
+  }, [missing, router]);
 
   const d = debtQ.data;
-  if (!d) return <View style={{ flex: 1, backgroundColor: colors.surface }} />;
+  if (!d || missing || deleted.current) return <View style={{ flex: 1, backgroundColor: colors.surface }} />;
 
   const progress = d.original_amount > 0 ? d.total_paid / d.original_amount : 0;
+  const refreshFinancialData = () => Promise.all(
+    [["debt", d.id], ["debt-payments", d.id], ["debts"], ["transactions"], ["accounts"], ["summary"]]
+      .map((queryKey) => qc.invalidateQueries({ queryKey }))
+  );
+  const executeDeletion = async (paymentId?: string) => {
+    if (processing.current || deleted.current) return;
+    processing.current = true;
+    setBusy(true);
+    try {
+      if (paymentId) {
+        await api.deleteDebtPayment(paymentId);
+        await refreshFinancialData();
+      } else {
+        await api.deleteDebt(d.id);
+        deleted.current = true;
+        qc.removeQueries({ queryKey: ["debt", d.id], exact: true });
+        qc.removeQueries({ queryKey: ["debt-payments", d.id], exact: true });
+        // Start refreshes, but never keep a deleted detail open while they finish.
+        void Promise.all([["debts"], ["transactions"], ["accounts"], ["summary"]]
+          .map((queryKey) => qc.invalidateQueries({ queryKey, refetchType: "all" })))
+          .catch(() => Alert.alert("Actualizar datos", "La deuda se eliminó. No se pudo actualizar la lista; vuelve a intentarlo."));
+        router.dismissTo("/debts");
+      }
+    } catch (error) {
+      const message = error instanceof ApiError && error.status === 409
+        ? paymentId
+          ? error.detail
+          : "Esta deuda tiene pagos o movimientos vinculados. Anúlalos desde el historial antes de eliminarla."
+        : error instanceof Error ? error.message : "No se pudo completar la operación. Inténtalo de nuevo.";
+      Alert.alert("No se pudo eliminar", message);
+    } finally {
+      if (!deleted.current) {
+        processing.current = false;
+        setBusy(false);
+      }
+    }
+  };
+  const cancelPayment = (paymentId: string) => {
+    if (processing.current) return;
+    Alert.alert("Anular pago", "Se eliminará el movimiento asociado y se revertirá el efecto de este pago en el saldo de la cuenta y en el pendiente de la deuda. ¿Continuar?", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Anular pago", style: "destructive", onPress: () => { void executeDeletion(paymentId); } },
+    ]);
+  };
   const remove = () => {
+    if (processing.current) return;
     Alert.alert("Eliminar deuda", "¿Estás seguro?", [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Eliminar",
         style: "destructive",
-        onPress: async () => {
-          await api.deleteDebt(d.id);
-          qc.invalidateQueries();
-          router.back();
-        },
+        onPress: () => { void executeDeletion(); },
       },
     ]);
   };
@@ -49,7 +101,7 @@ export default function DebtDetail() {
           <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{d.name}</Text>
-        <Pressable onPress={remove} style={styles.backBtn}>
+        <Pressable onPress={remove} disabled={busy} accessibilityState={{ disabled: busy, busy }} style={styles.backBtn}>
           <Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} />
         </Pressable>
       </View>
@@ -123,8 +175,11 @@ export default function DebtDetail() {
 
       <Pressable
         testID="pay-btn"
-        disabled={d.status === "paid"}
-        onPress={() => router.push(`/debts/${d.id}/pay`)}
+        onPress={() => {
+          if (!processing.current && !deleted.current && d.status !== "paid") router.push(`/debts/${d.id}/pay`);
+        }}
+        disabled={busy || d.status === "paid"}
+        accessibilityState={{ disabled: busy || d.status === "paid", busy }}
         style={[styles.payBtn, d.status === "paid" && { opacity: 0.5 }]}
       >
         <Ionicons name="add-circle-outline" size={us(22)} color="#fff" />
@@ -141,6 +196,15 @@ export default function DebtDetail() {
                 <Text style={{ fontWeight: "700", color: colors.onSurface }}>{formatCurrencyInt(p.amount)}</Text>
                 <Text style={{ color: colors.muted, fontSize: ufs(12) }}>{formatDateLong(p.date)}</Text>
               </View>
+              <Pressable
+                testID={`cancel-payment-${p.id}`}
+                onPress={() => cancelPayment(p.id)}
+                disabled={busy}
+                accessibilityState={{ disabled: busy, busy }}
+                style={{ padding: us(8) }}
+              >
+                <Text style={{ color: colors.expenseRed, fontSize: ufs(12), fontWeight: "600" }}>Anular pago</Text>
+              </Pressable>
             </View>
           ))}
           {(!paysQ.data || paysQ.data.length === 0) && (

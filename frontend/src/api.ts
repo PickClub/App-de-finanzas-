@@ -1,5 +1,17 @@
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "";
 
+export class ApiError extends Error {
+  readonly detail: string;
+  constructor(public readonly status: number, text: string) {
+    super(`API ${status}: ${text}`);
+    this.detail = this.message;
+    try {
+      const detail = JSON.parse(text).detail;
+      if (typeof detail === "string") this.detail = detail;
+    } catch { /* Non-JSON errors keep the original message. */ }
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}/api${path}`, {
     ...options,
@@ -10,7 +22,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`API ${res.status}: ${text}`);
+    throw new ApiError(res.status, text);
   }
   return res.json();
 }
@@ -53,6 +65,7 @@ export const api = {
   deleteDebt: (id: string) => request<any>(`/debts/${id}`, { method: "DELETE" }),
   listDebtPayments: (id: string) => request<any[]>(`/debts/${id}/payments`),
   createDebtPayment: (d: any) => request<any>("/debt-payments", { method: "POST", body: JSON.stringify(d) }),
+  deleteDebtPayment: (id: string) => request<any>(`/debt-payments/${id}`, { method: "DELETE" }),
   // Summary
   summary: () => request<any>("/summary"),
   seed: () => request<any>("/seed", { method: "POST" }),

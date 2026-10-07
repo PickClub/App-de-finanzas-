@@ -7,6 +7,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/src/api";
+import { useResourceDeletion } from "@/src/use-resource-deletion";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
 import { ConfirmSheet } from "@/src/components/sheets";
@@ -26,6 +27,9 @@ export default function NewTransaction() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
+  const deletion = useResourceDeletion("/(tabs)", [["accounts"], ["transactions"], ["categories"], ["debts"], ["debt-payments"], ["debt"], ["summary"]]);
+  const [loadedId, setResourceLoaded] = useState<string>();
+  const resourceLoaded = loadedId === params.id;
 
   const [type, setType] = useState<string>(params.type || "expense");
   const [amount, setAmount] = useState("");
@@ -43,8 +47,9 @@ export default function NewTransaction() {
   // Ensure the default category catalog exists so selection always has options.
   const ensuredRef = React.useRef(false);
   useEffect(() => {
-    if (catQ.isSuccess && (catQ.data || []).length === 0 && !ensuredRef.current) {
-      ensuredRef.current = true;
+    if (!catQ.isSuccess || ensuredRef.current) return;
+    ensuredRef.current = true;
+    if ((catQ.data || []).length === 0) {
       api.initDefaultCategories().then(() => qc.invalidateQueries({ queryKey: ["categories"] })).catch(() => {});
     }
   }, [catQ.isSuccess, catQ.data, qc]);
@@ -53,7 +58,9 @@ export default function NewTransaction() {
     if (params.id) {
       api.listTransactions().then((all) => {
         const t = all.find((x: any) => x.id === params.id);
+        if (!t) { deletion.unavailable(); return; }
         if (t) {
+          setResourceLoaded(params.id);
           setType(t.type);
           setAmount(String(t.amount));
           setName(t.name);
@@ -62,7 +69,7 @@ export default function NewTransaction() {
           setToAccountId(t.to_account_id);
           setNotes(t.notes || "");
         }
-      });
+      }).catch((error) => Alert.alert("No se pudo cargar", error instanceof Error ? error.message : "Inténtalo de nuevo."));
     }
   }, [params.id]);
 
@@ -87,6 +94,7 @@ export default function NewTransaction() {
   }, [params.dupFrom, params.id]);
 
   const save = async () => {
+    if (deletion.locked.current || (params.id && !resourceLoaded)) return;
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) {
       Alert.alert("Falta información", "Ingresa un monto válido");
@@ -114,14 +122,14 @@ export default function NewTransaction() {
 
   const remove = async () => {
     if (!params.id) return;
-    await api.deleteTransaction(params.id as string);
-    qc.invalidateQueries();
-    setConfirmDel(false);
-    router.back();
+    await deletion.remove(() => api.deleteTransaction(params.id as string));
   };
+
+  if (params.id && (!resourceLoaded || deletion.deleted.current)) return <View />;
 
   return (
     <KeyboardAvoidingView
+      pointerEvents={deletion.busy ? "none" : "auto"}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={{ flex: 1, backgroundColor: colors.surface }}
     >
@@ -131,7 +139,7 @@ export default function NewTransaction() {
         </Pressable>
         <Text style={styles.title}>{params.id ? "Editar" : "Nuevo"} movimiento</Text>
         {params.id && (
-          <Pressable testID="delete-tx" onPress={() => setConfirmDel(true)} style={styles.backBtn}>
+          <Pressable testID="delete-tx" disabled={deletion.busy} onPress={() => { if (!deletion.locked.current) setConfirmDel(true); }} style={styles.backBtn}>
             <Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} />
           </Pressable>
         )}

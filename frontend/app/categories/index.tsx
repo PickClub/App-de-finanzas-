@@ -25,8 +25,9 @@ export default function Categories() {
   // Ensure the default catalog exists (idempotent) if there are no categories.
   const ensuredRef = React.useRef(false);
   useEffect(() => {
-    if (q.isSuccess && cats.length === 0 && !ensuredRef.current) {
-      ensuredRef.current = true;
+    if (!q.isSuccess || ensuredRef.current) return;
+    ensuredRef.current = true;
+    if (cats.length === 0) {
       api.initDefaultCategories().then(() => qc.invalidateQueries({ queryKey: ["categories"] })).catch(() => {});
     }
   }, [q.isSuccess, cats.length, qc]);

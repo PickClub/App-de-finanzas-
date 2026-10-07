@@ -7,6 +7,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/src/api";
+import { useResourceDeletion } from "@/src/use-resource-deletion";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
 
@@ -27,6 +28,9 @@ export default function CategoryForm() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
+  const deletion = useResourceDeletion("/categories", [["accounts"], ["transactions"], ["categories"], ["debts"], ["debt-payments"], ["debt"], ["summary"]]);
+  const [loadedId, setResourceLoaded] = useState<string>();
+  const resourceLoaded = loadedId === params.id;
 
   const [name, setName] = useState("");
   const [type, setType] = useState<"expense" | "income">("expense");
@@ -37,12 +41,14 @@ export default function CategoryForm() {
     if (params.id) {
       api.listCategories().then((all) => {
         const c = all.find((x: any) => x.id === params.id);
-        if (c) { setName(c.name); setType(c.type); setIcon(c.icon); setColor(c.color); }
-      });
+        if (!c) { deletion.unavailable(); return; }
+        if (c) { setResourceLoaded(params.id); setName(c.name); setType(c.type); setIcon(c.icon); setColor(c.color); }
+      }).catch((error) => Alert.alert("No se pudo cargar", error instanceof Error ? error.message : "Inténtalo de nuevo."));
     }
   }, [params.id]);
 
   const save = async () => {
+    if (deletion.locked.current || (params.id && !resourceLoaded)) return;
     if (!name.trim()) return Alert.alert("Falta nombre");
     const payload = { name, type, icon, color };
     if (params.id) await api.updateCategory(params.id as string, payload);
@@ -53,19 +59,19 @@ export default function CategoryForm() {
 
   const remove = async () => {
     if (!params.id) return;
-    await api.deleteCategory(params.id as string);
-    qc.invalidateQueries();
-    router.back();
+    await deletion.remove(() => api.deleteCategory(params.id as string));
   };
 
+  if (params.id && (!resourceLoaded || deletion.deleted.current)) return <View />;
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+    <ScrollView pointerEvents={deletion.busy ? "none" : "auto"} style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{params.id ? "Editar" : "Nueva"} categoría</Text>
-        {params.id && <Pressable onPress={remove} style={styles.backBtn}><Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} /></Pressable>}
+        {params.id && <Pressable onPress={remove} disabled={deletion.busy} style={styles.backBtn}><Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} /></Pressable>}
       </View>
 
       <Text style={styles.label}>Nombre</Text>

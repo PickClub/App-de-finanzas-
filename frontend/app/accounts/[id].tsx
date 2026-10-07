@@ -1,12 +1,14 @@
-import React, { useMemo } from "react";
+import { useAccountDeletionExit } from "@/src/account-deletion-navigation";
+import React, { useCallback, useMemo, useState } from "react";
 import { View, ScrollView, Platform, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/src/api";
+import { useResourceDeletion, useMissingResource } from "@/src/use-resource-deletion";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { formatCurrencyInt, formatDateLong } from "@/src/format";
@@ -56,6 +58,13 @@ export default function AccountDetail() {
   const styles = useStyles();
   const params = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
+  const [isFocused, setFocused] = useState(false);
+  useFocusEffect(useCallback(() => {
+    setFocused(true);
+    return () => setFocused(false);
+  }, []));
+  const exitAfterRemoval = useAccountDeletionExit(params.id);
+  const deletion = useResourceDeletion("/accounts", [["accounts"]], exitAfterRemoval);
   const insets = useSafeAreaInsets();
 
   // Reuse the SAME react-query sources the rest of the app uses (single source
@@ -83,7 +92,9 @@ export default function AccountDetail() {
       .slice(0, 3);
   }, [txQ.data, params.id]);
 
-  if (!account) {
+  useMissingResource(isFocused && accountsQ.isSuccess && !account, deletion.unavailable);
+
+  if (!account || deletion.deleted.current) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.surface, paddingTop: insets.top + us(8) }}>
         <View style={styles.headerRow}>
@@ -95,7 +106,7 @@ export default function AccountDetail() {
           {accountsQ.isLoading ? (
             <ActivityIndicator color={forest} />
           ) : (
-            <Text style={{ color: colors.muted }}>{t("accounts.noAccounts")}</Text>
+            <ActivityIndicator color={forest} />
           )}
         </View>
       </View>

@@ -10,6 +10,7 @@ import Animated, {
   withTiming,
   Easing,
   LinearTransition,
+  FadeIn,
   type SharedValue,
 } from "react-native-reanimated";
 import Svg, { Circle as SvgCircle, Path as SvgPath, Polyline as SvgPolyline } from "react-native-svg";
@@ -102,6 +103,64 @@ const DONUT_BASE = 132;
 const DONUT_STROKE_BASE = 20;
 const DONUT_SIZE = us(DONUT_BASE);
 const DONUT_STROKE = us(DONUT_STROKE_BASE);
+
+// --- Movimientos recientes: fixed 6-slot list -------------------------------
+// When there are fewer than MR_SLOTS real movements, the remaining slots show
+// blurred EXAMPLE rows. They are frontend-only constants: never stored, never
+// sent to the backend, not pressable and not part of any total/statistic.
+const MR_SLOTS = 6;
+type MRGhost = { name: string; badge: string; icon: string; tint: string; amount: number; kind: "income" | "expense" | "transfer"; date: string };
+const MR_GHOST_BASE = Date.now();
+const ghostDate = (h: number) => new Date(MR_GHOST_BASE - h * 3600 * 1000).toISOString();
+const MR_GHOSTS: Record<string, { es: string; en: string; bes: string; ben: string; icon: string; tint: string; amount: number; kind: MRGhost["kind"] }[]> = {
+  all: [
+    { es: "Supermercado", en: "Groceries", bes: "Comida", ben: "Food", icon: "cart-outline", tint: "#F5B83B", amount: 85, kind: "expense" },
+    { es: "Salario", en: "Salary", bes: "Sueldo", ben: "Salary", icon: "briefcase-outline", tint: "#2FA47C", amount: 1200, kind: "income" },
+    { es: "Restaurante", en: "Restaurant", bes: "Comida", ben: "Food", icon: "restaurant-outline", tint: "#FF8A3D", amount: 42, kind: "expense" },
+    { es: "Transferencia", en: "Transfer", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 250, kind: "transfer" },
+    { es: "Gasolina", en: "Gas", bes: "Transporte", ben: "Transport", icon: "car-outline", tint: "#8F5BE8", amount: 60, kind: "expense" },
+    { es: "Compras", en: "Shopping", bes: "Compras", ben: "Shopping", icon: "bag-handle-outline", tint: "#D95345", amount: 125, kind: "expense" },
+  ],
+  income: [
+    { es: "Salario", en: "Salary", bes: "Sueldo", ben: "Salary", icon: "briefcase-outline", tint: "#2FA47C", amount: 1200, kind: "income" },
+    { es: "Freelance", en: "Freelance", bes: "Trabajo", ben: "Work", icon: "laptop-outline", tint: "#29C4A9", amount: 350, kind: "income" },
+    { es: "Venta", en: "Sale", bes: "Ventas", ben: "Sales", icon: "pricetag-outline", tint: "#2FA47C", amount: 90, kind: "income" },
+    { es: "Reembolso", en: "Refund", bes: "Reembolso", ben: "Refund", icon: "return-down-back-outline", tint: "#4C83EA", amount: 45, kind: "income" },
+    { es: "Intereses", en: "Interest", bes: "Ahorro", ben: "Savings", icon: "trending-up-outline", tint: "#29C4A9", amount: 18, kind: "income" },
+    { es: "Bono", en: "Bonus", bes: "Sueldo", ben: "Salary", icon: "gift-outline", tint: "#2FA47C", amount: 200, kind: "income" },
+  ],
+  expense: [
+    { es: "Supermercado", en: "Groceries", bes: "Comida", ben: "Food", icon: "cart-outline", tint: "#F5B83B", amount: 85, kind: "expense" },
+    { es: "Restaurante", en: "Restaurant", bes: "Comida", ben: "Food", icon: "restaurant-outline", tint: "#FF8A3D", amount: 42, kind: "expense" },
+    { es: "Gasolina", en: "Gas", bes: "Transporte", ben: "Transport", icon: "car-outline", tint: "#8F5BE8", amount: 60, kind: "expense" },
+    { es: "Compras", en: "Shopping", bes: "Compras", ben: "Shopping", icon: "bag-handle-outline", tint: "#D95345", amount: 125, kind: "expense" },
+    { es: "Farmacia", en: "Pharmacy", bes: "Salud", ben: "Health", icon: "medkit-outline", tint: "#FF654A", amount: 28, kind: "expense" },
+    { es: "Internet", en: "Internet", bes: "Servicios", ben: "Utilities", icon: "wifi-outline", tint: "#4C83EA", amount: 35, kind: "expense" },
+  ],
+  transfer: [
+    { es: "Transferencia", en: "Transfer", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 250, kind: "transfer" },
+    { es: "A ahorros", en: "To savings", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 150, kind: "transfer" },
+    { es: "Entre cuentas", en: "Between accounts", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 80, kind: "transfer" },
+    { es: "A efectivo", en: "To cash", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 60, kind: "transfer" },
+    { es: "A tarjeta", en: "To card", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 300, kind: "transfer" },
+    { es: "Fondo viaje", en: "Travel fund", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 120, kind: "transfer" },
+  ],
+};
+function mrGhosts(filter: string, count: number, lang?: string): MRGhost[] {
+  if (count <= 0) return [];
+  const en = (lang || "es").startsWith("en");
+  const list = MR_GHOSTS[filter] || MR_GHOSTS.all;
+  // Use the LAST `count` examples so the visible set stays stable as real rows fill the top.
+  return list.slice(MR_SLOTS - count).map((g, i) => ({
+    name: en ? g.en : g.es,
+    badge: en ? g.ben : g.bes,
+    icon: g.icon,
+    tint: g.tint,
+    amount: g.amount,
+    kind: g.kind,
+    date: ghostDate(5 + (MR_SLOTS - count + i) * 7),
+  }));
+}
 
 // Compact circular progress indicator for the Deudas tiles. Uses react-native-svg
 // (already a dependency). No gradient / glow / heavy shadow — secondary info only.
@@ -493,7 +552,7 @@ export default function Home() {
         return ts >= dateRange.start && ts <= dateRange.end;
       });
     }
-    return items.slice(0, 10);
+    return items.slice(0, MR_SLOTS);
   }, [txQ.data, txFilter, dateRange]);
   const cats: any[] = catQ.data || [];
   const catById = Object.fromEntries(cats.map((c) => [c.id, c]));
@@ -558,7 +617,6 @@ export default function Home() {
   const distTotal = distAccounts.reduce((s: number, a: any) => s + (a?.current_balance || 0), 0);
 
   const TX_FILTERS = [
-    { id: "all", label: t("home.filterAll"), icon: "grid", color: colors.brandPrimary },
     { id: "income", label: t("home.filterIncome"), icon: "trending-up", color: colors.incomeGreen },
     { id: "expense", label: t("home.filterExpenses"), icon: "trending-down", color: colors.expenseRed },
     { id: "transfer", label: t("home.filterTransfers"), icon: "swap-horizontal", color: colors.accountsBlue },
@@ -967,42 +1025,36 @@ export default function Home() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.mrFilterRow}
         >
+          <MRIconPill
+            testID="mr-filter-month"
+            active={!!dateRange}
+            onPress={() => dateSheetRef.current?.open(dateRange)}
+            activeColor={colors.brandPrimary}
+            idleColor={colors.muted}
+            styles={styles}
+          />
           {TX_FILTERS.map((f) => {
             const active = txFilter === f.id;
             return (
-              <React.Fragment key={f.id}>
-                <MRPill
-                  testID={`mr-filter-${f.id}`}
-                  active={active}
-                  onPress={() => setTxFilter(f.id)}
-                  icon={f.icon}
-                  iconColor={f.color}
-                  label={f.label}
-                  gradient={scheme === "dark" ? [colors.brandPrimary, colors.brandSecondary] : ["#16694A", "#146448"]}
-                  styles={styles}
-                />
-                {f.id === "all" && (
-                  <MRIconPill
-                    testID="mr-filter-month"
-                    active={!!dateRange}
-                    onPress={() => dateSheetRef.current?.open(dateRange)}
-                    activeColor={colors.brandPrimary}
-                    idleColor={colors.muted}
-                    styles={styles}
-                  />
-                )}
-              </React.Fragment>
+              <MRPill
+                key={f.id}
+                testID={`mr-filter-${f.id}`}
+                active={active}
+                // No "Todas" pill: tapping the active filter again returns to all types.
+                onPress={() => setTxFilter(active ? "all" : f.id)}
+                icon={f.icon}
+                iconColor={f.color}
+                label={f.label}
+                gradient={scheme === "dark" ? [colors.brandPrimary, colors.brandSecondary] : ["#16694A", "#146448"]}
+                styles={styles}
+              />
             );
           })}
         </ScrollView>
 
-        {/* List card */}
-        <Animated.View style={styles.mrCard} layout={LinearTransition.duration(260)}>
-          {recent.length === 0 && (
-            <Text style={{ color: colors.muted, textAlign: "center", padding: us(spacing.lg) }}>
-              {t("home.noMovements")}
-            </Text>
-          )}
+        {/* List card — always 6 slots: real rows first, then blurred visual-only examples */}
+        <View style={styles.mrCard}>
+          <Animated.View key={`${txFilter}|${dateRange ? dateRange.start + "-" + dateRange.end : ""}`} entering={FadeIn.duration(200)}>
           {recent.map((item, idx) => {
             const cat = catById[item.category_id];
             const isIncome = item.type === "income" || item.type === "loan_received";
@@ -1015,7 +1067,7 @@ export default function Home() {
             const badgeLabel = cat?.name ? translateCategoryName(cat.name) : (isTransfer ? t("txType.transfer") : isIncome ? t("txType.income") : t("txType.expense"));
             const badgeColor = cat?.color || color;
             return (
-              <Animated.View key={item.id} layout={LinearTransition.duration(260)}>
+              <View key={item.id}>
                 {idx > 0 && <View style={styles.mrDivider} />}
                 <Pressable
                   testID={`mr-tx-${item.id}`}
@@ -1024,22 +1076,55 @@ export default function Home() {
                 >
                   <IconTile icon={iconName} tint={tint} size={us(36)} />
                   <View style={{ flex: 1, marginLeft: us(10) }}>
-                    <Text style={styles.mrName}>{item.name}</Text>
+                    <Text style={styles.mrName} numberOfLines={1}>{item.name}</Text>
                     <View style={styles.mrTimeRow}>
                       <Ionicons name="time-outline" size={us(12)} color={colors.muted} />
-                      <Text style={styles.mrTime}>{formatDateTime(item.date)}</Text>
+                      <Text style={styles.mrTime} numberOfLines={1}>{formatDateTime(item.date)}</Text>
                     </View>
                   </View>
                   <View style={[styles.mrBadge, { backgroundColor: badgeColor + "1A" }]}>
-                    <Text style={[styles.mrBadgeText, { color: badgeColor }]}>{badgeLabel}</Text>
+                    <Text style={[styles.mrBadgeText, { color: badgeColor }]} numberOfLines={1}>{badgeLabel}</Text>
                   </View>
                   <Text style={[styles.mrAmount, { color }]}>{sign}{formatCurrency(item.amount)}</Text>
                   <Ionicons name="chevron-forward" size={us(15)} color={colors.muted} style={{ marginLeft: us(4) }} />
                 </Pressable>
-              </Animated.View>
+              </View>
             );
           })}
-        </Animated.View>
+          {mrGhosts(txFilter, MR_SLOTS - recent.length, i18n.language).map((g, gi) => {
+            const color = g.kind === "transfer" ? colors.accountsBlue : g.kind === "income" ? colors.incomeGreen : colors.expenseRed;
+            const sign = g.kind === "transfer" ? "" : g.kind === "income" ? "+" : "-";
+            return (
+              // Visual-only placeholder: never stored, sent, pressable or counted anywhere.
+              <View
+                key={`ghost-${gi}`}
+                testID="mr-ghost"
+                pointerEvents="none"
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+                style={styles.mrGhost}
+              >
+                {(recent.length > 0 || gi > 0) && <View style={styles.mrDivider} />}
+                <View style={styles.mrRow}>
+                  <IconTile icon={g.icon} tint={g.tint} size={us(36)} />
+                  <View style={{ flex: 1, marginLeft: us(10) }}>
+                    <Text style={styles.mrName} numberOfLines={1}>{g.name}</Text>
+                    <View style={styles.mrTimeRow}>
+                      <Ionicons name="time-outline" size={us(12)} color={colors.muted} />
+                      <Text style={styles.mrTime} numberOfLines={1}>{formatDateTime(g.date)}</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.mrBadge, { backgroundColor: g.tint + "1A" }]}>
+                    <Text style={[styles.mrBadgeText, { color: g.tint }]} numberOfLines={1}>{g.badge}</Text>
+                  </View>
+                  <Text style={[styles.mrAmount, { color }]}>{sign}{formatCurrency(g.amount)}</Text>
+                  <Ionicons name="chevron-forward" size={us(15)} color={colors.muted} style={{ marginLeft: us(4) }} />
+                </View>
+              </View>
+            );
+          })}
+          </Animated.View>
+        </View>
       </View>
 
       {/* Section divider — before Deudas */}
@@ -1693,6 +1778,7 @@ const useStyles = makeStyles((colors, scheme) => {
   },
   mrRow: { flexDirection: "row", alignItems: "center", paddingVertical: 9, paddingHorizontal: 4 },
   mrDivider: { height: 1, backgroundColor: dividerSoft, marginLeft: 50, marginRight: 4 },
+  mrGhost: { opacity: 0.35 },
   mrName: { color: wallText, fontWeight: "800", fontSize: 13.5, letterSpacing: -0.2 },
   mrTimeRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   mrTime: { color: wallMuted, fontSize: 11 },

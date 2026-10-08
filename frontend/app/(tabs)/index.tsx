@@ -106,14 +106,15 @@ const DONUT_STROKE = us(DONUT_STROKE_BASE);
 // Compact circular progress indicator for the Deudas tiles. Uses react-native-svg
 // (already a dependency). No gradient / glow / heavy shadow — secondary info only.
 function DebtRing({ pct, color, track, display }: { pct: number; color: string; track: string; display?: string }) {
-  const size = us(42);
+  const size = us(38);
   const stroke = us(4.5);
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
   const p = Math.max(0, Math.min(100, pct));
   const offset = circ * (1 - p / 100);
   return (
-    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+    // Layout-only: fixed 1:1 box that never shrinks, with a uniform inset from the tile edges.
+    <View style={{ width: size, height: size, flexShrink: 0, marginVertical: us(2), marginLeft: us(2), marginRight: us(5), alignItems: "center", justifyContent: "center" }}>
       <Svg width={size} height={size}>
         <SvgCircle cx={size / 2} cy={size / 2} r={r} stroke={track} strokeWidth={stroke} fill="none" />
         <SvgCircle

@@ -617,6 +617,7 @@ export default function Home() {
   const distTotal = distAccounts.reduce((s: number, a: any) => s + (a?.current_balance || 0), 0);
 
   const TX_FILTERS = [
+    { id: "all", label: t("home.filterAll"), icon: "grid", color: colors.brandPrimary },
     { id: "income", label: t("home.filterIncome"), icon: "trending-up", color: colors.incomeGreen },
     { id: "expense", label: t("home.filterExpenses"), icon: "trending-down", color: colors.expenseRed },
     { id: "transfer", label: t("home.filterTransfers"), icon: "swap-horizontal", color: colors.accountsBlue },

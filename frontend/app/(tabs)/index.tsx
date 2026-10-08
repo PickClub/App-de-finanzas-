@@ -1013,7 +1013,7 @@ export default function Home() {
             </Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(8) }}>
-            <Pressable testID="see-all-tx" onPress={() => router.push("/(tabs)/transactions")} style={styles.seeAllBtn}>
+            <Pressable testID="see-all-tx" onPress={() => router.push("/transactions/all")} style={styles.seeAllBtn}>
               <Text style={styles.seeAllText}>{t("common.seeAll")}</Text>
               <Ionicons name="chevron-forward" size={us(14)} color={colors.brandPrimary} />
             </Pressable>

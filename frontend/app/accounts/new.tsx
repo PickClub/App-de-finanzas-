@@ -13,6 +13,7 @@ import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 
 import { us } from "@/src/ui-scale";
+import { COLOR_PALETTE } from "@/src/color-palette";
 
 // Local visual identity (same light-mode values used by Home / Nueva deuda:
 // sage background, warm-white cards, forest green, mint badges). Dark mode
@@ -50,7 +51,9 @@ const TYPE_IDS = [
   { id: "wallet", icon: "phone-portrait-outline" },
   { id: "other", icon: "ellipsis-horizontal-outline" },
 ];
-const COLORS = ["#4C83EA", "#2FA47C", "#FF654A", "#F5B83B", "#8F5BE8", "#29C4A9", "#D95345", "#FF8A3D"];
+// Shared 20-color palette; DEFAULT_COLOR keeps this screen's previous default.
+const COLORS = COLOR_PALETTE;
+const DEFAULT_COLOR = "#4C83EA";
 
 export default function AccountForm() {
   const { colors, scheme } = useTheme();
@@ -72,7 +75,7 @@ export default function AccountForm() {
   const [name, setName] = useState("");
   const [type, setType] = useState("cash");
   const [balance, setBalance] = useState("");
-  const [color, setColor] = useState(COLORS[0]);
+  const [color, setColor] = useState(DEFAULT_COLOR);
   const [icon, setIcon] = useState("wallet-outline");
 
   useEffect(() => {

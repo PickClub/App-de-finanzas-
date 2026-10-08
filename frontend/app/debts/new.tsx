@@ -13,6 +13,7 @@ import { IconTile } from "@/src/components/ui";
 import { AppSheet } from "@/src/components/sheets";
 
 import { us, ufs } from "@/src/ui-scale";
+import { COLOR_PALETTE } from "@/src/color-palette";
 
 // Same light-mode identity values used by Home (sage background, warm white
 // cards, forest green, mint badges). Local to this form; dark mode keeps the
@@ -85,7 +86,9 @@ function Collapsible({
     </View>
   );
 }
-const COLORS = ["#F5B83B", "#FF654A", "#D95345", "#4C83EA", "#8F5BE8", "#29C4A9", "#2FA47C"];
+// Shared 20-color palette; DEFAULT_COLOR keeps this screen's previous default.
+const COLORS = COLOR_PALETTE;
+const DEFAULT_COLOR = "#F5B83B";
 const ICONS = ["cash-outline", "card-outline", "car-outline", "home-outline", "person-outline", "briefcase-outline", "gift-outline"];
 const FREQ = [
   { id: "weekly", label: "Semanal" },
@@ -166,7 +169,7 @@ export default function NewDebt() {
   const [frequency, setFrequency] = useState("monthly");
   const [interest, setInterest] = useState("");
   const [notes] = useState("");
-  const [color, setColor] = useState(COLORS[0]);
+  const [color, setColor] = useState(DEFAULT_COLOR);
   const [icon, setIcon] = useState(ICONS[0]);
   // Optional category (existing Debt.category_id field). Notes are no longer
   // shown in this form; the value is still sent unchanged (empty for new debts).
@@ -394,7 +397,7 @@ export default function NewDebt() {
             ))}
           </ScrollView>
           <Text style={[styles.cardLabel, { marginTop: us(12) }]}>Color</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: us(10), paddingVertical: us(2) }}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(10), paddingVertical: us(2) }}>
             {COLORS.map((c) => (
               <Pressable
                 key={c}
@@ -405,7 +408,7 @@ export default function NewDebt() {
                 <View style={[styles.colorDot, { backgroundColor: c }]} />
               </Pressable>
             ))}
-          </ScrollView>
+          </View>
         </View>
       </ScrollView>
 

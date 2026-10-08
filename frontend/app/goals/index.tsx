@@ -13,7 +13,10 @@ import { ProgressRing } from "@/src/components/ProgressRing";
 import { IconTile } from "@/src/components/ui";
 
 import { us } from "@/src/ui-scale";
-const COLORS = ["#29C4A9", "#4C83EA", "#FF654A", "#F5B83B", "#8F5BE8", "#2FA47C"];
+import { COLOR_PALETTE } from "@/src/color-palette";
+// Shared 20-color palette; DEFAULT_COLOR keeps this screen's previous default.
+const COLORS = COLOR_PALETTE;
+const DEFAULT_COLOR = "#29C4A9";
 const ICONS = ["flag-outline", "desktop-outline", "airplane-outline", "shield-checkmark-outline", "car-outline", "home-outline", "gift-outline", "school-outline"];
 
 export default function Goals() {
@@ -29,7 +32,7 @@ export default function Goals() {
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [current, setCurrent] = useState("");
-  const [color, setColor] = useState(COLORS[0]);
+  const [color, setColor] = useState(DEFAULT_COLOR);
   const [icon, setIcon] = useState(ICONS[0]);
 
   const save = async () => {

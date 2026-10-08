@@ -12,6 +12,7 @@ import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
 
 import { us } from "@/src/ui-scale";
+import { COLOR_PALETTE } from "@/src/color-palette";
 const ICONS = [
   "restaurant-outline", "cart-outline", "pizza-outline", "car-outline",
   "flame-outline", "home-outline", "flash-outline", "call-outline",
@@ -19,7 +20,9 @@ const ICONS = [
   "briefcase-outline", "school-outline", "airplane-outline", "cash-outline",
   "star-outline", "gift-outline", "heart-outline", "paw-outline",
 ];
-const COLORS = ["#FF8A3D", "#F5B83B", "#FF654A", "#4C83EA", "#D95345", "#8F5BE8", "#29C4A9", "#2FA47C", "#27221F", "#8E8883"];
+// Shared 20-color palette; DEFAULT_COLOR keeps this screen's previous default.
+const COLORS = COLOR_PALETTE;
+const DEFAULT_COLOR = "#FF8A3D";
 
 export default function CategoryForm() {
   const { colors } = useTheme();
@@ -35,7 +38,7 @@ export default function CategoryForm() {
   const [name, setName] = useState("");
   const [type, setType] = useState<"expense" | "income">("expense");
   const [icon, setIcon] = useState(ICONS[0]);
-  const [color, setColor] = useState(COLORS[0]);
+  const [color, setColor] = useState(DEFAULT_COLOR);
 
   useEffect(() => {
     if (params.id) {

@@ -439,6 +439,8 @@ export default function Home() {
   const router = useRouter();
   const { guard } = useLock();
   const [hidden, setHidden] = useState(false);
+  // Debts 2x2 grid: bottom row adopts the measured top-row height (equal tiles).
+  const [debtTopRowH, setDebtTopRowH] = useState(0);
   const [txFilter, setTxFilter] = useState("all");
   const dateSheetRef = useRef<DateRangeSheetHandle>(null);
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
@@ -1066,8 +1068,8 @@ export default function Home() {
       {/* Debts card */}
       <View style={{ paddingHorizontal: us(spacing.lg) }}>
         <Pressable testID="debts-card" onPress={() => router.push("/debts")} style={styles.debtCard}>
-          <View style={styles.debtQuadRow}>
-            <View style={[styles.debtQuadTile, styles.debtTileNeutral]}>
+          <View style={styles.debtQuadRow} onLayout={(e) => setDebtTopRowH(e.nativeEvent.layout.height)}>
+            <View style={[styles.debtQuadTile, styles.debtOweTint]}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: us(5) }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.expenseRed + "14" }]}>
                   <Ionicons name="arrow-up" size={us(15)} color={colors.expenseRed} />
@@ -1087,7 +1089,7 @@ export default function Home() {
                 <DebtRing pct={hidden ? 0 : debtShare(summary?.debts?.i_owe || 0)} color={colors.expenseRed} track={ringTrack} display={hidden ? "••" : undefined} />
               </View>
             </View>
-            <View style={[styles.debtQuadTile, styles.debtTileNeutral]}>
+            <View style={[styles.debtQuadTile, styles.debtOwedTint]}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: us(5) }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.incomeGreen + "14" }]}>
                   <Ionicons name="arrow-down" size={us(15)} color={colors.incomeGreen} />
@@ -1108,8 +1110,8 @@ export default function Home() {
               </View>
             </View>
           </View>
-          <View style={styles.debtQuadRow}>
-            <View style={[styles.debtQuadTile, styles.debtTileNeutral]}>
+          <View style={[styles.debtQuadRow, debtTopRowH > 0 && { minHeight: debtTopRowH }]}>
+            <View style={[styles.debtQuadTile, styles.debtPaidTint]}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: us(5) }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.statsPurple + "14" }]}>
                   <Ionicons name="card" size={us(15)} color={colors.statsPurple} />
@@ -1129,7 +1131,7 @@ export default function Home() {
                 <DebtRing pct={monthProgress} color={colors.statsPurple} track={ringTrack} />
               </View>
             </View>
-            <View style={[styles.debtQuadTile, styles.debtTileNeutral]}>
+            <View style={[styles.debtQuadTile, styles.debtNextTint]}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: us(5) }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.brandSecondary + "14" }]}>
                   <Ionicons name="calendar-outline" size={us(15)} color={colors.brandSecondary} />
@@ -1596,10 +1598,10 @@ const useStyles = makeStyles((colors, scheme) => {
     borderWidth: 0.5, borderColor: isDark ? colors.border : "rgba(39,71,56,0.035)",
     overflow: "hidden",
   },
-  debtOweTint: { backgroundColor: isDark ? colors.expenseRed + "0B" : "#FCF5F3" },
-  debtOwedTint: { backgroundColor: isDark ? colors.incomeGreen + "0B" : "#F2F8F4" },
-  debtPaidTint: { backgroundColor: isDark ? colors.statsPurple + "0B" : "#F6F3FC" },
-  debtNextTint: { backgroundColor: isDark ? colors.brandSecondary + "0B" : "#FCF6EE" },
+  debtOweTint: { backgroundColor: isDark ? colors.expenseRed + "1A" : "#FCE8E6" },
+  debtOwedTint: { backgroundColor: isDark ? colors.incomeGreen + "1A" : "#E5F3EC" },
+  debtPaidTint: { backgroundColor: isDark ? colors.statsPurple + "1A" : "#F1E9FA" },
+  debtNextTint: { backgroundColor: isDark ? colors.brandSecondary + "1A" : "#FFF0E2" },
   // Neutral Home material (same light/cream surface as the rest of Home).
   debtTileNeutral: { backgroundColor: cardSurface },
   debtBodyRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },

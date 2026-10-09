@@ -164,18 +164,21 @@ function mrGhosts(filter: string, count: number, lang?: string): MRGhost[] {
 
 // Compact circular progress indicator for the Deudas tiles. Uses react-native-svg
 // (already a dependency). No gradient / glow / heavy shadow — secondary info only.
-function DebtRing({ pct, color, track, display }: { pct: number; color: string; track: string; display?: string }) {
+// The % label is centered with an absolutely-filled flex box (robust centering)
+// and auto-fits the inner diameter so 0% / 29% / 100% never overflow the ring.
+function DebtRing({ pct, color, display }: { pct: number; color: string; track?: string; display?: string }) {
   const size = us(38);
   const stroke = us(4.5);
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
   const p = Math.max(0, Math.min(100, pct));
   const offset = circ * (1 - p / 100);
+  const softTrack = color + "26"; // pastel soft version of the ring's own color
   return (
     // Layout-only: fixed 1:1 box that never shrinks, with a uniform inset from the tile edges.
-    <View style={{ width: size, height: size, flexShrink: 0, marginVertical: us(2), marginLeft: us(2), marginRight: us(5), alignItems: "center", justifyContent: "center" }}>
+    <View style={{ width: size, height: size, flexShrink: 0, marginVertical: us(2), marginLeft: us(2), marginRight: us(5) }}>
       <Svg width={size} height={size}>
-        <SvgCircle cx={size / 2} cy={size / 2} r={r} stroke={track} strokeWidth={stroke} fill="none" />
+        <SvgCircle cx={size / 2} cy={size / 2} r={r} stroke={softTrack} strokeWidth={stroke} fill="none" />
         <SvgCircle
           cx={size / 2}
           cy={size / 2}
@@ -189,9 +192,40 @@ function DebtRing({ pct, color, track, display }: { pct: number; color: string; 
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </Svg>
-      <Text style={{ position: "absolute", fontSize: ufs(10.5), fontWeight: "800", color }}>
-        {display !== undefined ? display : `${Math.round(p)}%`}
-      </Text>
+      <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" }}>
+        {(() => {
+          const label = display !== undefined ? display : `${Math.round(p)}%`;
+          const fs = label.length >= 4 ? ufs(8.5) : ufs(10.5);
+          return (
+            <Text numberOfLines={1} adjustsFontSizeToFit style={{ textAlign: "center", fontSize: fs, fontWeight: "800", color }}>
+              {label}
+            </Text>
+          );
+        })()}
+      </View>
+    </View>
+  );
+}
+
+// Soft organic wave decoration anchored to the bottom of each Deudas tile.
+// SVG-only (react-native-svg), two gently offset bands at 10% / 6% opacity using
+// a soft shade of the tile color. Not animated; sits behind the content and never
+// intercepts touches. Width is measured so the wave spans the full tile.
+function DebtWave({ color }: { color: string }) {
+  const [w, setW] = useState(0);
+  const h = us(20);
+  return (
+    <View
+      pointerEvents="none"
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
+      style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: h, overflow: "hidden" }}
+    >
+      {w > 0 && (
+        <Svg width={w} height={h} viewBox="0 0 100 20" preserveAspectRatio="none">
+          <SvgPath d="M0,11 C18,4 32,17 50,10 C70,2 86,16 100,9 L100,20 L0,20 Z" fill={color} fillOpacity={0.1} />
+          <SvgPath d="M0,15 C22,9 38,20 58,13 C78,7 92,18 100,13 L100,20 L0,20 Z" fill={color} fillOpacity={0.06} />
+        </Svg>
+      )}
     </View>
   );
 }
@@ -1162,6 +1196,7 @@ export default function Home() {
         <Pressable testID="debts-card" onPress={() => router.push("/debts")} style={styles.debtCard}>
           <View style={styles.debtQuadRow} onLayout={(e) => setDebtTopRowH(e.nativeEvent.layout.height)}>
             <View style={[styles.debtQuadTile, styles.debtOweTint]}>
+              <DebtWave color={colors.expenseRed} />
               <View style={{ flexDirection: "row", alignItems: "center", gap: us(5) }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.expenseRed + "14" }]}>
                   <Ionicons name="arrow-up" size={us(15)} color={colors.expenseRed} />
@@ -1182,6 +1217,7 @@ export default function Home() {
               </View>
             </View>
             <View style={[styles.debtQuadTile, styles.debtOwedTint]}>
+              <DebtWave color={colors.incomeGreen} />
               <View style={{ flexDirection: "row", alignItems: "center", gap: us(5) }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.incomeGreen + "14" }]}>
                   <Ionicons name="arrow-down" size={us(15)} color={colors.incomeGreen} />
@@ -1204,6 +1240,7 @@ export default function Home() {
           </View>
           <View style={[styles.debtQuadRow, debtTopRowH > 0 && { minHeight: debtTopRowH }]}>
             <View style={[styles.debtQuadTile, styles.debtPaidTint]}>
+              <DebtWave color={colors.statsPurple} />
               <View style={{ flexDirection: "row", alignItems: "center", gap: us(5) }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.statsPurple + "14" }]}>
                   <Ionicons name="card" size={us(15)} color={colors.statsPurple} />
@@ -1224,6 +1261,7 @@ export default function Home() {
               </View>
             </View>
             <View style={[styles.debtQuadTile, styles.debtNextTint]}>
+              <DebtWave color={colors.brandSecondary} />
               <View style={{ flexDirection: "row", alignItems: "center", gap: us(5) }}>
                 <View style={[styles.debtQuadIcon, { backgroundColor: colors.brandSecondary + "14" }]}>
                   <Ionicons name="calendar-outline" size={us(15)} color={colors.brandSecondary} />
@@ -1233,22 +1271,26 @@ export default function Home() {
                   <Ionicons name="chevron-forward" size={us(11)} color={colors.muted} />
                 </View>
               </View>
-              <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.debtDecorCalendar}>
-                <Ionicons name="calendar-outline" size={us(66)} color={colors.brandSecondary} />
+              <View style={styles.debtBodyRow}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  {summary?.debts?.next_payment ? (
+                    <>
+                      <Text style={styles.debtQuadDate} numberOfLines={1} adjustsFontSizeToFit>
+                        {formatDateLong(summary.debts.next_payment.date)}
+                      </Text>
+                      <Text style={[styles.debtQuadValue, { color: colors.brandSecondary }]} numberOfLines={1} adjustsFontSizeToFit>
+                        {debtMoney(summary.debts.next_payment.amount)}
+                      </Text>
+                      <Text style={styles.debtQuadFoot}>{t("home.keepPaymentsUpToDate")}</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.debtQuadFoot}>{t("home.noUpcomingPayments")}</Text>
+                  )}
+                </View>
+                <View style={{ width: us(38), height: us(38), borderRadius: us(19), flexShrink: 0, marginVertical: us(2), marginLeft: us(2), marginRight: us(5), alignItems: "center", justifyContent: "center", backgroundColor: colors.brandSecondary + "1F" }}>
+                  <Ionicons name="calendar-outline" size={us(18)} color={colors.brandSecondary} />
+                </View>
               </View>
-              {summary?.debts?.next_payment ? (
-                <>
-                  <Text style={styles.debtQuadDate} numberOfLines={1} adjustsFontSizeToFit>
-                    {formatDateLong(summary.debts.next_payment.date)}
-                  </Text>
-                  <Text style={[styles.debtQuadValue, { color: colors.brandSecondary }]} numberOfLines={1} adjustsFontSizeToFit>
-                    {debtMoney(summary.debts.next_payment.amount)}
-                  </Text>
-                  <Text style={styles.debtQuadFoot}>{t("home.keepPaymentsUpToDate")}</Text>
-                </>
-              ) : (
-                <Text style={styles.debtQuadFoot}>{t("home.noUpcomingPayments")}</Text>
-              )}
             </View>
           </View>
         </Pressable>
@@ -1687,13 +1729,13 @@ const useStyles = makeStyles((colors, scheme) => {
   debtQuadRow: { flexDirection: "row", gap: 8 },
   debtQuadTile: {
     flex: 1, minWidth: 0, padding: 7, borderRadius: 20,
-    borderWidth: 0.5, borderColor: isDark ? colors.border : "rgba(39,71,56,0.035)",
+    borderWidth: 1, borderColor: isDark ? colors.border : "rgba(39,71,56,0.035)",
     overflow: "hidden",
   },
-  debtOweTint: { backgroundColor: isDark ? colors.expenseRed + "1A" : "#FCE8E6" },
-  debtOwedTint: { backgroundColor: isDark ? colors.incomeGreen + "1A" : "#E5F3EC" },
-  debtPaidTint: { backgroundColor: isDark ? colors.statsPurple + "1A" : "#F1E9FA" },
-  debtNextTint: { backgroundColor: isDark ? colors.brandSecondary + "1A" : "#FFF0E2" },
+  debtOweTint: { backgroundColor: isDark ? colors.expenseRed + "1A" : "#FCE8E6", borderColor: colors.expenseRed + "3D" },
+  debtOwedTint: { backgroundColor: isDark ? colors.incomeGreen + "1A" : "#E5F3EC", borderColor: colors.incomeGreen + "3D" },
+  debtPaidTint: { backgroundColor: isDark ? colors.statsPurple + "1A" : "#F1E9FA", borderColor: colors.statsPurple + "3D" },
+  debtNextTint: { backgroundColor: isDark ? colors.brandSecondary + "1A" : "#FFF0E2", borderColor: colors.brandSecondary + "3D" },
   // Neutral Home material (same light/cream surface as the rest of Home).
   debtTileNeutral: { backgroundColor: cardSurface },
   debtBodyRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },

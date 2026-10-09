@@ -28,8 +28,13 @@ function chunk3<T>(arr: T[]): T[][] {
 const EXPAND_MS = 280;
 
 export default function Categories() {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const styles = useStyles();
+  // Reuse Home's EXACT identity values (app/(tabs)/index.tsx):
+  //   page background sage #E8EFE7 (light) / colors.surface (dark)
+  //   forest-green accent #126046 (light) / colors.brandPrimary (dark)
+  const accentGreen = scheme === "dark" ? colors.brandPrimary : "#126046";
+  const pageBg = scheme === "dark" ? colors.surface : "#E8EFE7";
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const qc = useQueryClient();
@@ -83,7 +88,7 @@ export default function Categories() {
         entering={FadeIn.duration(220)}
         exiting={FadeOut.duration(150)}
         layout={LinearTransition.duration(EXPAND_MS)}
-        style={[styles.panel, { borderColor: group.color + "66" }]}
+        style={styles.panel}
       >
         <Pressable onPress={() => toggle(group.id)} style={styles.panelHeader}>
           <IconTile icon={group.icon} tint={group.color} size={us(34)} />
@@ -91,7 +96,7 @@ export default function Categories() {
             <Text style={styles.panelTitle} numberOfLines={1}>{catLabel(group.name, i18n.language)}</Text>
             <Text style={styles.panelCount}>{subLabel(kids.length)}</Text>
           </View>
-          <Ionicons name="chevron-up" size={us(20)} color={group.color} />
+          <Ionicons name="chevron-up" size={us(20)} color={accentGreen} />
         </Pressable>
         <View style={styles.panelDivider} />
         {rows.map((row, ri) => (
@@ -117,8 +122,8 @@ export default function Categories() {
           onPress={guard(() => router.push(`/categories/new?parent=${group.id}&type=${group.type}`))}
           style={styles.addSub}
         >
-          <Ionicons name="add" size={us(16)} color={group.color} />
-          <Text style={[styles.addSubText, { color: group.color }]}>{l10n("Añadir subcategoría", "Add subcategory")}</Text>
+          <Ionicons name="add" size={us(16)} color={accentGreen} />
+          <Text style={[styles.addSubText, { color: accentGreen }]}>{l10n("Añadir subcategoría", "Add subcategory")}</Text>
         </Pressable>
       </Animated.View>
     );
@@ -148,7 +153,7 @@ export default function Categories() {
                       key={g.id}
                       testID={`cat-group-${g.id}`}
                       onPress={() => toggle(g.id)}
-                      style={[styles.gridItem, active && { borderColor: g.color, backgroundColor: g.color + "12" }]}
+                      style={styles.gridItem}
                     >
                       <IconTile icon={g.icon} tint={g.color} size={us(48)} />
                       <Text style={styles.name} numberOfLines={1}>{catLabel(g.name, i18n.language)}</Text>
@@ -156,7 +161,7 @@ export default function Categories() {
                       <Ionicons
                         name={active ? "chevron-up" : "chevron-down"}
                         size={us(13)}
-                        color={active ? g.color : colors.muted}
+                        color={active ? accentGreen : colors.muted}
                         style={styles.chev}
                       />
                     </Pressable>
@@ -176,7 +181,7 @@ export default function Categories() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.surface }}
+      style={{ flex: 1, backgroundColor: pageBg }}
       contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: us(10), marginBottom: us(spacing.lg) }}>
@@ -185,7 +190,7 @@ export default function Categories() {
         </Pressable>
         <Text style={styles.title}>{l10n("Categorías", "Categories")}</Text>
         <LockToggle testID="lock-cats" compact />
-        <Pressable testID="add-category" onPress={() => router.push("/categories/new")} style={[styles.backBtn, { backgroundColor: colors.brandPrimary }]}>
+        <Pressable testID="add-category" onPress={() => router.push("/categories/new")} style={[styles.backBtn, { backgroundColor: accentGreen, borderColor: accentGreen }]}>
           <Ionicons name="add" size={us(22)} color="#fff" />
         </Pressable>
       </View>
@@ -211,6 +216,7 @@ const useStyles = makeStyles((colors, scheme) => {
   const wallSub = isDark ? colors.muted : "#8B958F";
   const lineSoft = isDark ? colors.border : "rgba(39,71,56,0.10)";
   const dividerSoft = isDark ? colors.divider : "#E4E7E2";
+  const accentGreen = isDark ? colors.brandPrimary : "#126046";
   // Soft diffuse shadows copied from Home (wallet cards + Movimientos card).
   const cardShadow = { shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 };
   const panelShadow = { shadowColor: "#274738", shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 };
@@ -229,7 +235,7 @@ const useStyles = makeStyles((colors, scheme) => {
   subCount: { color: wallSub, fontWeight: "600", fontSize: 10, marginTop: 3, textAlign: "center" },
   chev: { position: "absolute", top: 8, right: 8 },
   // Expanded panel (soft tinted border of the category color, warm card surface).
-  panel: { backgroundColor: cardSurface, borderRadius: radius.cardLg, borderWidth: 1, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 6, marginBottom: 12, ...panelShadow },
+  panel: { backgroundColor: cardSurface, borderRadius: radius.cardLg, borderWidth: 1, borderColor: lineSoft, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 6, marginBottom: 12, ...panelShadow },
   panelHeader: { flexDirection: "row", alignItems: "center" },
   panelTitle: { color: wallText, fontWeight: "800", fontSize: 15 },
   panelCount: { color: wallSub, fontWeight: "600", fontSize: 11, marginTop: 2 },
@@ -240,6 +246,6 @@ const useStyles = makeStyles((colors, scheme) => {
   addSub: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 8, marginBottom: 4 },
   addSubText: { fontWeight: "800", fontSize: 12.5 },
   restoreBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 8, paddingVertical: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: lineSoft, backgroundColor: cardSurface },
-  restoreText: { color: colors.brandPrimary, fontWeight: "800", fontSize: 14 },
+  restoreText: { color: accentGreen, fontWeight: "800", fontSize: 14 },
   };
 });

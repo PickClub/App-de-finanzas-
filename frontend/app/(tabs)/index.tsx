@@ -1109,7 +1109,12 @@ export default function Home() {
                 <View style={styles.mrRow}>
                   <IconTile icon={g.icon} tint={g.tint} size={us(36)} />
                   <View style={{ flex: 1, marginLeft: us(10) }}>
-                    <Text style={styles.mrName} numberOfLines={1}>{g.name}</Text>
+                    <View style={styles.mrNameRow}>
+                      <Text style={[styles.mrName, styles.mrNameShrink]} numberOfLines={1}>{g.name}</Text>
+                      <View style={styles.exampleTag}>
+                        <Text style={styles.exampleTagText} numberOfLines={1}>{t("home.exampleTag")}</Text>
+                      </View>
+                    </View>
                     <View style={styles.mrTimeRow}>
                       <Ionicons name="time-outline" size={us(12)} color={colors.muted} />
                       <Text style={styles.mrTime} numberOfLines={1}>{formatDateTime(g.date)}</Text>
@@ -1781,6 +1786,17 @@ const useStyles = makeStyles((colors, scheme) => {
   mrDivider: { height: 1, backgroundColor: dividerSoft, marginLeft: 50, marginRight: 4 },
   mrGhost: { opacity: 0.35 },
   mrName: { color: wallText, fontWeight: "800", fontSize: 13.5, letterSpacing: -0.2 },
+  mrNameRow: { flexDirection: "row", alignItems: "center" },
+  mrNameShrink: { flexShrink: 1 },
+  exampleTag: {
+    marginLeft: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    backgroundColor: wallMuted + "22",
+    flexShrink: 0,
+  },
+  exampleTagText: { fontSize: 10, fontWeight: "400", color: wallMuted, letterSpacing: -0.1 },
   mrTimeRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   mrTime: { color: wallMuted, fontSize: 11 },
   mrBadge: {

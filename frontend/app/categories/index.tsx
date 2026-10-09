@@ -202,31 +202,44 @@ export default function Categories() {
   );
 }
 
-const useStyles = makeStyles((colors) => ({
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
+const useStyles = makeStyles((colors, scheme) => {
+  // Reuse Home's exact card language so Categories feels native to the app.
+  const isDark = scheme === "dark";
+  const cardSurface = isDark ? colors.surfaceSecondary : "#FCFCF8";
+  const wallText = isDark ? colors.onSurface : "#15251E";
+  const wallMuted = isDark ? colors.muted : "#68746D";
+  const wallSub = isDark ? colors.muted : "#8B958F";
+  const lineSoft = isDark ? colors.border : "rgba(39,71,56,0.10)";
+  const dividerSoft = isDark ? colors.divider : "#E4E7E2";
+  // Soft diffuse shadows copied from Home (wallet cards + Movimientos card).
+  const cardShadow = { shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 };
+  const panelShadow = { shadowColor: "#274738", shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 };
+  return {
+  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: cardSurface, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: lineSoft },
   title: { flex: 1, fontSize: 22, fontWeight: "800", color: colors.onSurface },
   sectionHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
   dot: { width: 9, height: 9, borderRadius: 5 },
   section: { flex: 1, fontSize: 15, fontWeight: "800", color: colors.onSurface },
-  count: { fontSize: 12, fontWeight: "700", color: colors.muted },
+  count: { fontSize: 12, fontWeight: "700", color: wallMuted },
   // Main group grid (explicit rows of 3 so expansion never leaves gaps).
   gridRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
   cellSpacer: { width: "31%" },
-  gridItem: { width: "31%", backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, paddingTop: 14, paddingBottom: 12, paddingHorizontal: 8, alignItems: "center", borderWidth: 1, borderColor: colors.border },
-  name: { color: colors.onSurface, fontWeight: "700", fontSize: 12, marginTop: 8, textAlign: "center" },
-  subCount: { color: colors.muted, fontWeight: "600", fontSize: 10, marginTop: 3, textAlign: "center" },
+  gridItem: { width: "31%", backgroundColor: cardSurface, borderRadius: radius.md, paddingTop: 14, paddingBottom: 12, paddingHorizontal: 8, alignItems: "center", borderWidth: 1, borderColor: lineSoft, ...cardShadow },
+  name: { color: wallText, fontWeight: "700", fontSize: 12, marginTop: 8, textAlign: "center" },
+  subCount: { color: wallSub, fontWeight: "600", fontSize: 10, marginTop: 3, textAlign: "center" },
   chev: { position: "absolute", top: 8, right: 8 },
-  // Expanded panel (soft tinted border, cream surface).
-  panel: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 6, marginBottom: 12 },
+  // Expanded panel (soft tinted border of the category color, warm card surface).
+  panel: { backgroundColor: cardSurface, borderRadius: radius.cardLg, borderWidth: 1, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 6, marginBottom: 12, ...panelShadow },
   panelHeader: { flexDirection: "row", alignItems: "center" },
-  panelTitle: { color: colors.onSurface, fontWeight: "800", fontSize: 15 },
-  panelCount: { color: colors.muted, fontWeight: "600", fontSize: 11, marginTop: 2 },
-  panelDivider: { height: 1, backgroundColor: colors.border, marginTop: 12, marginBottom: 12 },
+  panelTitle: { color: wallText, fontWeight: "800", fontSize: 15 },
+  panelCount: { color: wallSub, fontWeight: "600", fontSize: 11, marginTop: 2 },
+  panelDivider: { height: 1, backgroundColor: dividerSoft, marginTop: 12, marginBottom: 12 },
   subRow: { flexDirection: "row", justifyContent: "space-between" },
-  subItem: { width: "31%", backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 6, alignItems: "center", borderWidth: 1, borderColor: colors.border, marginBottom: 10 },
-  subName: { color: colors.onSurface, fontWeight: "700", fontSize: 11, marginTop: 6, textAlign: "center" },
+  subItem: { width: "31%", backgroundColor: cardSurface, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 6, alignItems: "center", borderWidth: 1, borderColor: lineSoft, marginBottom: 10 },
+  subName: { color: wallText, fontWeight: "700", fontSize: 11, marginTop: 6, textAlign: "center" },
   addSub: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 8, marginBottom: 4 },
   addSubText: { fontWeight: "800", fontSize: 12.5 },
-  restoreBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 8, paddingVertical: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSecondary },
+  restoreBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 8, paddingVertical: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: lineSoft, backgroundColor: cardSurface },
   restoreText: { color: colors.brandPrimary, fontWeight: "800", fontSize: 14 },
-}));
+  };
+});

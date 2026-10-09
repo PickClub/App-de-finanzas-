@@ -111,7 +111,7 @@ export default function Budgets() {
             <TextInput value={limit} onChangeText={setLimit} placeholder="0.00" placeholderTextColor={colors.muted} keyboardType="decimal-pad" style={styles.input} />
             <Text style={styles.label}>Categoría</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: us(10) }}>
-              {cats.filter((c: any) => c.type === "expense").map((c: any) => (
+              {cats.filter((c: any) => c.type === "expense" && !c.is_group).map((c: any) => (
                 <Pressable key={c.id} onPress={() => setCategoryId(c.id)} style={[styles.catChip, categoryId === c.id && { borderColor: c.color, borderWidth: 2 }]}>
                   <IconTile icon={c.icon} tint={c.color} size={us(32)} />
                   <Text style={{ fontSize: ufs(11), color: colors.onSurface, fontWeight: "600", marginTop: us(4) }}>{c.name}</Text>

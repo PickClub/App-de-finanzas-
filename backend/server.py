@@ -71,6 +71,10 @@ class Category(BaseModel):
     type: Literal["income", "expense"] = "expense"
     icon: str = "pricetag-outline"
     color: str = "#FF8A3D"
+    # Hierarchy (additive, backward compatible). is_group=True marks a main
+    # category (accordion header); parent_id links a subcategory to its group.
+    parent_id: Optional[str] = None
+    is_group: bool = False
 
 
 class CategoryCreate(BaseModel):
@@ -78,6 +82,8 @@ class CategoryCreate(BaseModel):
     type: str = "expense"
     icon: str = "pricetag-outline"
     color: str = "#FF8A3D"
+    parent_id: Optional[str] = None
+    is_group: bool = False
 
 
 class Transaction(BaseModel):
@@ -488,7 +494,9 @@ async def create_category(data: CategoryCreate):
 
 @api.put("/categories/{cid}")
 async def update_category(cid: str, data: CategoryCreate):
-    await db.categories.update_one({"id": cid}, {"$set": data.model_dump()})
+    # exclude_unset keeps hierarchy fields (parent_id/is_group) intact when a
+    # client sends only {name,type,icon,color}; never wipes existing links.
+    await db.categories.update_one({"id": cid}, {"$set": data.model_dump(exclude_unset=True)})
     return await db.categories.find_one({"id": cid}, PROJ)
 
 
@@ -550,28 +558,87 @@ DEFAULT_INCOME_CATEGORIES = [
     ("Other Income", "ellipsis-horizontal-outline", "#9AA0A6"),
 ]
 
+# New leaf subcategories introduced by the grouped layout (empty by design;
+# existing transactions are NEVER moved into them). (name, type, icon, color)
+NEW_SUBCATEGORIES = [
+    ("Electronics", "expense", "hardware-chip-outline", "#5C7CFA"),
+    ("Home", "expense", "bed-outline", "#C08457"),
+    ("Beauty", "expense", "rose-outline", "#EC5F94"),
+]
+
+# Main category groups (accordion headers). English canonical names are stored;
+# the client localises labels. Each tuple: (name, icon, color, [child names]).
+# Child names reference EXISTING leaf categories by their stored English name.
+EXPENSE_GROUPS = [
+    ("Food & Dining", "fast-food-outline", "#FF7A59", ["Food", "Groceries", "Restaurants"]),
+    ("Home & Housing", "home-outline", "#7C6CF0", ["Housing", "Rent", "Utilities"]),
+    ("Transport & Auto", "bus-outline", "#4C9AFF", ["Transportation", "Fuel", "Car"]),
+    ("Shopping & Goods", "bag-handle-outline", "#FF8ACC", ["Shopping", "Clothing", "Electronics", "Home", "Gifts", "Beauty"]),
+    ("Health & Wellness", "medkit-outline", "#FF6B6B", ["Health", "Pharmacy", "Personal Care", "Fitness"]),
+    ("Entertainment & Leisure", "film-outline", "#9B6BFA", ["Entertainment", "Subscriptions", "Travel"]),
+    ("Finance", "wallet-outline", "#51B7B0", ["Taxes", "Loans", "Credit Cards", "Insurance"]),
+    ("Other & Misc", "ellipsis-horizontal-outline", "#9AA0A6", ["Pets", "Family", "Education", "Technology", "Other"]),
+]
+INCOME_GROUPS = [
+    ("Work", "briefcase-outline", "#2FB67C", ["Salary", "Freelance", "Business", "Tips"]),
+    ("Investing", "trending-up-outline", "#7C6CF0", ["Investments", "Interest"]),
+    ("Selling", "pricetags-outline", "#FF9F43", ["Sales"]),
+    ("Other Earnings", "ellipsis-horizontal-outline", "#9AA0A6", ["Refunds", "Gifts", "Other Income"]),
+]
+
 
 @api.post("/categories/init-defaults")
 async def init_default_categories():
-    """Idempotently ensure the default Expense/Income category catalog exists.
-    Only inserts categories missing by (name, type). Never deletes and never
-    touches transactions, accounts, balances or any calculations."""
+    """Idempotently ensure the default catalog AND the grouped hierarchy exist.
+    Only inserts what is missing (matched by name+type). Never deletes, renames
+    or duplicates; never moves existing transactions; never touches balances.
+    Safe to run multiple times (used by 'Restaurar predeterminadas')."""
     await ensure_user()
-    existing = await db.categories.find({"user_id": DEFAULT_USER_ID}, PROJ).to_list(1000)
-    have = {(c.get("name"), c.get("type")) for c in existing}
+
+    async def ensure_leaf(name, typ, icon, color):
+        existing = await db.categories.find_one({"user_id": DEFAULT_USER_ID, "name": name, "type": typ}, PROJ)
+        if existing:
+            return existing, 0
+        c = Category(user_id=DEFAULT_USER_ID, name=name, type=typ, icon=icon, color=color).model_dump()
+        await db.categories.insert_one(c)
+        return {k: v for k, v in c.items() if k != "_id"}, 1
+
     created = 0
+    # 1) default leaf catalog
     for name, icon, color in DEFAULT_EXPENSE_CATEGORIES:
-        if (name, "expense") not in have:
-            c = Category(user_id=DEFAULT_USER_ID, name=name, type="expense", icon=icon, color=color).model_dump()
-            await db.categories.insert_one(c)
-            created += 1
+        _, n = await ensure_leaf(name, "expense", icon, color)
+        created += n
     for name, icon, color in DEFAULT_INCOME_CATEGORIES:
-        if (name, "income") not in have:
-            c = Category(user_id=DEFAULT_USER_ID, name=name, type="income", icon=icon, color=color).model_dump()
-            await db.categories.insert_one(c)
-            created += 1
+        _, n = await ensure_leaf(name, "income", icon, color)
+        created += n
+    # 2) new (empty) subcategories
+    for name, typ, icon, color in NEW_SUBCATEGORIES:
+        _, n = await ensure_leaf(name, typ, icon, color)
+        created += n
+
+    groups_created = 0
+    links = 0
+    # 3) groups + 4) parent links (idempotent)
+    for groups, typ in ((EXPENSE_GROUPS, "expense"), (INCOME_GROUPS, "income")):
+        for gname, gicon, gcolor, children in groups:
+            g = await db.categories.find_one(
+                {"user_id": DEFAULT_USER_ID, "name": gname, "type": typ, "is_group": True}, PROJ)
+            if not g:
+                g = Category(user_id=DEFAULT_USER_ID, name=gname, type=typ, icon=gicon,
+                             color=gcolor, is_group=True).model_dump()
+                await db.categories.insert_one(g)
+                g = {k: v for k, v in g.items() if k != "_id"}
+                groups_created += 1
+            gid = g["id"]
+            for child_name in children:
+                child = await db.categories.find_one(
+                    {"user_id": DEFAULT_USER_ID, "name": child_name, "type": typ, "is_group": {"$ne": True}}, PROJ)
+                if child and child.get("parent_id") != gid:
+                    await db.categories.update_one({"id": child["id"]}, {"$set": {"parent_id": gid}})
+                    links += 1
+
     total = await db.categories.count_documents({"user_id": DEFAULT_USER_ID})
-    return {"ok": True, "created": created, "total": total}
+    return {"ok": True, "created": created, "groups_created": groups_created, "links": links, "total": total}
 
 
 # Transactions

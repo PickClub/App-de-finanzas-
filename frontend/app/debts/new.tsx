@@ -179,7 +179,7 @@ export default function NewDebt() {
   const savingRef = useRef(false);
   const pal = useMemo(() => formPalette(colors, scheme), [colors, scheme]);
   const catQ = useQuery({ queryKey: ["categories"], queryFn: api.listCategories });
-  const cats = (catQ.data || []).filter((c: any) => c.type === "expense");
+  const cats = (catQ.data || []).filter((c: any) => c.type === "expense" && !c.is_group);
   const selCat = cats.find((c: any) => c.id === categoryId);
 
   const save = async () => {

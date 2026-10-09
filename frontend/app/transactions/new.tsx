@@ -113,7 +113,7 @@ export default function NewTransaction() {
 
   const catQ = useQuery({ queryKey: ["categories"], queryFn: api.listCategories });
   const accQ = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
-  const cats = (catQ.data || []).filter((c: any) => (type === "income" ? c.type === "income" : c.type === "expense"));
+  const cats = (catQ.data || []).filter((c: any) => (type === "income" ? c.type === "income" : c.type === "expense") && !c.is_group);
 
   // Ensure the default category catalog exists so selection always has options.
   const ensuredRef = React.useRef(false);

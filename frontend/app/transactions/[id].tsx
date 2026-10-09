@@ -107,7 +107,7 @@ export default function TransactionDetail() {
   const [catSearch, setCatSearch] = useState("");
   const [pickedCat, setPickedCat] = useState<string | undefined>();
   const catList = useMemo(() => {
-    const all = (catQ.data || []).filter((c: any) => (tx?.type === "income" ? c.type === "income" : c.type === "expense"));
+    const all = (catQ.data || []).filter((c: any) => (tx?.type === "income" ? c.type === "income" : c.type === "expense") && !c.is_group);
     const q = catSearch.trim().toLowerCase();
     return q ? all.filter((c: any) => c.name.toLowerCase().includes(q)) : all;
   }, [catQ.data, tx, catSearch]);

@@ -109,6 +109,35 @@ user_problem_statement: |
   3) Dashboard Ingresos/Gastos cards enriched (icon, title, amount, mini bar chart, promedio diario) and made equal height to the accounts % card.
 
 backend:
+  - task: "Categories hierarchy: additive parent_id/is_group fields + idempotent grouped init-defaults (8 expense + 4 income groups)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            ADDITIVE ONLY. Added optional fields parent_id (Optional[str]=None) and is_group (bool=False) to Category + CategoryCreate. update_category now uses model_dump(exclude_unset=True) so editing with a partial payload NEVER wipes hierarchy fields. Rewrote POST /api/categories/init-defaults to be fully idempotent AND establish the grouped hierarchy: (1) ensure default leaf catalog, (2) create 3 NEW empty subcategories (Electronics/Home/Beauty, expense), (3) create 12 main groups (is_group=True): expense = Food & Dining, Home & Housing, Transport & Auto, Shopping & Goods, Health & Wellness, Entertainment & Leisure, Finance, Other & Misc; income = Work, Investing, Selling, Other Earnings, (4) set parent_id on existing leaves per the spec mapping. Groups matched by (name,type,is_group); leaves by (name,type); parent links only updated when different. NEVER deletes/renames/duplicates, NEVER moves transactions, NEVER touches balances. Manual verify done: 1st run created=3, groups_created=12, links=41, total 54; 2nd run 0/0/0 (idempotent). Create subcategory with parent_id persists; PUT name-only keeps parent_id; DELETE works; transactions count (6) and total_balance (29400) UNCHANGED before/after. Please VERIFY: GET /api/categories returns groups (is_group) + leaves (parent_id), init-defaults idempotency (run twice), update preserves parent_id, and NO transaction/account/balance mutation. Clean up any test categories. Do NOT run /api/seed.
+        - working: true
+          agent: "testing"
+          comment: |
+            ✅✅✅ ALL TESTS PASSED (6/6) - Categories hierarchy feature working correctly. Comprehensive testing completed against https://stoic-shannon-13.preview.emergentagent.com/api following exact review request requirements.
+            
+            [TEST 1] HIERARCHY STRUCTURE ✅: GET /api/categories → HTTP 200, returned 54 categories total ✓. Found exactly 12 groups (is_group=true, parent_id=null): 8 expense groups (Food & Dining, Home & Housing, Transport & Auto, Shopping & Goods, Health & Wellness, Entertainment & Leisure, Finance, Other & Misc) ✓ and 4 income groups (Work, Investing, Selling, Other Earnings) ✓. All expected group names present ✓. Found 42 leaf subcategories (is_group=false or unset), 41 with parent_id set ✓. NO _id field leakage detected in any category ✓.
+            
+            [TEST 2] IDEMPOTENCY ✅: Initial category count: 54. Called POST /api/categories/init-defaults 3 times. First call → HTTP 200 {created:0, groups_created:0, links:0, total:54} (already initialized) ✓. Second call → HTTP 200 {created:0, groups_created:0, links:0, total:54} ✓. Third call → HTTP 200 {created:0, groups_created:0, links:0, total:54} ✓. Total count stable across all calls (54) ✓. GET /api/categories count unchanged after repeated calls (54) ✓. NO duplicate groups created ✓.
+            
+            [TEST 3] HIERARCHY CORRECTNESS ✅: Verified parent_id→group name resolution for all specified groups. Shopping & Goods has exactly 6 children: Shopping, Clothing, Gifts, Electronics, Home, Beauty (includes all 3 new subcategories) ✓. Other & Misc contains Technology ✓. Health & Wellness contains Personal Care ✓. Income Work has 4 children (Salary, Freelance, Business, Tips) ✓. Investing has 2 children (Investments, Interest) ✓. Selling has 1 child (Sales) ✓. Other Earnings has 3 children (Refunds, Gifts, Other Income) ✓.
+            
+            [TEST 4] CRUD WITH HIERARCHY ✅: Created test subcategory ZZ_TESTSUB with parent_id=<Shopping & Goods id>, is_group=false → HTTP 200 ✓. Response contains correct parent_id, is_group=false, NO _id field ✓. Updated category with ONLY {name, type, icon, color} (NO parent_id/is_group in payload) → HTTP 200, parent_id PRESERVED (exclude_unset behavior working correctly) ✓. Updated category with parent_id=null, is_group=false → HTTP 200, parent_id became null ✓. Deleted test category → HTTP 200 {ok:true} ✓. Verified category removed from GET list ✓.
+            
+            [TEST 5] CRITICAL DATA PROTECTION ✅: Baseline captured before operations: transactions_count=6, total_balance=29400.0, Motica category found (id=dc42cb8e-7e63-4180-8e0c-3c0b556052f4, parent_id=null). After all operations: transactions_count=6 (UNCHANGED) ✓, total_balance=29400.0 (UNCHANGED) ✓. Motica category still exists with ALL fields unchanged (same id, name, icon, color, parent_id=null) ✓. NO transactions created, NO balances modified, NO custom categories affected ✓.
+            
+            CONCLUSION: The grouped categories hierarchy feature is working perfectly. All 12 groups created correctly with proper hierarchy. Idempotency verified (no duplicates on repeated calls). Parent-child relationships correct for all specified groups. CRUD operations work correctly with parent_id preservation via exclude_unset. Critical data protection verified (transactions, balances, and custom category Motica all unchanged). Test cleanup successful. NO /api/seed was run.
+
   - task: "MongoDB single-member replica set rs0 so backend transactions (debts/payments) work (environment config only)"
     implemented: true
     working: true
@@ -192,6 +221,19 @@ backend:
           comment: "✅✅✅ 5TH VERIFICATION COMPLETE (READ-ONLY after latest .env recreation). Backend supervisor: RUNNING (pid 790, uptime 0:03:15). Port 8001 listening confirmed (netstat shows tcp 0.0.0.0:8001 LISTEN). /app/backend/.env exists with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database, CORS_ORIGINS=*. All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, dict with keys: id, name, email, profile_photo, currency ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, dict with keys: total_balance, month_income, month_expense, debts, accounts_count ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs show NO KeyError for MONGO_URL or DB_NAME in current session (backend started Thu Sep 24 10:06:44 2026). Old KeyError traces in error log are from previous crash-loop sessions before .env was recreated. Current session shows only the documented transient ObjectId serialization error (HTTP 500 on first /api/user after cold boot: 'ObjectId' object is not iterable), followed by stable HTTP 200 responses. NO 502 Bad Gateway errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED."
 
 frontend:
+  - task: "Categories screen redesign: accordion (main groups + expandable subcategory grid) + create main/sub in new.tsx"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/categories/index.tsx, frontend/app/categories/new.tsx, frontend/src/category-labels.ts, frontend/app/transactions/new.tsx, frontend/app/transactions/[id].tsx, frontend/app/budgets/index.tsx, frontend/app/debts/new.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            FULL redesign of app/categories/index.tsx into an accordion. 3-col grid of main group cards (icon + localized name + "N subcategorías"); tapping a card expands a FULL-WIDTH panel in place (explicit rows of 3 + spacers so the grid never leaves gaps), with a compact header (icon, name, count, chevron-up), a 3-col subcategory grid (white cards, pastel icons, tap -> existing edit /categories/new?id=), and an "Añadir subcategoría" link (-> /categories/new?parent=<gid>&type=<type>). Only ONE group expanded at a time. Animations via Reanimated: panel entering=FadeIn(220) exiting=FadeOut(150), rows+panel layout=LinearTransition(280) for smooth push-down (no bounce). Kept cream bg, white cards, pastel line icons, typography, lock toggle, (+) add, Gastos/Ingresos sections, Restaurar predeterminadas. Ungrouped/custom categories (e.g. Motica) are shown inside the "Otros"/"Otros ingresos" group. Localization via NEW file src/category-labels.ts (EN canonical -> es/en) scoped to the Categories feature (no global i18n or other-screen text changed). new.tsx: added "Clase" selector (Principal=is_group / Subcategoría=parent_id) + main-category chip picker; reads ?parent= and ?type= params; payload now includes is_group + parent_id. SELECTOR PRESERVATION: added "&& !c.is_group" to the 4 category pickers (transactions/new, transactions/[id], budgets, debts/new) so groups are NOT selectable as a transaction category (behavior preserved). init-defaults is auto-called (idempotent) on first load when no groups exist. VERIFIED on web preview: collapsed shows 8 expense + 4 income groups with correct counts (Shopping=6 incl new subcats, Other=6 incl Motica, Sales="1 subcategory" singular); expanding Food shows full-width panel (Food/Groceries/Restaurants + Add subcategory) pushing other cards down with no gaps; active card highlighted with chevron-up. ESLint: only pre-existing/benign warnings. Backend data-protection verified (tx=6, balance=29400 unchanged). NOTE: display language follows app language (es -> Alimentación/Comida..., en -> Food...). Reports screen intentionally NOT changed (per user decision 5).
+
   - task: "Home MR filters: move Calendar right after 'Todas' + Reports periods reuse MR press-spring"
     implemented: true
     working: "NA"
@@ -653,12 +695,22 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Categories hierarchy: additive parent_id/is_group fields + idempotent grouped init-defaults (8 expense + 4 income groups)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+    - agent: "main"
+      message: |
+        CATEGORIES HIERARCHY — backend testing requested (backend changes only). Please test the new grouped categories feature in backend/server.py:
+        1) GET /api/categories returns BOTH main groups (is_group=true, parent_id=null) and leaf subcategories (is_group=false, parent_id=<group id>). Expect 12 groups (8 expense + 4 income) and leaves linked.
+        2) POST /api/categories/init-defaults is IDEMPOTENT: run it 2–3 times; after the first, created=0, groups_created=0, links=0 (no duplicate groups). total should stay stable.
+        3) Hierarchy correctness: Shopping & Goods has 6 children (incl new Electronics/Home/Beauty); Other & Misc contains Technology; Health & Wellness contains Personal Care; income Work=4, Investing=2, Selling=1, Other Earnings=3.
+        4) CREATE a subcategory (POST with is_group=false + parent_id=<a group id>) -> 200, parent_id persisted, no _id leak. UPDATE it with PUT sending only {name,type,icon,color} -> parent_id MUST be preserved (exclude_unset). Also UPDATE sending parent_id -> updates. DELETE it (cleanup).
+        5) CRITICAL DATA PROTECTION: existing transactions count and GET /api/summary total_balance MUST be IDENTICAL before/after all operations. No transaction/account/balance mutation. Do NOT run /api/seed. Clean up any test categories you create.
+        Note: custom category "Motica" (expense, no parent) must remain intact (not renamed/deleted/reparented).
     - agent: "testing"
       message: |
         ✅✅✅ MONGODB REPLICA SET (rs0) ENVIRONMENT FIX - COMPREHENSIVE TESTING COMPLETE - ALL TESTS PASSED (4/4 TEST SUITES, 100%)
@@ -1746,3 +1798,68 @@ agent_communication:
         • Only tested temporary ZZ_TEST_* records ✓
         
         **CONCLUSION:** Backend persistence is WORKING CORRECTLY. The .env recreation fix has successfully restored full CREATE/SAVE/RETRIEVE/DELETE functionality. All data persists to MongoDB (not in-memory). The backend is stable and serving on port 8001.
+
+    - agent: "testing"
+      message: |
+        ✅✅✅ CATEGORIES HIERARCHY FEATURE - ALL TESTS PASSED (6/6) - COMPREHENSIVE VERIFICATION COMPLETE
+        
+        Tested the NEW grouped Categories hierarchy feature (backend/server.py) against https://stoic-shannon-13.preview.emergentagent.com/api following STRICT data-protection rules. Did NOT call POST /api/seed. Cleaned up all test categories created. Did NOT modify real transactions/accounts.
+        
+        TEST RESULTS:
+        
+        [1] HIERARCHY STRUCTURE ✅ (8/8 checks passed):
+        • GET /api/categories → HTTP 200, returned 54 categories total ✓
+        • Found exactly 12 groups (is_group=true, parent_id=null) ✓
+        • 8 expense groups: Food & Dining, Home & Housing, Transport & Auto, Shopping & Goods, Health & Wellness, Entertainment & Leisure, Finance, Other & Misc ✓
+        • 4 income groups: Work, Investing, Selling, Other Earnings ✓
+        • All expected group names present ✓
+        • All groups have parent_id=null ✓
+        • Found 42 leaf subcategories (is_group=false or unset), 41 with parent_id set ✓
+        • NO _id field leakage detected in any category ✓
+        
+        [2] IDEMPOTENCY ✅ (6/6 checks passed):
+        • Initial category count: 54 ✓
+        • POST /api/categories/init-defaults (1st call) → HTTP 200 {created:0, groups_created:0, links:0, total:54} ✓
+        • POST /api/categories/init-defaults (2nd call) → HTTP 200 {created:0, groups_created:0, links:0, total:54} ✓
+        • POST /api/categories/init-defaults (3rd call) → HTTP 200 {created:0, groups_created:0, links:0, total:54} ✓
+        • Total count stable across all calls (54) ✓
+        • GET /api/categories count unchanged after repeated calls (54) ✓
+        • NO duplicate groups created on repeated calls ✓
+        
+        [3] HIERARCHY CORRECTNESS ✅ (8/8 checks passed):
+        • Shopping & Goods has exactly 6 children: Shopping, Clothing, Gifts, Electronics, Home, Beauty ✓
+        • Shopping & Goods contains all 3 new subcategories (Electronics, Home, Beauty) ✓
+        • Other & Misc contains Technology ✓
+        • Health & Wellness contains Personal Care ✓
+        • Income Work has 4 children (Salary, Freelance, Business, Tips) ✓
+        • Investing has 2 children (Investments, Interest) ✓
+        • Selling has 1 child (Sales) ✓
+        • Other Earnings has 3 children (Refunds, Gifts, Other Income) ✓
+        
+        [4] CRUD WITH HIERARCHY ✅ (7/7 checks passed):
+        • POST /api/categories with {name:"ZZ_TESTSUB", type:"expense", icon:"star-outline", color:"#123456", is_group:false, parent_id:<Shopping & Goods id>} → HTTP 200 ✓
+        • Response contains parent_id set correctly ✓
+        • Response contains is_group=false ✓
+        • NO _id field in response ✓
+        • PUT /api/categories/{id} sending ONLY {name:"ZZ_TESTSUB2", type:"expense", icon:"star-outline", color:"#123456"} (NO parent_id/is_group) → HTTP 200, parent_id PRESERVED (exclude_unset behavior working) ✓
+        • PUT /api/categories/{id} sending parent_id=null, is_group=false → HTTP 200, parent_id became null ✓
+        • DELETE /api/categories/{id} → HTTP 200 {ok:true}, category removed from GET list ✓
+        
+        [5] CRITICAL DATA PROTECTION ✅ (3/3 checks passed):
+        • Baseline: transactions_count=6, total_balance=29400.0, Motica category found (id=dc42cb8e-7e63-4180-8e0c-3c0b556052f4, parent_id=null) ✓
+        • After all operations: transactions_count=6 (UNCHANGED) ✓
+        • After all operations: total_balance=29400.0 (UNCHANGED) ✓
+        • Motica category still exists with ALL fields unchanged (same id, name, icon, color, parent_id=null) ✓
+        • NO transactions created, NO balances modified, NO custom categories affected ✓
+        
+        CRITICAL FINDINGS:
+        • Grouped categories hierarchy is working perfectly ✓
+        • All 12 groups created correctly (8 expense + 4 income) with proper structure ✓
+        • Idempotency verified: no duplicates on repeated init-defaults calls ✓
+        • Parent-child relationships correct for all specified groups ✓
+        • CRUD operations work correctly with parent_id preservation via exclude_unset ✓
+        • Critical data protection verified: transactions, balances, and custom category Motica all unchanged ✓
+        • Test cleanup successful (ZZ_TESTSUB deleted) ✓
+        • NO /api/seed was run ✓
+        
+        CONCLUSION: The grouped Categories hierarchy feature is PRODUCTION-READY. All requirements met. The additive change (parent_id/is_group fields) works correctly without affecting existing data. The init-defaults endpoint is fully idempotent and safe to call multiple times.

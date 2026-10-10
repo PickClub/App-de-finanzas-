@@ -63,9 +63,24 @@ export const api = {
   deleteBudget: (id: string) => request<any>(`/budgets/${id}`, { method: "DELETE" }),
   // Goals
   listGoals: () => request<any[]>("/goals"),
-  createGoal: (d: any) => request<any>("/goals", { method: "POST", body: JSON.stringify(d) }),
+  goalsOverview: () => request<any>("/goals/overview"),
+  getGoal: (id: string) => request<any>(`/goals/${id}`),
+  listGoalContributions: (id: string, offset = 0, limit = 20) =>
+    request<any>(`/goals/${id}/contributions?offset=${offset}&limit=${limit}`),
+  createGoal: (d: any, idempotencyKey?: string) =>
+    request<any>("/goals", {
+      method: "POST",
+      body: JSON.stringify(d),
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {},
+    }),
   updateGoal: (id: string, d: any) => request<any>(`/goals/${id}`, { method: "PUT", body: JSON.stringify(d) }),
   deleteGoal: (id: string) => request<any>(`/goals/${id}`, { method: "DELETE" }),
+  createGoalContribution: (id: string, d: any, idempotencyKey?: string) =>
+    request<any>(`/goals/${id}/contributions`, {
+      method: "POST",
+      body: JSON.stringify(d),
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {},
+    }),
   // Debts
   listDebts: () => request<any[]>("/debts"),
   getDebt: (id: string) => request<any>(`/debts/${id}`),

@@ -2244,14 +2244,224 @@ agent_communication:
             - ✅ Tested with exact numbers per review request
 
 
+  - task: "Saving Goals API: CRUD + contributions/withdrawals + overview + history pagination"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: |
+            ✅✅✅ ALL 132 TESTS PASSED (100%) - Saving Goals API COMPREHENSIVE VERIFICATION COMPLETE
+            
+            Tested on ISOLATED instance: http://127.0.0.1:8013/api (APP_ENV=test, DB test_moneyflow_goals_qa, MongoDB replica set rs0).
+            Did NOT touch main backend (port 8001) or moneyflow_database. All test data created/deleted in isolated instance.
+            Cleaned up: killed port 8013 process, dropped test_moneyflow_goals_qa database.
+            
+            **TEST RESULTS BY CATEGORY:**
+            
+            ✅ [TEST 1] VALIDATION ERRORS (6/6 PASS):
+            - Empty name → 422 ✓
+            - Target amount = 0 → 422 ✓
+            - Target amount < 0 → 422 ✓
+            - Invalid target_date "2027-13-45" → 422 ✓
+            - Negative initial_amount → 422 ✓
+            - Unknown account_id → 422 ✓
+            
+            ✅ [TEST 2] DUPLICATE NAME CONFLICT (3/3 PASS):
+            - Create first goal "Vacation Fund" → 200 ✓
+            - Duplicate name (exact case) → 409 ✓
+            - Duplicate name (case-insensitive "vacation fund") → 409 ✓
+            
+            ✅ [TEST 3] IDEMPOTENCY KEY (5/5 PASS):
+            - First request with idempotency key → 200 ✓
+            - Second request with same key and body → 200, same goal ID returned ✓
+            - Same key different body → 409 ✓
+            - No _id or request_fingerprint leakage in responses ✓
+            
+            ✅ [TEST 4] CREATE GOALS WITH INITIAL AMOUNTS & OVERVIEW (13/13 PASS):
+            - Created 2 accounts (Source checking 1000, Savings savings 0) ✓
+            - Created goal "House Down Payment" target 50000, initial 5000, account_id=Savings → current_amount=5000 ✓
+            - Created goal "Wedding Fund" target 30000, initial 10000 ✓
+            - GET /goals/overview → totals{saved, target, remaining, pct}, active_count, completed_count, goals[] ✓
+            - Saved = sum of initial amounts (15000+) ✓
+            - Remaining = sum of per-goal max(0, target-saved) (non-negative) ✓
+            - Percentage = saved/target*100 (calculated correctly) ✓
+            - No division by zero when no goals ✓
+            
+            ✅ [TEST 5] CONTRIBUTIONS - TRACKING ONLY (18/18 PASS):
+            - Deposit tracking (no real_movement) increases saved (5000→6000) ✓
+            - Creates NO transaction ✓
+            - Account balances unchanged (Source 1000, Savings 0) ✓
+            - /api/summary unchanged (total_balance, month_income, month_expense) ✓
+            - Withdrawal tracking reduces saved (6000→5500) ✓
+            - History keeps both deposit and withdrawal records ✓
+            - Withdrawal > saved → 422 ✓
+            - Amount <= 0 → 422 ✓
+            - Idempotency-Key replay doesn't duplicate (same saved amount on replay) ✓
+            
+            ✅ [TEST 6] REAL MOVEMENT (20/20 PASS):
+            - Deposit 200 real_movement=true account_id=Source → exactly ONE transfer transaction Source→Savings ✓
+            - Source balance decreased (1000→800) ✓
+            - Savings balance increased (0→200) ✓
+            - Total balance unchanged (transfer between accounts) ✓
+            - Month income/expense unchanged (transfers don't affect these) ✓
+            - Real movement without goal account → 422 ✓
+            - Real movement without account_id → 422 ✓
+            - Real movement with same account as goal → 422 ✓
+            - Real withdrawal 50 to Source → transfer Savings→Source ✓
+            - Source increased (800→850), Savings decreased (200→150) ✓
+            - PUT /api/transactions/{linked id} → 409 ✓
+            - DELETE /api/transactions/{linked id} → 409 ✓
+            
+            ✅ [TEST 7] COMPLETION (14/14 PASS):
+            - Created goal target 100, initial 50 ✓
+            - Added 50 to reach target → completed=true, completed_at set, pct=100.0 ✓
+            - Added 32.5 to exceed target → pct=132.5 (can exceed 100) ✓
+            - PUT lowering target to 200 → completed=false, completed_at cleared ✓
+            - PUT raising target back to 100 → completed=true, completed_at set again ✓
+            
+            ✅ [TEST 8] MONTHLY RECOMMENDED (8/8 PASS):
+            - No target_date → monthly_recommended=null ✓
+            - Future date (90 days) → monthly_recommended is positive integer (ceiling) ✓
+            - Past date with remaining>0 → overdue=true, monthly_recommended=null ✓
+            
+            ✅ [TEST 9] PAGINATION (25/25 PASS):
+            - Created goal with 5 contributions ✓
+            - GET /goals/{id}/contributions?limit=2&offset=0 → items, total, offset, limit, has_more ✓
+            - Limit respected (2 items) ✓
+            - Total=5, has_more=true ✓
+            - Sorted by date desc ✓
+            - Page 2 (offset=2) → 2 items, has_more=true ✓
+            - Last page (offset=4) → 1 item, has_more=false ✓
+            - GET /goals/{id} includes contributions page + account ✓
+            
+            ✅ [TEST 10] UPDATE & DELETE (16/16 PASS):
+            - PUT nonexistent goal → 404 ✓
+            - Edit without initial_amount keeps initial ✓
+            - DELETE goal removes goal + contributions ✓
+            - Linked transfers remain (unlinked, goal_id removed) ✓
+            - Balances unchanged after delete ✓
+            - Formerly linked transfer can be deleted normally ✓
+            
+            ✅ [TEST 11] NO LEAKAGE IN RESPONSES (4/4 PASS):
+            - GET /goals - no _id or request_fingerprint ✓
+            - GET /goals/overview - no leakage ✓
+            - GET /goals/{id} - no leakage ✓
+            - GET /goals/{id}/contributions - no leakage ✓
+            
+            **CRITICAL FINDINGS:**
+            
+            ✅ **VALIDATION**: All 422 validations working (empty name, target<=0, invalid date, negative initial, unknown account)
+            ✅ **CONFLICT DETECTION**: 409 for duplicate names (case-insensitive)
+            ✅ **IDEMPOTENCY**: Same key returns same goal (no duplicates), different body → 409
+            ✅ **OVERVIEW TOTALS**: saved=sum, target=sum, remaining=sum of per-goal max(0,target-saved), pct=saved/target*100 or null
+            ✅ **TRACKING CONTRIBUTIONS**: Deposit/withdrawal tracking increases/decreases saved, NO transaction created, balances unchanged
+            ✅ **REAL MOVEMENT**: Creates exactly ONE transfer transaction, updates account balances, total_balance unchanged, income/expense unchanged
+            ✅ **REAL MOVEMENT VALIDATION**: 422 without goal account, without account_id, or same account as goal
+            ✅ **LINKED TRANSACTIONS**: Cannot edit/delete via /api/transactions (409)
+            ✅ **COMPLETION**: saved >= target → completed=true, completed_at set, pct can exceed 100 (e.g. 132.5)
+            ✅ **COMPLETION RECOMPUTE**: PUT lowering/raising target recomputes and clears completed_at when no longer complete
+            ✅ **MONTHLY RECOMMENDED**: null when no target_date, positive integer (ceil) with future date, null with past date (overdue=true)
+            ✅ **PAGINATION**: limit/offset/has_more/total working, sorted date desc
+            ✅ **DETAIL ENDPOINT**: Includes contributions page + account
+            ✅ **UPDATE**: 404 for missing, edit without initial_amount keeps initial
+            ✅ **DELETE**: Removes goal + contributions, linked transfers remain (unlinked), balances unchanged
+            ✅ **NO LEAKAGE**: No _id or request_fingerprint in any response
+            
+            **CONCLUSION:**
+            
+            The Saving Goals API is WORKING CORRECTLY and PRODUCTION-READY. All 132 tests passed (100%). All requirements from the review request verified:
+            - Validation (422 errors)
+            - Duplicate detection (409 errors)
+            - Idempotency (same key returns same goal)
+            - Overview totals (saved, target, remaining, pct, active_count, completed_count)
+            - Tracking contributions (no transaction, balances unchanged)
+            - Real movement (exactly one transfer, balances updated, total unchanged)
+            - Completion (completed=true, completed_at, pct can exceed 100)
+            - Monthly recommended (null/positive integer/overdue)
+            - Pagination (limit/offset/has_more/total, sorted date desc)
+            - Update & Delete (404, initial preserved, unlinked transfers)
+            - No leakage (_id, request_fingerprint)
+            
+            **TEST CONSTRAINTS FOLLOWED:**
+            - ✅ Tested ONLY against isolated backend http://127.0.0.1:8013/api
+            - ✅ Did NOT call main backend (port 8001) for writes
+            - ✅ Did NOT touch moneyflow_database
+            - ✅ Cleaned up all test data (killed process, dropped DB test_moneyflow_goals_qa)
+            - ✅ Used real-looking data (not dummy data)
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Endpoints: GET /api/goals (computed list), GET /api/goals/overview -> totals{saved,target,remaining(sum of per-goal remaining),pct|null}, active_count, completed_count, goals[]; GET /api/goals/{id} (+account, contributions first page); GET /api/goals/{id}/contributions?offset&limit -> {items,total,offset,limit,has_more}; POST /api/goals (Idempotency-Key optional; 422 empty name / target<=0 / invalid date / negative initial / unknown account; 409 duplicate name case-insensitive); PUT /api/goals/{id} (404, same validation, recompute); DELETE /api/goals/{id} (deletes goal+contributions; linked transfers kept but unlinked; balances unchanged); POST /api/goals/{id}/contributions {kind deposit|withdrawal, amount, date, account_id, notes, real_movement} (Idempotency-Key; 422 amount<=0, withdrawal > saved, real_movement without goal account / without account / same account).
+            Rules: saved = initial_amount + deposits - withdrawals (Decimal). Tracking contributions do NOT create transactions nor change balances. real_movement=true creates ONE transfer (deposit: account->goal account; withdrawal: goal account->account) inside a Mongo transaction, so total_balance & month income/expense unchanged. Linked transfers cannot be edited/deleted via /api/transactions (409). Computed fields: pct, remaining, completed/status, completed_at, monthly_recommended=ceil(remaining/max(1,(days_left+1)/30.44)) or null, overdue, days_left.
+            TEST ONLY ON ISOLATED INSTANCE: run uvicorn from /app/backend with APP_ENV=test DB_NAME=test_moneyflow_goals_qa MONGO_URL=mongodb://localhost:27017 CORS_ORIGINS=http://localhost on port 8013. Do NOT write to the real backend (8001) / moneyflow_database.
+
+frontend:
+  - task: "Saving Goals screens: overview (Mis ahorros, indicators, sorted cards, empty state), form new/edit, contribute/withdraw, detail with history+delete"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/goals/index.tsx, new.tsx, contribute.tsx, [id].tsx, frontend/src/goals/shared.tsx, frontend/src/api.ts, i18n es/en"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "testIDs: add-goal, goals-summary, goals-total-saved/target/pct/remaining, goals-active-count, goals-completed-count, goals-sort, goals-sort-<key>, goal-card-<id>, goal-add-<id>, goal-pct-<id>, goals-empty, goals-empty-create; form: goal-name-input, goal-target-input, goal-date, goal-icon-<name>, goal-color-<hex>, goal-initial-input, goal-account-select, goal-form-error, save-goal; contribute: contrib-amount-input, contrib-day-today|yesterday|other, contrib-account-select, contrib-notes-input, contrib-real-switch, contrib-error, save-contribution; detail: goal-detail-status/saved/pct/remaining/recommended, goal-detail-add, goal-detail-withdraw, goal-history, goal-history-more, goal-edit, goal-delete, confirm-delete-goal."
+
 test_plan:
   current_focus:
-    - "Budgets API"
+    - "Saving Goals API: CRUD + contributions/withdrawals + overview + history pagination"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+    - agent: "testing"
+      message: |
+        ✅✅✅ SAVING GOALS API TESTING COMPLETE - ALL 132 TESTS PASSED (100%)
+        
+        Comprehensive testing of the NEW Saving Goals API completed against isolated backend (http://127.0.0.1:8013/api).
+        
+        **RESULTS: 132/132 tests passed (100%)**
+        
+        **ALL CRITICAL FUNCTIONALITY VERIFIED:**
+        ✅ Validation (422 errors for invalid input: empty name, target<=0, invalid date, negative initial, unknown account)
+        ✅ Conflict detection (409 for duplicate names, case-insensitive)
+        ✅ Idempotency (same key returns same goal, different body → 409)
+        ✅ Overview totals (saved=sum, target=sum, remaining=sum of per-goal max(0,target-saved), pct=saved/target*100 or null)
+        ✅ Tracking contributions (deposit/withdrawal increases/decreases saved, NO transaction created, balances unchanged)
+        ✅ Real movement (exactly ONE transfer transaction, balances updated, total_balance unchanged, income/expense unchanged)
+        ✅ Real movement validation (422 without goal account, without account_id, or same account as goal)
+        ✅ Linked transactions (cannot edit/delete via /api/transactions → 409)
+        ✅ Completion (saved >= target → completed=true, completed_at set, pct can exceed 100 e.g. 132.5)
+        ✅ Completion recompute (PUT lowering/raising target recomputes and clears completed_at when no longer complete)
+        ✅ Monthly recommended (null when no target_date, positive integer ceil with future date, null with past date overdue=true)
+        ✅ Pagination (limit/offset/has_more/total working, sorted date desc)
+        ✅ Detail endpoint (includes contributions page + account)
+        ✅ Update (404 for missing, edit without initial_amount keeps initial)
+        ✅ Delete (removes goal + contributions, linked transfers remain unlinked, balances unchanged)
+        ✅ No leakage (no _id or request_fingerprint in any response)
+        
+        **EXACT NUMBERS VERIFIED (per review request):**
+        - Created 2 accounts: Source (checking, 1000), Savings (savings, 0)
+        - Created goal "House Down Payment" (target 50000, initial 5000, account_id=Savings)
+        - Tracking deposit 1000 → saved 6000, NO transaction, balances unchanged
+        - Tracking withdrawal 500 → saved 5500
+        - Real deposit 200 (account_id=Source, real_movement=true) → ONE transfer Source→Savings, Source=800, Savings=200
+        - Real withdrawal 50 (account_id=Source, real_movement=true) → ONE transfer Savings→Source, Source=850, Savings=150
+        - Completion: target 100, initial 50, +50 → completed=true pct=100.0, +32.5 → pct=132.5
+        - Pagination: 5 contributions, limit=2 offset=0 → 2 items has_more=true, offset=4 → 1 item has_more=false
+        
+        **NO ISSUES FOUND**
+        
+        The Saving Goals API is production-ready and working correctly per specification. All test data cleaned up (killed port 8013, dropped test_moneyflow_goals_qa).
+    - agent: "main"
+      message: "New Saving Goals backend. Test ONLY on an isolated instance (port 8013, APP_ENV=test, DB test_moneyflow_goals_qa). Never touch port 8001 data. Drop the test DB at the end."
     - agent: "testing"
       message: |
         ✅✅✅ BUDGETS API TESTING COMPLETE - ALL CORE FUNCTIONALITY WORKING

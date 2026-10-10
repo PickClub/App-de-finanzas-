@@ -1,11 +1,11 @@
 from fastapi import FastAPI, APIRouter, Header, HTTPException
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import logging, uuid, hashlib, json, math
+import logging, uuid, hashlib, json, math, re
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Literal
-from datetime import datetime, timezone, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from datetime import date, datetime, timezone, timedelta
+from decimal import Decimal, ROUND_HALF_UP, ROUND_CEILING
 from pymongo import ReadPreference
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from pymongo.read_concern import ReadConcern
@@ -181,21 +181,40 @@ class SavingGoal(BaseModel):
     user_id: str = DEFAULT_USER_ID
     name: str
     target_amount: float
+    # current_amount = initial_amount + deposits - withdrawals (cached, recomputed).
     current_amount: float = 0.0
+    initial_amount: float = 0.0
     target_date: Optional[str] = None
     priority: Literal["low", "medium", "high"] = "medium"
     color: str = "#29C4A9"
     icon: str = "flag-outline"
+    account_id: Optional[str] = None
+    completed_at: Optional[str] = None
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: Optional[str] = None
 
 
 class SavingGoalCreate(BaseModel):
-    name: str
+    name: str = ""
     target_amount: float
-    current_amount: float = 0.0
+    initial_amount: Optional[float] = None
+    # Legacy alias: older clients sent the initial saved amount as current_amount.
+    current_amount: Optional[float] = None
     target_date: Optional[str] = None
-    priority: str = "medium"
+    priority: Literal["low", "medium", "high"] = "medium"
     color: str = "#29C4A9"
     icon: str = "flag-outline"
+    account_id: Optional[str] = None
+
+
+class GoalContributionCreate(BaseModel):
+    kind: Literal["deposit", "withdrawal"] = "deposit"
+    amount: float
+    date: Optional[str] = None
+    account_id: Optional[str] = None
+    notes: Optional[str] = None
+    # Only when True AND the goal has a linked account, a real transfer is recorded.
+    real_movement: bool = False
 
 
 class Debt(BaseModel):
@@ -676,6 +695,8 @@ async def update_transaction(tid: str, data: TransactionCreate):
     old = await db.transactions.find_one({"id": tid}, PROJ)
     if not old:
         raise HTTPException(404, "Not found")
+    if old.get("goal_contribution_id"):
+        raise HTTPException(409, "Este movimiento está vinculado a un aporte de una meta de ahorro; adminístralo desde Metas de ahorro.")
     if old.get("debt_payment_id"):
         return await edit_payment_movement(tid, data)
     if old.get("debt_id") or data.debt_id or data.type == "debt_payment":
@@ -693,6 +714,8 @@ async def update_transaction(tid: str, data: TransactionCreate):
 @api.delete("/transactions/{tid}")
 async def delete_transaction(tid: str):
     old = await db.transactions.find_one({"id": tid}, PROJ)
+    if old and old.get("goal_contribution_id"):
+        raise HTTPException(409, "Este movimiento está vinculado a un aporte de una meta de ahorro; adminístralo desde Metas de ahorro.")
     if old and await db.recurring_templates.find_one({"source_transaction_id": tid}, PROJ):
         raise HTTPException(409, "Este movimiento es origen de una recurrencia. Elimina primero esa configuración de recurrencia.")
     if old and old.get("debt_payment_id"):
@@ -1029,29 +1052,303 @@ async def delete_budget(bid: str):
     return {"ok": True}
 
 
-# Saving Goals
+# ---------- Saving Goals ----------
+# Rules:
+# * A goal's saved amount = initial_amount + deposits - withdrawals (Decimal math).
+# * Tracking contributions NEVER touch account balances or transactions.
+# * A "real movement" contribution is recorded ONLY when explicitly requested and the
+#   goal has a linked account: it creates ONE transfer (source -> goal account, or the
+#   reverse for withdrawals). Transfers are neither income nor expense, so no fictitious
+#   income/expense is created and total money is never duplicated.
+# * Contribution history is append-only (withdrawals are stored as their own records).
+GOAL_HIDDEN = {"_id", "request_fingerprint"}
+CENT = Decimal("0.01")
+
+
+def _goal_clean(doc):
+    return {k: v for k, v in doc.items() if k not in GOAL_HIDDEN}
+
+
+def _goal_target_date(value):
+    if value in (None, ""):
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10]).isoformat()
+    except ValueError:
+        raise HTTPException(422, "La fecha objetivo no es válida.")
+
+
+def _positive_money(value, msg):
+    if value is None or not math.isfinite(value) or value <= 0:
+        raise HTTPException(422, msg)
+    return float(Decimal(str(value)).quantize(CENT, rounding=ROUND_HALF_UP))
+
+
+def _goal_public(g, today=None):
+    today = today or datetime.now(timezone.utc).date()
+    target = Decimal(str(g.get("target_amount") or 0))
+    saved = Decimal(str(g.get("current_amount") or 0))
+    remaining = max(Decimal(0), target - saved)
+    pct = float((saved / target * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)) if target > 0 else None
+    completed = target > 0 and saved >= target
+    recommended, days_left, overdue = None, None, False
+    td = g.get("target_date")
+    if td:
+        try:
+            d = date.fromisoformat(str(td)[:10])
+        except ValueError:
+            d = None
+        if d:
+            days_left = (d - today).days
+            if remaining > 0:
+                if days_left < 0:
+                    overdue = True
+                else:
+                    # Partial months count proportionally; anything under a month needs
+                    # the whole remaining amount this month.
+                    months = max(Decimal(1), Decimal(days_left + 1) / Decimal("30.436875"))
+                    recommended = int((remaining / months).to_integral_value(rounding=ROUND_CEILING))
+    out = _goal_clean(g)
+    out.update(
+        current_amount=float(saved), remaining=float(remaining), pct=pct, completed=completed,
+        status="completed" if completed else "active", monthly_recommended=recommended,
+        days_left=days_left, overdue=overdue,
+    )
+    return out
+
+
+async def recompute_goal(gid, session=None):
+    g = await db.saving_goals.find_one({"id": gid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+    if not g:
+        return None
+    # Legacy goals (before contributions existed) stored the saved amount in current_amount.
+    initial = Decimal(str(g["initial_amount"] if g.get("initial_amount") is not None else g.get("current_amount") or 0))
+    total = initial
+    pipeline = [
+        {"$match": {"user_id": DEFAULT_USER_ID, "goal_id": gid}},
+        {"$group": {"_id": "$kind", "s": {"$sum": {"$toDecimal": "$amount"}}}},
+    ]
+    async for row in db.goal_contributions.aggregate(pipeline, session=session):
+        s = row["s"].to_decimal()
+        total += s if row["_id"] == "deposit" else -s
+    total = max(Decimal(0), total).quantize(CENT, rounding=ROUND_HALF_UP)
+    completed = g["target_amount"] > 0 and total >= Decimal(str(g["target_amount"]))
+    upd = {"current_amount": float(total), "initial_amount": float(initial)}
+    if completed and not g.get("completed_at"):
+        upd["completed_at"] = now_iso()
+    elif not completed and g.get("completed_at"):
+        upd["completed_at"] = None
+    await db.saving_goals.update_one({"id": gid, "user_id": DEFAULT_USER_ID}, {"$set": upd}, session=session)
+    g.update(upd)
+    return g
+
+
+async def _validate_goal(data: SavingGoalCreate, replacing=None, session=None):
+    name = (data.name or "").strip()
+    if not name:
+        raise HTTPException(422, "El nombre de la meta es obligatorio.")
+    if len(name) > 60:
+        raise HTTPException(422, "El nombre de la meta es demasiado largo (máx. 60).")
+    target = _positive_money(data.target_amount, "El monto objetivo debe ser mayor que cero.")
+    initial = data.initial_amount if data.initial_amount is not None else data.current_amount
+    if initial is not None:
+        if not math.isfinite(initial) or initial < 0:
+            raise HTTPException(422, "El monto inicial no puede ser negativo.")
+        initial = float(Decimal(str(initial)).quantize(CENT, rounding=ROUND_HALF_UP))
+    if data.account_id and not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+        raise HTTPException(422, "La cuenta asociada no existe.")
+    q = {"user_id": DEFAULT_USER_ID, "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}
+    if replacing:
+        q["id"] = {"$ne": replacing}
+    if await db.saving_goals.find_one(q, PROJ, session=session):
+        raise HTTPException(409, "Ya existe una meta con ese nombre.")
+    return {
+        "name": name, "target_amount": target, "target_date": _goal_target_date(data.target_date),
+        "priority": data.priority, "color": data.color or "#29C4A9", "icon": data.icon or "flag-outline",
+        "account_id": data.account_id or None,
+    }, initial
+
+
+async def _contributions_page(gid, limit, offset, session=None):
+    limit = max(1, min(int(limit or 20), 100))
+    offset = max(0, int(offset or 0))
+    q = {"user_id": DEFAULT_USER_ID, "goal_id": gid}
+    items = await db.goal_contributions.find(q, {"_id": 0, "request_fingerprint": 0}, session=session) \
+        .sort([("date", -1), ("created_at", -1)]).skip(offset).limit(limit).to_list(limit)
+    total = await db.goal_contributions.count_documents(q, session=session)
+    return {"items": items, "total": total, "offset": offset, "limit": limit, "has_more": offset + len(items) < total}
+
+
 @api.get("/goals")
 async def list_goals():
-    return await db.saving_goals.find({"user_id": DEFAULT_USER_ID}, PROJ).to_list(500)
+    goals = await db.saving_goals.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("created_at", -1).to_list(500)
+    today = datetime.now(timezone.utc).date()
+    return [_goal_public(g, today) for g in goals]
+
+
+@api.get("/goals/overview")
+async def goals_overview():
+    goals = await db.saving_goals.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("created_at", -1).to_list(500)
+    today = datetime.now(timezone.utc).date()
+    rows = [_goal_public(g, today) for g in goals]
+    saved = sum((Decimal(str(r["current_amount"])) for r in rows), Decimal(0))
+    target = sum((Decimal(str(r["target_amount"])) for r in rows), Decimal(0))
+    # Per-goal remaining: surplus in one goal never reduces another goal's remaining.
+    remaining = sum((Decimal(str(r["remaining"])) for r in rows), Decimal(0))
+    pct = float((saved / target * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)) if target > 0 else None
+    return {
+        "totals": {"saved": float(saved), "target": float(target), "remaining": float(remaining), "pct": pct},
+        "active_count": sum(1 for r in rows if not r["completed"]),
+        "completed_count": sum(1 for r in rows if r["completed"]),
+        "goals": rows,
+    }
+
+
+@api.get("/goals/{gid}")
+async def get_goal(gid: str, limit: int = 20):
+    g = await db.saving_goals.find_one({"id": gid, "user_id": DEFAULT_USER_ID}, PROJ)
+    if not g:
+        raise HTTPException(404, "Meta no encontrada.")
+    out = _goal_public(g)
+    acc = await db.accounts.find_one({"id": g["account_id"], "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1, "color": 1}) if g.get("account_id") else None
+    out["account"] = acc
+    out["contributions"] = await _contributions_page(gid, limit, 0)
+    return out
+
+
+@api.get("/goals/{gid}/contributions")
+async def list_goal_contributions(gid: str, limit: int = 20, offset: int = 0):
+    if not await db.saving_goals.find_one({"id": gid, "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Meta no encontrada.")
+    return await _contributions_page(gid, limit, offset)
 
 
 @api.post("/goals")
-async def create_goal(data: SavingGoalCreate):
-    g = SavingGoal(user_id=DEFAULT_USER_ID, **data.model_dump()).model_dump()
-    await db.saving_goals.insert_one(g)
-    return {k: v for k, v in g.items() if k != "_id"}
+async def create_goal(
+    data: SavingGoalCreate,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=128),
+):
+    gid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:goal:{idempotency_key}")) if idempotency_key else new_id()
+    fingerprint = hashlib.sha256(json.dumps(data.model_dump(), sort_keys=True, allow_nan=False).encode()).hexdigest()
+    previous = await db.saving_goals.find_one({"_id": gid, "user_id": DEFAULT_USER_ID})
+    if previous:
+        if previous.get("request_fingerprint") != fingerprint:
+            raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
+        return _goal_public(previous)
+    fields, initial = await _validate_goal(data)
+    initial = initial or 0.0
+    g = SavingGoal(id=gid, user_id=DEFAULT_USER_ID, current_amount=initial, initial_amount=initial, **fields).model_dump()
+    if g["target_amount"] > 0 and initial >= g["target_amount"]:
+        g["completed_at"] = now_iso()
+    stored = dict(g, _id=gid)
+    if idempotency_key:
+        stored["request_fingerprint"] = fingerprint
+    try:
+        await db.saving_goals.insert_one(stored)
+    except DuplicateKeyError:
+        previous = await db.saving_goals.find_one({"_id": gid, "user_id": DEFAULT_USER_ID})
+        if previous and previous.get("request_fingerprint") == fingerprint:
+            return _goal_public(previous)
+        raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
+    return _goal_public(g)
 
 
 @api.put("/goals/{gid}")
 async def update_goal(gid: str, data: SavingGoalCreate):
-    await db.saving_goals.update_one({"id": gid}, {"$set": data.model_dump()})
-    return await db.saving_goals.find_one({"id": gid}, PROJ)
+    async def operation(session):
+        if not await db.saving_goals.find_one({"id": gid, "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1}, session=session):
+            raise HTTPException(404, "Meta no encontrada.")
+        fields, initial = await _validate_goal(data, replacing=gid, session=session)
+        fields["updated_at"] = now_iso()
+        if initial is not None:
+            fields["initial_amount"] = initial
+        await db.saving_goals.update_one({"id": gid, "user_id": DEFAULT_USER_ID}, {"$set": fields}, session=session)
+        return _goal_public(await recompute_goal(gid, session=session))
+
+    return await payment_transaction(operation)
 
 
 @api.delete("/goals/{gid}")
 async def delete_goal(gid: str):
-    await db.saving_goals.delete_one({"id": gid})
-    return {"ok": True}
+    async def operation(session):
+        g = await db.saving_goals.find_one({"id": gid, "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1}, session=session)
+        if not g:
+            return {"ok": True}
+        await db.goal_contributions.delete_many({"goal_id": gid, "user_id": DEFAULT_USER_ID}, session=session)
+        # Real transfers already moved money between the user's accounts: keep them
+        # (balances unchanged) and only remove the link to the deleted goal.
+        await db.transactions.update_many(
+            {"goal_id": gid, "user_id": DEFAULT_USER_ID},
+            {"$unset": {"goal_id": "", "goal_contribution_id": ""}}, session=session,
+        )
+        await db.saving_goals.delete_one({"id": gid, "user_id": DEFAULT_USER_ID}, session=session)
+        return {"ok": True}
+
+    return await payment_transaction(operation)
+
+
+@api.post("/goals/{gid}/contributions")
+async def create_goal_contribution(
+    gid: str,
+    data: GoalContributionCreate,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=128),
+):
+    cid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:goal-contribution:{gid}:{idempotency_key}")) if idempotency_key else new_id()
+    tid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"goal-contribution-movement:{cid}"))
+    fingerprint = hashlib.sha256(json.dumps({"goal": gid, **data.model_dump()}, sort_keys=True, allow_nan=False).encode()).hexdigest()
+    amount = _positive_money(data.amount, "El monto debe ser mayor que cero.")
+    when = _parse_dt(data.date) if data.date else datetime.now(timezone.utc)
+    if when is None:
+        raise HTTPException(422, "La fecha no es válida.")
+    notes = (data.notes or "").strip()[:200] or None
+
+    async def operation(session):
+        previous = await db.goal_contributions.find_one({"_id": cid, "user_id": DEFAULT_USER_ID}, session=session)
+        if previous:
+            if previous.get("request_fingerprint") != fingerprint:
+                raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
+            g = await db.saving_goals.find_one({"id": gid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+            return {"contribution": _goal_clean(previous), "goal": _goal_public(g) if g else None}
+        g = await recompute_goal(gid, session=session)
+        if not g:
+            raise HTTPException(404, "Meta no encontrada.")
+        if data.account_id and not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+            raise HTTPException(422, "La cuenta seleccionada no existe.")
+        if data.kind == "withdrawal" and Decimal(str(amount)) > Decimal(str(g["current_amount"])):
+            raise HTTPException(422, "El retiro supera el ahorro acumulado de la meta.")
+        tx_id = None
+        if data.real_movement:
+            goal_acc = g.get("account_id")
+            if not goal_acc or not await db.accounts.find_one({"id": goal_acc, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+                raise HTTPException(422, "Para mover dinero real, la meta debe tener una cuenta asociada.")
+            if not data.account_id:
+                raise HTTPException(422, "Selecciona la cuenta para registrar el movimiento real.")
+            if data.account_id == goal_acc:
+                raise HTTPException(422, "La cuenta debe ser distinta de la cuenta asociada a la meta.")
+            src, dst = (data.account_id, goal_acc) if data.kind == "deposit" else (goal_acc, data.account_id)
+            tx = Transaction(
+                id=tid, user_id=DEFAULT_USER_ID, amount=amount, type="transfer", date=when.isoformat(),
+                name=(f"Ahorro: {g['name']}" if data.kind == "deposit" else f"Retiro de meta: {g['name']}"),
+                account_id=src, to_account_id=dst, notes=notes,
+            ).model_dump()
+            tx.update(goal_id=gid, goal_contribution_id=cid)
+            await db.transactions.insert_one(dict(tx, _id=tid), session=session)
+            await recompute_account_balance(src, session=session)
+            await recompute_account_balance(dst, session=session)
+            tx_id = tid
+        contribution = {
+            "id": cid, "user_id": DEFAULT_USER_ID, "goal_id": gid, "kind": data.kind, "amount": amount,
+            "date": when.isoformat(), "account_id": data.account_id or None, "notes": notes,
+            "real_movement": bool(tx_id), "transaction_id": tx_id, "created_at": now_iso(),
+        }
+        stored = dict(contribution, _id=cid)
+        if idempotency_key:
+            stored["request_fingerprint"] = fingerprint
+        await db.goal_contributions.insert_one(stored, session=session)
+        g2 = await recompute_goal(gid, session=session)
+        return {"contribution": contribution, "goal": _goal_public(g2)}
+
+    return await payment_transaction(operation)
 
 
 # Debts
@@ -1246,6 +1543,15 @@ app.add_middleware(
 
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+async def goal_indexes():
+    try:
+        await db.saving_goals.create_index([("user_id", 1), ("created_at", -1)])
+        await db.goal_contributions.create_index([("user_id", 1), ("goal_id", 1), ("date", -1), ("created_at", -1)])
+    except PyMongoError:
+        logger.warning("Could not ensure saving-goal indexes")
 
 
 @app.on_event("shutdown")

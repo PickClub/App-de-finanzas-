@@ -1,7 +1,7 @@
 from fastapi import FastAPI, APIRouter, Header, HTTPException
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import logging, uuid, hashlib, json, math, re
+import logging, uuid, hashlib, json, math, re, calendar
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Literal
 from datetime import date, datetime, timezone, timedelta
@@ -697,6 +697,8 @@ async def update_transaction(tid: str, data: TransactionCreate):
         raise HTTPException(404, "Not found")
     if old.get("goal_contribution_id"):
         raise HTTPException(409, "Este movimiento está vinculado a un aporte de una meta de ahorro; adminístralo desde Metas de ahorro.")
+    if old.get("recurring_record_id"):
+        raise HTTPException(409, "Este movimiento está vinculado a un pago recurrente; adminístralo desde Pagos recurrentes.")
     if old.get("debt_payment_id"):
         return await edit_payment_movement(tid, data)
     if old.get("debt_id") or data.debt_id or data.type == "debt_payment":
@@ -716,6 +718,8 @@ async def delete_transaction(tid: str):
     old = await db.transactions.find_one({"id": tid}, PROJ)
     if old and old.get("goal_contribution_id"):
         raise HTTPException(409, "Este movimiento está vinculado a un aporte de una meta de ahorro; adminístralo desde Metas de ahorro.")
+    if old and old.get("recurring_record_id"):
+        raise HTTPException(409, "Este movimiento está vinculado a un pago recurrente; adminístralo desde Pagos recurrentes.")
     if old and await db.recurring_templates.find_one({"source_transaction_id": tid}, PROJ):
         raise HTTPException(409, "Este movimiento es origen de una recurrencia. Elimina primero esa configuración de recurrencia.")
     if old and old.get("debt_payment_id"):
@@ -1531,6 +1535,580 @@ async def seed():
     )
 
 
+# ---------- Recurring payments (bills / subscriptions) ----------
+# Independent from /api/recurring (config-only templates attached to movements),
+# which stays untouched. Design:
+# * A recurrence stores schedule "versions"; each version applies to due dates
+#   >= its valid_from, so editing amount/frequency/dates never rewrites the past.
+# * Due dates (occurrences) are computed on demand from the schedule (no stored
+#   placeholders -> repeated queries or restarts can never duplicate them).
+# * Payments are stored as records keyed by (recurring_id, due_date):
+#     mark    -> tracking only, no movement, balances untouched
+#     expense -> creates ONE expense movement (atomic, Mongo transaction)
+#     link    -> links an existing expense movement (no new movement)
+# * Nothing is created automatically when a due date arrives.
+RP_FREQS = {
+    "daily": ("d", 1), "weekly": ("d", 7), "biweekly": ("d", 14), "monthly": ("m", 1),
+    "bimonthly": ("m", 2), "quarterly": ("m", 3), "semiannual": ("m", 6), "annual": ("m", 12),
+}
+RP_REMINDERS = {None, 0, 1, 3, 7}
+RP_LINK_FIELDS = ("recurring_record_id", "goal_contribution_id", "debt_payment_id", "debt_id")
+
+
+class RecurringPaymentCreate(BaseModel):
+    name: str = ""
+    amount: float
+    variable: bool = False
+    category_id: Optional[str] = None
+    account_id: Optional[str] = None
+    frequency: str = "monthly"
+    start_date: str
+    end_date: Optional[str] = None
+    due_day: Optional[int] = None
+    icon: str = "receipt-outline"
+    color: str = "#2FA47C"
+    notes: Optional[str] = None
+    reminder_days: Optional[int] = None
+    active: bool = True
+
+
+class RecurringPayRecordCreate(BaseModel):
+    due_date: str
+    mode: Literal["mark", "expense", "link"] = "mark"
+    amount: Optional[float] = None
+    date: Optional[str] = None
+    account_id: Optional[str] = None
+    category_id: Optional[str] = None
+    notes: Optional[str] = None
+    transaction_id: Optional[str] = None
+    # None -> automatic (variable bills settle with the real amount; fixed ones when fully covered).
+    settles: Optional[bool] = None
+    allow_overpay: bool = False
+
+
+def _rp_day(value, msg):
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except (ValueError, TypeError):
+        raise HTTPException(422, msg)
+
+
+def _rp_today(tz_offset: int = 0):
+    return datetime.now(_local_tz(tz_offset)).date()
+
+
+def _rp_dates(ver, a: date, b: date):
+    """Due dates of one schedule version inside [a, b] (inclusive)."""
+    s = date.fromisoformat(ver["start_date"])
+    lo = max(a, s)
+    if lo > b:
+        return []
+    kind, step = RP_FREQS[ver["frequency"]]
+    out = []
+    if kind == "d":
+        n = -(-(lo - s).days // step)
+        d = s + timedelta(days=n * step)
+        while d <= b:
+            out.append(d)
+            d += timedelta(days=step)
+        return out
+    # Month based: the configured day is kept; short months use their last day
+    # for that period only (31 -> 30 Apr -> 28/29 Feb -> 31 Mar).
+    day = ver.get("due_day") or s.day
+    start_idx = s.year * 12 + s.month - 1
+    n = max(0, ((lo.year * 12 + lo.month - 1) - start_idx) // step - 1)
+    while True:
+        y, m0 = divmod(start_idx + n * step, 12)
+        m = m0 + 1
+        d = date(y, m, min(day, calendar.monthrange(y, m)[1]))
+        if d > b:
+            break
+        if d >= lo:
+            out.append(d)
+        n += 1
+    return out
+
+
+def _rp_paused(rp, d: date):
+    for p in rp.get("pauses") or []:
+        if p["start"] <= d.isoformat() and (not p.get("end") or d.isoformat() < p["end"]):
+            return True
+    return False
+
+
+def _rp_occurrences(rp, a: date, b: date):
+    """{due_date_iso: expected_amount} for the recurrence inside [a, b]."""
+    vers = rp.get("versions") or []
+    if rp.get("end_date"):
+        b = min(b, date.fromisoformat(rp["end_date"]))
+    out = {}
+    for i, v in enumerate(vers):
+        vf = date.fromisoformat(v["valid_from"])
+        vt = date.fromisoformat(vers[i + 1]["valid_from"]) - timedelta(days=1) if i + 1 < len(vers) else b
+        lo, hi = max(a, vf), min(b, vt)
+        if lo > hi:
+            continue
+        for d in _rp_dates(v, lo, hi):
+            if not _rp_paused(rp, d):
+                out[d.isoformat()] = float(v["amount"])
+    return out
+
+
+def _rp_state(rp, due_iso, expected, recs, today):
+    paid = sum((Decimal(str(r["amount"])) for r in recs), Decimal(0))
+    if expected is None:
+        expected = recs[0].get("expected_amount", 0) if recs else 0
+    exp = Decimal(str(expected))
+    settled = any(r.get("settles") for r in recs)
+    is_paid = bool(recs) and (settled or paid >= exp)
+    remaining = Decimal(0) if is_paid else max(Decimal(0), exp - paid)
+    status = "paid" if is_paid else ("overdue" if due_iso < today.isoformat() else "pending")
+    return {
+        "due_date": due_iso, "expected": float(exp), "paid": float(paid), "remaining": float(remaining),
+        "status": status, "partial": (not is_paid and paid > 0), "overpaid": float(max(Decimal(0), paid - exp)) if is_paid else 0.0,
+        "records": [{k: v for k, v in r.items() if k not in ("_id", "request_fingerprint")} for r in sorted(recs, key=lambda r: r.get("created_at", ""))],
+    }
+
+
+def _rp_state_name(rp, today):
+    if rp.get("end_date") and rp["end_date"] < today.isoformat():
+        return "ended"
+    return rp.get("state") or "active"
+
+
+def _rp_current(rp):
+    return (rp.get("versions") or [{}])[-1]
+
+
+def _rp_public(rp, today):
+    v = _rp_current(rp)
+    out = {k: val for k, val in rp.items() if k not in ("_id", "request_fingerprint", "versions", "pauses")}
+    out.update(amount=v.get("amount"), frequency=v.get("frequency"), start_date=v.get("start_date"),
+               due_day=v.get("due_day"), state=_rp_state_name(rp, today))
+    return out
+
+
+async def _rp_records(rid=None, a=None, b=None, session=None):
+    q = {"user_id": DEFAULT_USER_ID}
+    if rid:
+        q["recurring_id"] = rid
+    if a or b:
+        q["due_date"] = {}
+        if a:
+            q["due_date"]["$gte"] = a.isoformat()
+        if b:
+            q["due_date"]["$lte"] = b.isoformat()
+    grouped = {}
+    async for r in db.recurring_payment_records.find(q, {"_id": 0, "request_fingerprint": 0}, session=session):
+        grouped.setdefault((r["recurring_id"], r["due_date"]), []).append(r)
+    return grouped
+
+
+def _rp_month_states(rp, a, b, records, today):
+    occ = _rp_occurrences(rp, a, b)
+    for (rid, due), _ in records.items():
+        if rid == rp["id"] and due not in occ and a.isoformat() <= due <= b.isoformat():
+            occ[due] = None  # paid occurrence that no longer matches the current schedule
+    return [_rp_state(rp, d, occ[d], records.get((rp["id"], d), []), today) for d in sorted(occ)]
+
+
+def _rp_next_due(rp, records, today, horizon_days=800):
+    for d, exp in sorted(_rp_occurrences(rp, today, today + timedelta(days=horizon_days)).items()):
+        st = _rp_state(rp, d, exp, records.get((rp["id"], d), []), today)
+        if st["status"] != "paid":
+            return st
+    return None
+
+
+async def _rp_validate(data: RecurringPaymentCreate, session=None):
+    name = (data.name or "").strip()
+    if not name:
+        raise HTTPException(422, "El nombre del pago es obligatorio.")
+    if len(name) > 60:
+        raise HTTPException(422, "El nombre es demasiado largo (máx. 60).")
+    amount = _positive_money(data.amount, "El monto previsto debe ser mayor que cero.")
+    if data.frequency not in RP_FREQS:
+        raise HTTPException(422, "Frecuencia no válida.")
+    start = _rp_day(data.start_date, "La fecha de inicio no es válida.")
+    end = _rp_day(data.end_date, "La fecha de finalización no es válida.") if data.end_date else None
+    if end and end < start:
+        raise HTTPException(422, "La fecha de finalización debe ser posterior a la de inicio.")
+    due_day = None
+    if RP_FREQS[data.frequency][0] == "m":
+        due_day = start.day if data.due_day is None else data.due_day
+        if not 1 <= due_day <= 31:
+            raise HTTPException(422, "El día de vencimiento debe estar entre 1 y 31.")
+    if data.reminder_days not in RP_REMINDERS:
+        raise HTTPException(422, "Recordatorio no válido.")
+    if data.category_id:
+        cat = await db.categories.find_one({"id": data.category_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        if not cat or cat.get("type") != "expense" or cat.get("is_group"):
+            raise HTTPException(422, "La categoría debe ser una categoría de gasto existente.")
+    if data.account_id and not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+        raise HTTPException(422, "La cuenta asociada no existe.")
+    color = data.color if re.fullmatch(r"#[0-9a-fA-F]{6}", data.color or "") else "#2FA47C"
+    fields = {
+        "name": name, "variable": bool(data.variable), "category_id": data.category_id or None,
+        "account_id": data.account_id or None, "end_date": end.isoformat() if end else None,
+        "icon": (data.icon or "receipt-outline")[:40], "color": color,
+        "notes": (data.notes or "").strip()[:200] or None, "reminder_days": data.reminder_days,
+    }
+    version = {"frequency": data.frequency, "start_date": start.isoformat(), "due_day": due_day, "amount": amount}
+    return fields, version
+
+
+async def _rp_get(rid, session=None):
+    rp = await db.recurring_payments.find_one({"id": rid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+    if not rp:
+        raise HTTPException(404, "Pago recurrente no encontrado.")
+    return rp
+
+
+@api.get("/recurring-payments")
+async def list_recurring_payments(tz_offset: int = 0):
+    today = _rp_today(tz_offset)
+    rps = await db.recurring_payments.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("created_at", -1).to_list(500)
+    return [_rp_public(rp, today) for rp in rps]
+
+
+@api.get("/recurring-payments/overview")
+async def recurring_overview(year: Optional[int] = None, month: Optional[int] = None, tz_offset: int = 0):
+    today = _rp_today(tz_offset)
+    year, month = year or today.year, month or today.month
+    if not 1 <= month <= 12 or not 1900 <= year <= 3000:
+        raise HTTPException(422, "Mes no válido.")
+    a = date(year, month, 1)
+    b = date(year, month, calendar.monthrange(year, month)[1])
+    rps = await db.recurring_payments.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("created_at", -1).to_list(500)
+    rem_hi = today + timedelta(days=7)
+    records = await _rp_records(a=min(a, today - timedelta(days=400)), b=max(b, rem_hi + timedelta(days=800)))
+    tot = {"expected": Decimal(0), "paid": Decimal(0), "pending": Decimal(0)}
+    counts = {"total": 0, "paid": 0, "pending": 0, "overdue": 0}
+    items, reminders = [], []
+    for rp in rps:
+        pub = _rp_public(rp, today)
+        states = _rp_month_states(rp, a, b, records, today)
+        for st in states:
+            counts["total"] += 1
+            tot["expected"] += Decimal(str(st["expected"]))
+            tot["paid"] += Decimal(str(st["paid"]))
+            tot["pending"] += Decimal(str(st["remaining"]))
+            if st["status"] == "paid":
+                counts["paid"] += 1
+            else:
+                counts["pending"] += 1
+                if st["status"] == "overdue":
+                    counts["overdue"] += 1
+        if states:
+            unpaid = [s for s in states if s["status"] != "paid"]
+            focus = unpaid[0] if unpaid else states[-1]
+            card_status = "overdue" if any(s["status"] == "overdue" for s in states) else ("pending" if unpaid else "paid")
+        elif pub["state"] in ("active", "paused"):
+            focus = _rp_next_due(rp, records, today) if pub["state"] == "active" else None
+            card_status = "paused" if pub["state"] == "paused" else "upcoming"
+        else:
+            continue  # ended and nothing due this month
+        items.append({
+            **pub, "card_status": card_status, "due_date": focus["due_date"] if focus else None,
+            "due_expected": focus["expected"] if focus else pub["amount"], "due_paid": focus["paid"] if focus else 0,
+            "due_remaining": focus["remaining"] if focus else 0, "partial": bool(focus and focus["partial"]),
+            "month_count": len(states), "month_paid_count": sum(1 for s in states if s["status"] == "paid"),
+            "month_expected": float(sum((Decimal(str(s["expected"])) for s in states), Decimal(0))),
+            "month_paid": float(sum((Decimal(str(s["paid"])) for s in states), Decimal(0))),
+        })
+        # In-app reminders (independent from the selected month).
+        if pub["state"] == "active" and rp.get("reminder_days") is not None:
+            for d, exp in sorted(_rp_occurrences(rp, today, rem_hi).items()):
+                left = (date.fromisoformat(d) - today).days
+                st = _rp_state(rp, d, exp, records.get((rp["id"], d), []), today)
+                if st["status"] != "paid" and left <= rp["reminder_days"]:
+                    reminders.append({"id": rp["id"], "name": rp["name"], "icon": rp.get("icon"), "color": rp.get("color"),
+                                      "due_date": d, "days_left": left, "remaining": st["remaining"]})
+                    break
+    settled_base = tot["paid"] + tot["pending"]
+    pct = float((tot["paid"] / settled_base * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)) if settled_base > 0 else None
+    return {
+        "year": year, "month": month, "today": today.isoformat(),
+        "totals": {"expected": float(tot["expected"]), "paid": float(tot["paid"]), "pending": float(tot["pending"]), "paid_pct": pct},
+        "counts": counts, "items": items, "reminders": sorted(reminders, key=lambda r: r["due_date"]),
+    }
+
+
+@api.get("/recurring-payments/{rid}")
+async def get_recurring_payment(rid: str, tz_offset: int = 0):
+    today = _rp_today(tz_offset)
+    rp = await _rp_get(rid)
+    records = await _rp_records(rid=rid)
+    out = _rp_public(rp, today)
+    out["next_due"] = _rp_next_due(rp, records, today) if out["state"] == "active" else None
+    out["paid_total"] = float(sum((Decimal(str(r["amount"])) for rs in records.values() for r in rs), Decimal(0)))
+    out["payments_count"] = sum(len(rs) for rs in records.values())
+    out["account"] = await db.accounts.find_one({"id": rp.get("account_id"), "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1, "color": 1}) if rp.get("account_id") else None
+    out["category"] = await db.categories.find_one({"id": rp.get("category_id"), "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1, "icon": 1, "color": 1}) if rp.get("category_id") else None
+    return out
+
+
+@api.get("/recurring-payments/{rid}/occurrences")
+async def recurring_occurrences(rid: str, offset: int = 0, limit: int = 20, tz_offset: int = 0):
+    today = _rp_today(tz_offset)
+    rp = await _rp_get(rid)
+    limit, offset = max(1, min(int(limit), 100)), max(0, int(offset))
+    records = await _rp_records(rid=rid)
+    first = min((date.fromisoformat(v["start_date"]) for v in rp.get("versions") or []), default=today)
+    nxt = _rp_next_due(rp, records, today)
+    hi = max(date(today.year, today.month, calendar.monthrange(today.year, today.month)[1]),
+             date.fromisoformat(nxt["due_date"]) if nxt else today)
+    occ = _rp_occurrences(rp, first, hi)
+    for (_, due) in records:
+        occ.setdefault(due, None)
+    dues = sorted(occ, reverse=True)
+    page = dues[offset:offset + limit]
+    items = [_rp_state(rp, d, occ[d], records.get((rid, d), []), today) for d in page]
+    return {"items": items, "total": len(dues), "offset": offset, "limit": limit, "has_more": offset + len(page) < len(dues)}
+
+
+@api.get("/recurring-payments/{rid}/link-candidates")
+async def recurring_link_candidates(rid: str, due_date: str):
+    rp = await _rp_get(rid)
+    d = _rp_day(due_date, "Fecha no válida.")
+    lo = datetime.combine(d - timedelta(days=15), datetime.min.time(), timezone.utc).isoformat()
+    hi = datetime.combine(d + timedelta(days=16), datetime.min.time(), timezone.utc).isoformat()
+    q = {"user_id": DEFAULT_USER_ID, "type": "expense", "date": {"$gte": lo, "$lt": hi}}
+    for f in RP_LINK_FIELDS:
+        q[f] = None
+    txs = await db.transactions.find(q, PROJ).sort("date", -1).to_list(200)
+    target = _rp_current(rp).get("amount") or 0
+    txs.sort(key=lambda t: (abs(t["amount"] - target), 0 if t.get("category_id") == rp.get("category_id") else 1))
+    return txs[:10]
+
+
+@api.post("/recurring-payments")
+async def create_recurring_payment(
+    data: RecurringPaymentCreate,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=128),
+):
+    rid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:recurring-payment:{idempotency_key}")) if idempotency_key else new_id()
+    fingerprint = hashlib.sha256(json.dumps(data.model_dump(), sort_keys=True, allow_nan=False).encode()).hexdigest()
+    today = _rp_today()
+    prev = await db.recurring_payments.find_one({"_id": rid, "user_id": DEFAULT_USER_ID})
+    if prev:
+        if prev.get("request_fingerprint") != fingerprint:
+            raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
+        return _rp_public(prev, today)
+    fields, version = await _rp_validate(data)
+    now = now_iso()
+    rp = {
+        "id": rid, "user_id": DEFAULT_USER_ID, **fields, "state": "active" if data.active else "paused",
+        "versions": [{**version, "valid_from": version["start_date"]}],
+        "pauses": [] if data.active else [{"start": min(today, date.fromisoformat(version["start_date"])).isoformat(), "end": None}],
+        "created_at": now, "updated_at": None,
+    }
+    stored = dict(rp, _id=rid)
+    if idempotency_key:
+        stored["request_fingerprint"] = fingerprint
+    try:
+        await db.recurring_payments.insert_one(stored)
+    except DuplicateKeyError:
+        prev = await db.recurring_payments.find_one({"_id": rid, "user_id": DEFAULT_USER_ID})
+        if prev and prev.get("request_fingerprint") == fingerprint:
+            return _rp_public(prev, today)
+        raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
+    return _rp_public(rp, today)
+
+
+@api.put("/recurring-payments/{rid}")
+async def update_recurring_payment(rid: str, data: RecurringPaymentCreate):
+    today = _rp_today()
+
+    async def operation(session):
+        rp = await _rp_get(rid, session)
+        fields, version = await _rp_validate(data, session)
+        cur = _rp_current(rp)
+        vers = rp.get("versions") or []
+        if any(cur.get(k) != version[k] for k in ("frequency", "start_date", "due_day", "amount")):
+            first_start = min((v["start_date"] for v in vers), default=version["start_date"])
+            if first_start >= today.isoformat():
+                vers = [{**version, "valid_from": version["start_date"]}]
+            else:
+                # Past due dates keep the previous schedule/amount; the new one applies from today.
+                cutoff = today.isoformat()
+                vers = [v for v in vers if v["valid_from"] < cutoff] + [{**version, "valid_from": cutoff}]
+        fields.update(versions=vers, updated_at=now_iso())
+        await db.recurring_payments.update_one({"id": rid, "user_id": DEFAULT_USER_ID}, {"$set": fields}, session=session)
+        return _rp_public(await _rp_get(rid, session), today)
+
+    return await payment_transaction(operation)
+
+
+async def _rp_set_state(rid, action):
+    today = _rp_today()
+    rp = await _rp_get(rid)
+    state = _rp_state_name(rp, today)
+    pauses = rp.get("pauses") or []
+    upd = {"updated_at": now_iso()}
+    if action == "pause":
+        if state != "active":
+            raise HTTPException(409, "Solo se puede pausar un pago activo.")
+        upd.update(state="paused", pauses=pauses + [{"start": today.isoformat(), "end": None}])
+    elif action == "resume":
+        if state != "paused":
+            raise HTTPException(409, "Solo se puede reactivar un pago pausado.")
+        upd.update(state="active", pauses=[dict(p, end=p.get("end") or today.isoformat()) for p in pauses])
+    else:
+        if state == "ended":
+            raise HTTPException(409, "La recurrencia ya está finalizada.")
+        end = today.isoformat()
+        if rp.get("end_date") and rp["end_date"] < end:
+            end = rp["end_date"]
+        upd.update(state="ended", end_date=end, pauses=[dict(p, end=p.get("end") or today.isoformat()) for p in pauses])
+    await db.recurring_payments.update_one({"id": rid, "user_id": DEFAULT_USER_ID}, {"$set": upd})
+    return _rp_public(await _rp_get(rid), today)
+
+
+@api.post("/recurring-payments/{rid}/pause")
+async def pause_recurring_payment(rid: str):
+    return await _rp_set_state(rid, "pause")
+
+
+@api.post("/recurring-payments/{rid}/resume")
+async def resume_recurring_payment(rid: str):
+    return await _rp_set_state(rid, "resume")
+
+
+@api.post("/recurring-payments/{rid}/end")
+async def end_recurring_payment(rid: str):
+    return await _rp_set_state(rid, "end")
+
+
+@api.delete("/recurring-payments/{rid}")
+async def delete_recurring_payment(rid: str):
+    async def operation(session):
+        if not await db.recurring_payments.find_one({"id": rid, "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1}, session=session):
+            return {"ok": True}
+        await db.recurring_payment_records.delete_many({"recurring_id": rid, "user_id": DEFAULT_USER_ID}, session=session)
+        # Real expenses stay (money was really spent); only the link is removed. Balances unchanged.
+        await db.transactions.update_many(
+            {"recurring_payment_id": rid, "user_id": DEFAULT_USER_ID},
+            {"$unset": {"recurring_payment_id": "", "recurring_record_id": ""}}, session=session,
+        )
+        await db.recurring_payments.delete_one({"id": rid, "user_id": DEFAULT_USER_ID}, session=session)
+        return {"ok": True}
+
+    return await payment_transaction(operation)
+
+
+@api.post("/recurring-payments/{rid}/payments")
+async def create_recurring_record(
+    rid: str,
+    data: RecurringPayRecordCreate,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=128),
+):
+    pid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:recurring-record:{rid}:{idempotency_key}")) if idempotency_key else new_id()
+    tid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"recurring-record-movement:{pid}"))
+    fingerprint = hashlib.sha256(json.dumps({"rid": rid, **data.model_dump()}, sort_keys=True, allow_nan=False).encode()).hexdigest()
+    due = _rp_day(data.due_date, "La fecha de vencimiento no es válida.").isoformat()
+    when = _parse_dt(data.date) if data.date else datetime.now(timezone.utc)
+    if when is None:
+        raise HTTPException(422, "La fecha efectiva no es válida.")
+    notes = (data.notes or "").strip()[:200] or None
+    today = _rp_today()
+
+    async def operation(session):
+        prev = await db.recurring_payment_records.find_one({"_id": pid, "user_id": DEFAULT_USER_ID}, session=session)
+        if prev:
+            if prev.get("request_fingerprint") != fingerprint:
+                raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
+            return {k: v for k, v in prev.items() if k not in ("_id", "request_fingerprint")}
+        rp = await _rp_get(rid, session)
+        d = date.fromisoformat(due)
+        occ = _rp_occurrences(rp, d, d)
+        records = await _rp_records(rid=rid, a=d, b=d, session=session)
+        existing = records.get((rid, due), [])
+        if due not in occ and not existing:
+            raise HTTPException(422, "La fecha no corresponde a un vencimiento de este pago.")
+        st = _rp_state(rp, due, occ.get(due), existing, today)
+        expected = Decimal(str(st["expected"]))
+        tx = None
+        if data.mode == "link":
+            if not data.transaction_id:
+                raise HTTPException(422, "Selecciona el movimiento a vincular.")
+            tx = await db.transactions.find_one({"id": data.transaction_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+            if not tx or tx.get("type") != "expense":
+                raise HTTPException(422, "El movimiento a vincular debe ser un gasto existente.")
+            if any(tx.get(f) for f in RP_LINK_FIELDS):
+                raise HTTPException(409, "Ese movimiento ya está vinculado a otro registro.")
+            amount = float(tx["amount"])
+        else:
+            amount = _positive_money(data.amount, "El monto pagado debe ser mayor que cero.")
+        if data.account_id and not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+            raise HTTPException(422, "La cuenta seleccionada no existe.")
+        cat_id = data.category_id or rp.get("category_id")
+        if data.category_id:
+            cat = await db.categories.find_one({"id": data.category_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+            if not cat or cat.get("type") != "expense" or cat.get("is_group"):
+                raise HTTPException(422, "La categoría debe ser una categoría de gasto existente.")
+        if not rp.get("variable") and not data.allow_overpay:
+            if st["status"] == "paid":
+                raise HTTPException(409, "Este vencimiento ya está pagado.")
+            if Decimal(str(amount)) > Decimal(str(st["remaining"])) + Decimal("0.001"):
+                raise HTTPException(422, f"El monto supera lo pendiente ({st['remaining']:.2f}). Confirma el sobrepago para continuar.")
+        settles = data.settles if data.settles is not None else bool(rp.get("variable"))
+        link = {"recurring_payment_id": rid, "recurring_record_id": pid}
+        if data.mode == "expense":
+            if not data.account_id:
+                raise HTTPException(422, "Selecciona la cuenta de origen para registrar el gasto.")
+            new_tx = Transaction(
+                id=tid, user_id=DEFAULT_USER_ID, name=rp["name"], amount=amount, type="expense",
+                date=when.isoformat(), category_id=cat_id, account_id=data.account_id, notes=notes,
+            ).model_dump()
+            new_tx.update(link)
+            await db.transactions.insert_one(dict(new_tx, _id=tid), session=session)
+            await recompute_account_balance(data.account_id, session=session)
+            tx_id = tid
+        elif data.mode == "link":
+            await db.transactions.update_one({"id": tx["id"], "user_id": DEFAULT_USER_ID}, {"$set": link}, session=session)
+            tx_id = tx["id"]
+        else:
+            tx_id = None
+        record = {
+            "id": pid, "user_id": DEFAULT_USER_ID, "recurring_id": rid, "due_date": due, "mode": data.mode,
+            "amount": amount, "expected_amount": float(expected), "date": (tx["date"] if tx else when.isoformat()),
+            "account_id": (tx.get("account_id") if tx else data.account_id) or None, "category_id": (tx.get("category_id") if tx else cat_id) or None,
+            "notes": notes, "transaction_id": tx_id, "settles": bool(settles), "created_at": now_iso(),
+        }
+        stored = dict(record, _id=pid)
+        if idempotency_key:
+            stored["request_fingerprint"] = fingerprint
+        await db.recurring_payment_records.insert_one(stored, session=session)
+        return record
+
+    return await payment_transaction(operation)
+
+
+@api.delete("/recurring-payments/payments/{pid}")
+async def delete_recurring_record(pid: str):
+    async def operation(session):
+        rec = await db.recurring_payment_records.find_one({"id": pid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        if not rec:
+            return {"ok": True}
+        tid = rec.get("transaction_id")
+        if tid and rec["mode"] == "expense":
+            tx = await db.transactions.find_one({"id": tid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+            if tx and tx.get("recurring_record_id") == pid:
+                await db.transactions.delete_one({"id": tid, "user_id": DEFAULT_USER_ID}, session=session)
+                if tx.get("account_id"):
+                    await recompute_account_balance(tx["account_id"], session=session)
+        elif tid:
+            await db.transactions.update_one(
+                {"id": tid, "user_id": DEFAULT_USER_ID, "recurring_record_id": pid},
+                {"$unset": {"recurring_payment_id": "", "recurring_record_id": ""}}, session=session,
+            )
+        await db.recurring_payment_records.delete_one({"id": pid, "user_id": DEFAULT_USER_ID}, session=session)
+        return {"ok": True}
+
+    return await payment_transaction(operation)
+
+
 app.include_router(api)
 
 app.add_middleware(
@@ -1550,6 +2128,9 @@ async def goal_indexes():
     try:
         await db.saving_goals.create_index([("user_id", 1), ("created_at", -1)])
         await db.goal_contributions.create_index([("user_id", 1), ("goal_id", 1), ("date", -1), ("created_at", -1)])
+        await db.recurring_payments.create_index([("user_id", 1), ("created_at", -1)])
+        await db.recurring_payment_records.create_index([("user_id", 1), ("recurring_id", 1), ("due_date", -1)])
+        await db.recurring_payment_records.create_index([("user_id", 1), ("due_date", 1)])
     except PyMongoError:
         logger.warning("Could not ensure saving-goal indexes")
 

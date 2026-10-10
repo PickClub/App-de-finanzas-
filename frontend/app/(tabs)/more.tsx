@@ -62,7 +62,7 @@ export default function More() {
     { icon: "pie-chart", label: t("more.budgets"), subtitle: t("more.subBudgets"), ...PALETTE.coral, route: "/budgets" },
     { icon: "radio-button-on", label: t("more.savingsGoals"), subtitle: t("more.subGoals"), ...PALETTE.green, route: "/goals" },
     { icon: "server", label: t("more.debtsAndLoans"), subtitle: t("more.subDebts"), ...PALETTE.gold, route: "/debts" },
-    { icon: "sync", label: t("more.recurringPayments"), subtitle: t("more.subRecurring"), ...PALETTE.violet },
+    { icon: "sync", label: t("more.recurringPayments"), subtitle: t("more.subRecurring"), ...PALETTE.violet, route: "/recurring" },
     { icon: "document-text", label: t("more.invoices"), subtitle: t("more.subInvoices"), ...PALETTE.blue },
     { icon: "calendar", label: t("more.financialCalendar"), subtitle: t("more.subCalendar"), ...PALETTE.mint },
   ];

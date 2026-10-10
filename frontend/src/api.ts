@@ -93,6 +93,21 @@ export const api = {
   // Summary
   summary: () => request<any>("/summary"),
   seed: () => request<any>("/seed", { method: "POST" }),
+  // Recurring payments (bills / subscriptions with due dates)
+  rpOverview: (year: number, month: number) =>
+    request<any>(`/recurring-payments/overview?year=${year}&month=${month}&tz_offset=${new Date().getTimezoneOffset()}`),
+  rpGet: (id: string) => request<any>(`/recurring-payments/${id}?tz_offset=${new Date().getTimezoneOffset()}`),
+  rpOccurrences: (id: string, offset = 0, limit = 20) =>
+    request<any>(`/recurring-payments/${id}/occurrences?offset=${offset}&limit=${limit}&tz_offset=${new Date().getTimezoneOffset()}`),
+  rpCandidates: (id: string, due: string) => request<any[]>(`/recurring-payments/${id}/link-candidates?due_date=${due}`),
+  rpCreate: (d: any, key?: string) =>
+    request<any>("/recurring-payments", { method: "POST", body: JSON.stringify(d), headers: key ? { "Idempotency-Key": key } : {} }),
+  rpUpdate: (id: string, d: any) => request<any>(`/recurring-payments/${id}`, { method: "PUT", body: JSON.stringify(d) }),
+  rpAction: (id: string, action: "pause" | "resume" | "end") => request<any>(`/recurring-payments/${id}/${action}`, { method: "POST" }),
+  rpDelete: (id: string) => request<any>(`/recurring-payments/${id}`, { method: "DELETE" }),
+  rpPay: (id: string, d: any, key?: string) =>
+    request<any>(`/recurring-payments/${id}/payments`, { method: "POST", body: JSON.stringify(d), headers: key ? { "Idempotency-Key": key } : {} }),
+  rpDeletePayment: (pid: string) => request<any>(`/recurring-payments/payments/${pid}`, { method: "DELETE" }),
   // Recurring templates (config only)
   listRecurring: () => request<any[]>("/recurring"),
   createRecurring: (d: any) => request<any>("/recurring", { method: "POST", body: JSON.stringify(d) }),

@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Any, Optional, List
 
 # Use the public backend URL
-BASE_URL = "https://test-deploy-470.preview.emergentagent.com/api"
+BASE_URL = "https://demo-view-38.preview.emergentagent.com/api"
 
 class Colors:
     GREEN = '\033[92m'

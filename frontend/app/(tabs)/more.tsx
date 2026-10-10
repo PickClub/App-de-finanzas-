@@ -55,7 +55,7 @@ export default function More() {
     isDark ? [m.color + "38", m.color + "10"] : [m.from, m.to];
 
   // Navigation of the first six cards is preserved exactly (recurring had no route).
-  // Facturas / Calendario financiero have no screens yet -> no route (visual only).
+  // Facturas has no screen yet -> no route (visual only). Calendario -> /calendar.
   const MONEY: MoneyTile[] = [
     { icon: "wallet", label: t("more.accounts"), subtitle: t("more.subAccounts"), ...PALETTE.mint, route: "/accounts" },
     { icon: "pricetag-outline", label: t("more.categories"), subtitle: t("more.subCategories"), ...PALETTE.orange, route: "/categories" },
@@ -64,7 +64,7 @@ export default function More() {
     { icon: "server", label: t("more.debtsAndLoans"), subtitle: t("more.subDebts"), ...PALETTE.gold, route: "/debts" },
     { icon: "sync", label: t("more.recurringPayments"), subtitle: t("more.subRecurring"), ...PALETTE.violet, route: "/recurring" },
     { icon: "document-text", label: t("more.invoices"), subtitle: t("more.subInvoices"), ...PALETTE.blue },
-    { icon: "calendar", label: t("more.financialCalendar"), subtitle: t("more.subCalendar"), ...PALETTE.mint },
+    { icon: "calendar", label: t("more.financialCalendar"), subtitle: t("more.subCalendar"), ...PALETTE.mint, route: "/calendar" },
   ];
 
   const APP: Tile[] = [

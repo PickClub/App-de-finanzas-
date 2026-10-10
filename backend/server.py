@@ -2109,6 +2109,273 @@ async def delete_recurring_record(pid: str):
     return await payment_transaction(operation)
 
 
+# ---------- Financial calendar (READ-ONLY aggregation layer) ----------
+# Builds calendar events on demand from the existing collections (transactions,
+# recurring payments + records, debts, saving goals + contributions). Nothing is
+# copied, stored or generated: every event keeps a reference to its source record.
+# Integrity rules:
+# * realized=True  -> money that really moved (registered movements).
+# * realized=False -> planned/expected obligations (never touch balances or totals
+#   of real money). Pending recurring dues show only their REMAINING amount, and a
+#   due already paid through a movement is represented by that movement (no double count).
+# * Transfers and goal tracking contributions are never income nor expense.
+# * "bill" (Facturas) has no data source yet -> always empty, never invented.
+CAL_KINDS = ("income", "expense", "recurring", "bill", "debt", "goal", "other")
+CAL_MAX_DAYS = 400
+
+
+def _cal_types(types: Optional[str]):
+    if not types:
+        return set(CAL_KINDS)
+    sel = {t.strip() for t in types.split(",") if t.strip()}
+    bad = sel - set(CAL_KINDS)
+    if bad:
+        raise HTTPException(422, "Tipo de evento no válido.")
+    return sel
+
+
+def _cal_dt(value, tz):
+    """(local_date, 'HH:MM' | None). Date-only values have no time (all-day)."""
+    s = str(value or "")
+    if len(s) <= 10:
+        try:
+            return date.fromisoformat(s[:10]), None
+        except ValueError:
+            return None, None
+    dt = _parse_dt(s)
+    if not dt:
+        return None, None
+    loc = dt.astimezone(tz)
+    return loc.date(), loc.strftime("%H:%M")
+
+
+def _cal_str_window(a: date, b: date):
+    # Stored dates are ISO strings; widen by 2 days so any UTC offset is covered,
+    # then the exact local-date filter is applied in Python.
+    return (a - timedelta(days=2)).isoformat(), (b + timedelta(days=2)).isoformat() + "\uffff"
+
+
+async def _cal_events(a: date, b: date, tz, today: date):
+    U = DEFAULT_USER_ID
+    accounts = {x["id"]: x for x in await db.accounts.find({"user_id": U}, {"_id": 0, "id": 1, "name": 1}).to_list(2000)}
+    cats = {x["id"]: x for x in await db.categories.find({"user_id": U}, {"_id": 0, "id": 1, "name": 1, "icon": 1, "color": 1}).to_list(5000)}
+    goals = {x["id"]: x for x in await db.saving_goals.find({"user_id": U}, PROJ).to_list(1000)}
+    debts = await db.debts.find({"user_id": U}, PROJ).to_list(2000)
+    debt_by_id = {d["id"]: d for d in debts}
+    rps = await db.recurring_payments.find({"user_id": U}, PROJ).to_list(1000)
+    rp_by_id = {r["id"]: r for r in rps}
+    lo, hi = _cal_str_window(a, b)
+    events = []
+
+    def acc_name(aid):
+        return (accounts.get(aid) or {}).get("name") if aid else None
+
+    # 1) Registered movements (real money).
+    async for t in db.transactions.find({"user_id": U, "date": {"$gte": lo, "$lte": hi}}, PROJ):
+        d, hm = _cal_dt(t.get("date"), tz)
+        if not d or not (a <= d <= b):
+            continue
+        if t.get("goal_contribution_id"):
+            continue  # represented by its goal contribution (single event, no duplicate)
+        typ, amount = t.get("type"), float(t.get("amount") or 0)
+        cat = cats.get(t.get("category_id")) or {}
+        links = {}
+        flow, sign, net = typ, 0, True
+        if typ == "income":
+            sign = 1
+            if t.get("debt_payment_id") or t.get("debt_id"):
+                kind, sub = "debt", "debt_collection"
+                links["debt_id"] = t.get("debt_id")
+            else:
+                kind, sub = "income", "income"
+        elif typ == "expense":
+            sign = -1
+            if t.get("recurring_record_id"):
+                kind, sub = "recurring", "recurring_paid"
+                links["recurring_id"] = t.get("recurring_payment_id")
+            else:
+                kind, sub = "expense", "expense"
+        elif typ == "debt_payment":
+            kind, sub, sign = "debt", "debt_payment", -1
+            links["debt_id"] = t.get("debt_id")
+        elif typ == "loan_given":
+            kind, sub, sign = "debt", "loan_given", -1
+        elif typ == "loan_received":
+            kind, sub, sign = "debt", "loan_received", 1
+        else:  # transfer between own accounts: neither income nor expense
+            kind, sub, sign, net = "other", "transfer", 0, False
+        rp = rp_by_id.get(links.get("recurring_id")) if links.get("recurring_id") else None
+        debt = debt_by_id.get(links.get("debt_id")) if links.get("debt_id") else None
+        detail = acc_name(t.get("account_id"))
+        if typ == "transfer":
+            src, dst = acc_name(t.get("account_id")), acc_name(t.get("to_account_id"))
+            detail = " → ".join(x for x in (src, dst) if x) or None
+        events.append({
+            "id": f"tx:{t['id']}", "kind": kind, "subtype": sub, "source": "transaction", "ref_id": t["id"],
+            "date": d.isoformat(), "time": hm, "title": t.get("name") or "", "account": detail,
+            "category": cat.get("name"), "amount": amount, "sign": sign, "realized": True,
+            "counts_in_net": net, "flow": flow, "status": "done",
+            "icon": (rp or {}).get("icon") or cat.get("icon") or (debt or {}).get("icon"),
+            "color": (rp or {}).get("color") or cat.get("color"), "links": links,
+        })
+
+    # 2) Goal contributions (tracking only -> never income/expense).
+    async for c in db.goal_contributions.find({"user_id": U, "date": {"$gte": lo, "$lte": hi}}, {"_id": 0, "request_fingerprint": 0}):
+        d, hm = _cal_dt(c.get("date"), tz)
+        if not d or not (a <= d <= b):
+            continue
+        g = goals.get(c.get("goal_id")) or {}
+        events.append({
+            "id": f"gc:{c['id']}", "kind": "goal", "subtype": "goal_deposit" if c.get("kind") == "deposit" else "goal_withdrawal",
+            "source": "goal", "ref_id": c.get("goal_id"), "date": d.isoformat(), "time": hm,
+            "title": g.get("name") or "", "account": acc_name(c.get("account_id")), "category": None,
+            "amount": float(c.get("amount") or 0), "sign": 0, "realized": bool(c.get("real_movement")),
+            "counts_in_net": False, "flow": "goal", "status": "done", "icon": g.get("icon"), "color": g.get("color"),
+            "links": {"goal_id": c.get("goal_id"), "contribution_id": c["id"], "transaction_id": c.get("transaction_id")},
+        })
+
+    # 3) Goal target dates (planned milestone, all-day).
+    for g in goals.values():
+        td = g.get("target_date")
+        if not td:
+            continue
+        try:
+            d = date.fromisoformat(str(td)[:10])
+        except ValueError:
+            continue
+        if not (a <= d <= b):
+            continue
+        pub = _goal_public(g, today)
+        status = "completed" if pub["completed"] else ("overdue" if d < today else "target")
+        events.append({
+            "id": f"goal:{g['id']}", "kind": "goal", "subtype": "goal_target", "source": "goal", "ref_id": g["id"],
+            "date": d.isoformat(), "time": None, "title": g.get("name") or "", "account": acc_name(g.get("account_id")),
+            "category": None, "amount": float(pub["remaining"]), "sign": 0, "realized": False, "counts_in_net": False,
+            "flow": "goal", "status": status, "icon": g.get("icon"), "color": g.get("color"), "links": {"goal_id": g["id"]},
+        })
+
+    # 4) Recurring payment dues (planned). Paid dues settled by a movement are
+    #    represented by that movement; tracking-only marks are shown as "marked".
+    if rps:
+        records = await _rp_records(a=a, b=b)
+        for rp in rps:
+            for st in _rp_month_states(rp, a, b, records, today):
+                recs = st["records"]
+                cat = cats.get(rp.get("category_id")) or {}
+                base = {
+                    "kind": "recurring", "source": "recurring", "ref_id": rp["id"], "date": st["due_date"], "time": None,
+                    "title": rp.get("name") or "", "account": acc_name(rp.get("account_id")), "category": cat.get("name"),
+                    "sign": -1, "realized": False, "counts_in_net": False, "flow": "planned_expense",
+                    "icon": rp.get("icon"), "color": rp.get("color"), "links": {"recurring_id": rp["id"]},
+                }
+                if st["status"] == "paid":
+                    marks = [r for r in recs if not r.get("transaction_id")]
+                    if not marks:
+                        continue  # fully represented by the linked movement(s)
+                    amt = float(sum((Decimal(str(r["amount"])) for r in marks), Decimal(0)))
+                    events.append({**base, "id": f"rp:{rp['id']}:{st['due_date']}", "subtype": "recurring_marked",
+                                   "amount": amt, "status": "marked", "sign": 0})
+                else:
+                    events.append({**base, "id": f"rp:{rp['id']}:{st['due_date']}", "subtype": "recurring_due",
+                                   "amount": st["remaining"], "status": st["status"], "partial": st["partial"],
+                                   "expected": st["expected"]})
+
+    # 5) Debt due dates (planned; payments are already real movements above).
+    for dbt in debts:
+        dd = dbt.get("due_date")
+        if not dd or dbt.get("status") != "active" or float(dbt.get("remaining_amount") or 0) <= 0:
+            continue
+        try:
+            d = date.fromisoformat(str(dd)[:10])
+        except ValueError:
+            continue
+        if not (a <= d <= b):
+            continue
+        i_owe = dbt.get("direction") == "i_owe"
+        events.append({
+            "id": f"debt:{dbt['id']}", "kind": "debt", "subtype": "debt_due" if i_owe else "debt_due_collect",
+            "source": "debt", "ref_id": dbt["id"], "date": d.isoformat(), "time": None, "title": dbt.get("name") or "",
+            "account": dbt.get("person") or acc_name(dbt.get("account_id")), "category": None,
+            "amount": float(dbt["remaining_amount"]), "sign": -1 if i_owe else 1, "realized": False,
+            "counts_in_net": False, "flow": "planned_expense" if i_owe else "planned_income",
+            "status": "overdue" if d < today else "pending", "icon": dbt.get("icon"), "color": dbt.get("color"),
+            "links": {"debt_id": dbt["id"]},
+        })
+
+    # Timed events first (by time), all-day events after; stable by title.
+    events.sort(key=lambda e: (e["date"], e["time"] is None, e["time"] or "", e["title"].lower()))
+    return events
+
+
+def _cal_summary(events, a: date, b: date):
+    def acc(pred):
+        s, n = Decimal(0), 0
+        for e in events:
+            if a.isoformat() <= e["date"] <= b.isoformat() and pred(e):
+                s += Decimal(str(e["amount"]))
+                n += 1
+        return {"amount": float(s), "count": n}
+
+    income = acc(lambda e: e["realized"] and e["source"] == "transaction" and e["flow"] == "income")
+    payments = acc(lambda e: e["realized"] and e["source"] == "transaction" and e["flow"] in ("expense", "debt_payment"))
+    planned_exp = acc(lambda e: not e["realized"] and e["flow"] == "planned_expense" and e["status"] in ("pending", "overdue"))
+    planned_inc = acc(lambda e: not e["realized"] and e["flow"] == "planned_income" and e["status"] in ("pending", "overdue"))
+    net = sum((Decimal(str(e["amount"])) * e["sign"] for e in events if e["counts_in_net"]
+               and a.isoformat() <= e["date"] <= b.isoformat()), Decimal(0))
+    return {
+        "income": income, "payments": payments,
+        "bills": {"amount": 0.0, "count": 0, "available": False},
+        "planned_expenses": planned_exp, "planned_income": planned_inc, "net_real": float(net),
+    }
+
+
+@api.get("/calendar/events")
+async def calendar_events(start: str, end: str, tz_offset: int = 0, types: Optional[str] = None):
+    a = _rp_day(start, "La fecha inicial no es válida.")
+    b = _rp_day(end, "La fecha final no es válida.")
+    if b < a:
+        raise HTTPException(422, "La fecha final debe ser posterior a la inicial.")
+    if (b - a).days > CAL_MAX_DAYS:
+        raise HTTPException(422, "El intervalo es demasiado amplio.")
+    sel = _cal_types(types)
+    today = _rp_today(tz_offset)
+    events = [e for e in await _cal_events(a, b, _local_tz(tz_offset), today) if e["kind"] in sel]
+    return {"start": a.isoformat(), "end": b.isoformat(), "today": today.isoformat(), "events": events}
+
+
+@api.get("/calendar/summary")
+async def calendar_summary(year: Optional[int] = None, month: Optional[int] = None, tz_offset: int = 0, types: Optional[str] = None):
+    today = _rp_today(tz_offset)
+    year, month = year or today.year, month or today.month
+    if not 1 <= month <= 12 or not 1900 <= year <= 3000:
+        raise HTTPException(422, "Mes no válido.")
+    sel = _cal_types(types)
+    a, b = date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1])
+    events = [e for e in await _cal_events(a, b, _local_tz(tz_offset), today) if e["kind"] in sel]
+    return {"year": year, "month": month, "today": today.isoformat(), **_cal_summary(events, a, b)}
+
+
+@api.get("/calendar/upcoming")
+async def calendar_upcoming(tz_offset: int = 0, limit: int = 5, offset: int = 0, days: int = 120, types: Optional[str] = None):
+    today = _rp_today(tz_offset)
+    limit, offset, days = max(1, min(int(limit), 50)), max(0, int(offset)), max(1, min(int(days), 365))
+    sel = _cal_types(types)
+    a, b = today - timedelta(days=CAL_MAX_DAYS - days), today + timedelta(days=days)
+    events = await _cal_events(a, b, _local_tz(tz_offset), today)
+    # Only active commitments: pending/overdue dues and open goal targets. Cancelled
+    # (ended) or paused recurrences produce no dues, paid items are excluded.
+    items = [
+        {**e, "days_left": (date.fromisoformat(e["date"]) - today).days}
+        for e in events
+        if e["kind"] in sel and not e["realized"] and e["status"] in ("pending", "overdue", "target")
+        and (e["status"] == "overdue" or e["date"] >= today.isoformat())
+    ]
+    items.sort(key=lambda e: (e["date"], e["title"].lower()))
+    page = items[offset:offset + limit]
+    return {"today": today.isoformat(), "items": page, "total": len(items), "offset": offset, "limit": limit,
+            "has_more": offset + len(page) < len(items)}
+
+
 app.include_router(api)
 
 app.add_middleware(
@@ -2131,6 +2398,9 @@ async def goal_indexes():
         await db.recurring_payments.create_index([("user_id", 1), ("created_at", -1)])
         await db.recurring_payment_records.create_index([("user_id", 1), ("recurring_id", 1), ("due_date", -1)])
         await db.recurring_payment_records.create_index([("user_id", 1), ("due_date", 1)])
+        # Calendar range queries (non-destructive, additive indexes).
+        await db.transactions.create_index([("user_id", 1), ("date", 1)])
+        await db.goal_contributions.create_index([("user_id", 1), ("date", 1)])
     except PyMongoError:
         logger.warning("Could not ensure saving-goal indexes")
 

@@ -108,6 +108,13 @@ export const api = {
   rpPay: (id: string, d: any, key?: string) =>
     request<any>(`/recurring-payments/${id}/payments`, { method: "POST", body: JSON.stringify(d), headers: key ? { "Idempotency-Key": key } : {} }),
   rpDeletePayment: (pid: string) => request<any>(`/recurring-payments/payments/${pid}`, { method: "DELETE" }),
+  // Financial calendar (read-only aggregation)
+  calendarEvents: (start: string, end: string) =>
+    request<any>(`/calendar/events?start=${start}&end=${end}&tz_offset=${new Date().getTimezoneOffset()}`),
+  calendarSummary: (year: number, month: number) =>
+    request<any>(`/calendar/summary?year=${year}&month=${month}&tz_offset=${new Date().getTimezoneOffset()}`),
+  calendarUpcoming: (limit = 3, types?: string) =>
+    request<any>(`/calendar/upcoming?limit=${limit}&tz_offset=${new Date().getTimezoneOffset()}${types ? `&types=${types}` : ""}`),
   // Recurring templates (config only)
   listRecurring: () => request<any[]>("/recurring"),
   createRecurring: (d: any) => request<any>("/recurring", { method: "POST", body: JSON.stringify(d) }),

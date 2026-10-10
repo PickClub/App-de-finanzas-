@@ -214,6 +214,139 @@ user_problem_statement: |
   3) Dashboard Ingresos/Gastos cards enriched (icon, title, amount, mini bar chart, promedio diario) and made equal height to the accounts % card.
 
 backend:
+  - task: "Financial calendar API (read-only aggregation): /api/calendar/events, /api/calendar/summary, /api/calendar/upcoming"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: |
+            ✅✅✅ ALL 51 TESTS PASSED (100%) - Financial Calendar API COMPREHENSIVE VERIFICATION COMPLETE
+            
+            Tested on ISOLATED instance: http://127.0.0.1:8011/api (APP_ENV=test, DB test_moneyflow_calendar, seeded by /tmp/cal_seed.py).
+            System date: 2026-10-10. Did NOT write to main backend (port 8001) or moneyflow_database.
+            
+            **TEST RESULTS BY CATEGORY:**
+            
+            ✅ [TEST 1] GET /calendar/events?start=2026-09-28&end=2026-11-08 (20/20 PASS):
+            - HTTP 200, returned 13 events ✓
+            - start/end/today dates correct ✓
+            - 10-01 debt_due "Deuda vencida" overdue (sign=-1, realized=false) ✓
+            - 10-05 expense "Supermercado" date-only (time=null, amount=80) ✓
+            - 10-07 09:30 debt_payment (amount=100, sign=-1) ✓
+            - 10-09 18:00 recurring_paid "Factura de agua" (amount=45) ✓
+            - 10-15 recurring_due "Factura de agua" NOT found (correct, no double count - paid by movement) ✓
+            - 10-10 08:00 income 500 (sign=1) ✓
+            - 10-10 10:00 expense 65 (sign=-1) ✓
+            - 10-10 transfer 100 (kind=other, sign=0, counts_in_net=false) ✓
+            - 10-10 recurring_due "Gimnasio" pending (amount=35, realized=false) ✓
+            - 10-12 goal_deposit (sign=0, counts_in_net=false) ✓
+            - 10-20 recurring_marked "Streaming" (sign=0, status=marked) ✓
+            - 10-22 debt_due 400 (remaining after 100 payment) ✓
+            - 10-28 debt_due_collect +200 (they_owe, sign=1) ✓
+            - 10-30 goal_target 950 (target 1000 - saved 50) ✓
+            - Paused "Revista pausada" NOT found (correct) ✓
+            - All events have ref_id ✓
+            
+            ✅ [TEST 2] Types filter (2/2 PASS):
+            - types=debt,goal filter works (6 events, kinds: {goal, debt}) ✓
+            - Invalid type returns 422 ✓
+            
+            ✅ [TEST 3] Validation errors (3/3 PASS):
+            - end < start returns 422 ✓
+            - range > 400 days returns 422 ✓
+            - Invalid date returns 422 ✓
+            
+            ✅ [TEST 4] tz_offset (1/1 PASS):
+            - tz_offset=300 (UTC-5): 2026-10-10T02:00Z appears on 10-09 at 21:00 ✓
+            
+            ✅ [TEST 5] GET /calendar/summary?year=2026&month=10 (8/8 PASS):
+            - HTTP 200, year/month correct ✓
+            - income: 500/1 (Ingreso quincenal) ✓
+            - payments: 290/4 (expense 80+65+45 + debt payment 100; transfer and goal excluded) ✓
+            - bills: 0/0, available=false ✓
+            - planned_expenses: 485/3 (Gimnasio 35 + debt_due 400 + debt_due 50) ✓
+            - planned_income: 200/1 (debt_due_collect) ✓
+            - net_real: 210 (income 500 - expenses 80+65+45 - debt_payment 100) ✓
+            
+            ✅ [TEST 6] GET /calendar/upcoming (8/8 PASS):
+            - HTTP 200, limit=3 respected (3 items) ✓
+            - Pagination fields present (total=15, has_more=true) ✓
+            - All items have days_left ✓
+            - Overdue items have negative days_left (2 overdue) ✓
+            - Realized items excluded ✓
+            - Paused recurrences excluded ✓
+            - Offset pagination works ✓
+            
+            ✅ [TEST 7] Recurring payment ended produces no future dues (2/2 PASS):
+            - Ended recurring payment "Gimnasio" ✓
+            - No future dues for ended recurring payment ✓
+            
+            ✅ [TEST 8] Partial payment on recurring due (3/3 PASS):
+            - Partial payment: recurring_paid 20 found ✓
+            - Partial payment: recurring_due 15 with partial=true found ✓
+            - Partial payment: both events present (no double count) ✓
+            
+            ✅ [TEST 9] Leap year February 2028 (2/2 PASS):
+            - Feb 2028 (leap year) range 2028-02-01..2028-02-29 returns 200 ✓
+            - Recurring monthly due_day 31 clamped to 2028-02-29 ✓
+            
+            ✅ [TEST 10] Account balances unchanged (1/1 PASS):
+            - Account balances unchanged by calendar calls ✓
+            
+            ✅ [TEST 11] Read-only GET on production backend (1/1 PASS):
+            - GET /calendar/summary on port 8001 returns 200 ✓
+            
+            **CRITICAL FINDINGS:**
+            
+            ✅ **NO DOUBLE COUNTING**: Recurring payment paid by movement (Factura de agua 10-15) does NOT produce recurring_due event
+            ✅ **PARTIAL PAYMENTS**: Partial payment shows both recurring_paid (20) and recurring_due (15, partial=true)
+            ✅ **VALIDATION**: All 422 validations working (end<start, range>400 days, invalid date, invalid type)
+            ✅ **TYPES FILTER**: Correctly filters events by kind (debt, goal, income, expense, recurring, other)
+            ✅ **TZ_OFFSET**: Correctly converts UTC timestamps to local time (UTC-5: 02:00Z → 21:00 previous day)
+            ✅ **SUMMARY CALCULATIONS**: income 500/1, payments 290/4, planned_expenses 485/3, planned_income 200/1, net_real 210
+            ✅ **UPCOMING PAGINATION**: limit/offset/has_more/total working, overdue items included with negative days_left
+            ✅ **PAUSED/ENDED EXCLUSION**: Paused recurrences produce no events, ended recurrences produce no future dues
+            ✅ **LEAP YEAR**: Feb 2028 range works, due_day 31 clamped to Feb 29
+            ✅ **READ-ONLY**: Account balances unchanged by calendar calls, production backend GET works
+            ✅ **REF_ID**: All events have ref_id to source entity
+            
+            **CONCLUSION:**
+            
+            The Financial Calendar API is WORKING CORRECTLY and PRODUCTION-READY. All 51 tests passed (100%). All requirements from the review request verified:
+            - GET /calendar/events with all expected events (debt_due, expense, debt_payment, recurring_paid, income, transfer, recurring_due, goal_deposit, recurring_marked, debt_due_collect, goal_target)
+            - No double counting (paid recurring dues not emitted)
+            - Paused recurrences excluded
+            - Types filter working
+            - Validation errors (422 for invalid input)
+            - tz_offset working correctly
+            - GET /calendar/summary with correct calculations
+            - GET /calendar/upcoming with pagination and days_left
+            - Partial payments showing both events
+            - Leap year handling
+            - Account balances unchanged
+            - Production backend GET working
+            
+            **TEST CONSTRAINTS FOLLOWED:**
+            - ✅ Tested ONLY against isolated backend http://127.0.0.1:8011/api
+            - ✅ Did NOT write to main backend (port 8001) or moneyflow_database
+            - ✅ Only read-only GET calls against port 8001
+            - ✅ Used seeded data from /tmp/cal_seed.py
+            - ✅ System date 2026-10-10
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Read-only aggregation over existing collections (transactions, recurring_payments + records, debts, saving_goals + goal_contributions). No new collection, no writes. Only additive indexes (transactions user_id+date, goal_contributions user_id+date).
+            GET /api/calendar/events?start=YYYY-MM-DD&end=YYYY-MM-DD&tz_offset&types=csv(income,expense,recurring,bill,debt,goal,other) -> {start,end,today,events[]}. 422 when end<start, range>400 days, invalid date, or invalid type.
+            Event: id, kind, subtype, source(transaction|recurring|debt|goal), ref_id, date, time(HH:MM local or null for date-only/all-day), title, account, category, amount, sign(+1/-1/0), realized, counts_in_net, flow, status, links.
+            Rules: income tx -> income (or debt/debt_collection if debt_payment_id); expense -> expense (recurring/recurring_paid if recurring_record_id); debt_payment -> debt; transfer -> other, sign 0, counts_in_net false; tx with goal_contribution_id skipped (represented by contribution); goal contributions -> goal, sign 0, never counted; goal target_date -> goal_target (status target/overdue/completed); recurring dues pending/overdue -> recurring_due with REMAINING amount, realized=false; paid dues fully covered by linked movements are NOT emitted (no double count); paid via mark (no movement) -> recurring_marked sign 0; paused/ended produce no dues; debts active with due_date -> debt_due (i_owe, sign -1) / debt_due_collect (they_owe, sign +1), realized false. "bill" kind has no data source -> always empty.
+            GET /api/calendar/summary?year&month&tz_offset -> income{amount,count} (realized income tx), payments{amount,count} (realized expense + debt_payment tx), bills{0,0,available:false}, planned_expenses, planned_income, net_real.
+            GET /api/calendar/upcoming?tz_offset&limit(1..50)&offset&days&types -> items (pending/overdue/target, not realized, overdue included), each with days_left; total, has_more.
+            Verified manually on isolated instance http://127.0.0.1:8011/api (APP_ENV=test DB test_moneyflow_calendar, already seeded by /tmp/cal_seed.py; today 2026-10-10): Oct 2026 summary income 500/1, payments 290/4, planned_expenses 485/3, planned_income 200/1, net_real 210.
   - task: "Categories hierarchy: additive parent_id/is_group fields + idempotent grouped init-defaults (8 expense + 4 income groups)"
     implemented: true
     working: true
@@ -883,6 +1016,7 @@ metadata:
 
 test_plan:
   current_focus:
+    - "Financial calendar API (read-only aggregation): /api/calendar/events, /api/calendar/summary, /api/calendar/upcoming"
     - "Categories screen redesign: accordion (main groups + expandable subcategory grid) + create main/sub in new.tsx"
     - "Home MR filters: move Calendar right after 'Todas' + Reports periods reuse MR press-spring"
     - "Account DETAIL / preview screen inserted between Home tap and Edit form"
@@ -2575,6 +2709,49 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+    - agent: "testing"
+      message: |
+        ✅✅✅ FINANCIAL CALENDAR API TESTING COMPLETE - ALL 51 TESTS PASSED (100%)
+        
+        Comprehensive testing of the NEW Financial Calendar API completed against isolated backend (http://127.0.0.1:8011/api).
+        System date: 2026-10-10. Test data seeded by /tmp/cal_seed.py.
+        
+        **RESULTS: 51/51 tests passed (100%)**
+        
+        **ALL CRITICAL FUNCTIONALITY VERIFIED:**
+        ✅ GET /calendar/events with all expected events (13 events in Oct 2026 range)
+        ✅ No double counting (paid recurring dues not emitted as recurring_due)
+        ✅ Paused recurrences excluded from events
+        ✅ Types filter working (debt, goal, income, expense, recurring, other)
+        ✅ Validation errors (422 for end<start, range>400 days, invalid date, invalid type)
+        ✅ tz_offset working correctly (UTC-5: 02:00Z → 21:00 previous day)
+        ✅ GET /calendar/summary with correct calculations (income 500/1, payments 290/4, planned_expenses 485/3, planned_income 200/1, net_real 210)
+        ✅ GET /calendar/upcoming with pagination (limit/offset/has_more/total, days_left, overdue items included)
+        ✅ Partial payments showing both recurring_paid and recurring_due events
+        ✅ Ended recurring payments produce no future dues
+        ✅ Leap year handling (Feb 2028 range works, due_day 31 clamped to Feb 29)
+        ✅ Account balances unchanged by calendar calls
+        ✅ Production backend GET working (port 8001)
+        ✅ All events have ref_id to source entity
+        
+        **EXACT EVENTS VERIFIED (per review request):**
+        - 10-01 debt_due "Deuda vencida" overdue (sign=-1, realized=false)
+        - 10-05 expense "Supermercado" date-only (time=null, amount=80)
+        - 10-07 09:30 debt_payment (amount=100, sign=-1)
+        - 10-09 18:00 recurring_paid "Factura de agua" (amount=45)
+        - 10-15 recurring_due "Factura de agua" NOT found (correct, no double count)
+        - 10-10 08:00 income 500, 10:00 expense 65, transfer 100 (sign=0, counts_in_net=false)
+        - 10-10 recurring_due "Gimnasio" pending (amount=35, realized=false)
+        - 10-12 goal_deposit (sign=0, counts_in_net=false)
+        - 10-20 recurring_marked "Streaming" (sign=0, status=marked)
+        - 10-22 debt_due 400 (remaining after 100 payment)
+        - 10-28 debt_due_collect +200 (they_owe, sign=1)
+        - 10-30 goal_target 950 (target 1000 - saved 50)
+        - Paused "Revista pausada" NOT found (correct)
+        
+        **NO ISSUES FOUND**
+        
+        The Financial Calendar API is production-ready and working correctly per specification. All test constraints followed (isolated instance, no writes to main backend, read-only GET on port 8001).
     - agent: "testing"
       message: |
         ⚠️ RECURRING PAYMENTS API TESTING COMPLETE - 69/78 TESTS PASSED (88.5%) - 3 CRITICAL BUGS FOUND

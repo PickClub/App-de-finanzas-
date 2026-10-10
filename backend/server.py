@@ -4,7 +4,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import logging, uuid, hashlib, json, math
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Literal
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 from pymongo import ReadPreference
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from pymongo.read_concern import ReadConcern
@@ -157,15 +158,22 @@ class Budget(BaseModel):
     start_date: str = Field(default_factory=now_iso)
     end_date: Optional[str] = None
     category_id: Optional[str] = None
+    # Additive (backward compatible) alert settings + audit fields.
+    alerts_enabled: bool = True
+    alert_threshold: int = 80
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: Optional[str] = None
 
 
 class BudgetCreate(BaseModel):
-    name: str
+    name: Optional[str] = None
     amount_limit: float
     period: str = "monthly"
     category_id: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
+    alerts_enabled: bool = True
+    alert_threshold: int = 80
 
 
 class SavingGoal(BaseModel):
@@ -731,30 +739,293 @@ async def delete_recurring(rid: str):
 
 
 # Budgets
+# ---------------------------------------------------------------------------
+# Spending is ALWAYS derived on demand from real transactions (never stored),
+# so history is preserved, a new period naturally starts at 0 and editing /
+# deleting a movement is reflected immediately. Only type == "expense" counts:
+# income, transfers, debt_payment and loan_* movements are excluded, which also
+# prevents double counting debt payments. Recurring templates are config-only
+# and never counted unless a real expense transaction exists.
+# Money math uses Decimal (cents) to avoid floating point drift.
+BUDGET_PERIODS = ("weekly", "monthly", "custom")
+
+
+def _dec(v) -> Decimal:
+    return Decimal(str(v or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _parse_dt(s):
+    if not s:
+        return None
+    try:
+        d = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    except Exception:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def _local_tz(tz_offset: int):
+    # tz_offset follows JS Date.getTimezoneOffset() (minutes, UTC - local).
+    return timezone(timedelta(minutes=-int(tz_offset or 0)))
+
+
+def _month_bounds(year: int, month: int, tz):
+    start = datetime(year, month, 1, tzinfo=tz)
+    end = datetime(year + (month == 12), (month % 12) + 1, 1, tzinfo=tz)
+    return start, end
+
+
+def _day_start(d, tz):
+    d = d.astimezone(tz)
+    return datetime(d.year, d.month, d.day, tzinfo=tz)
+
+
+def _budget_window(b, m_start, m_end, tz, now):
+    """Period window [start, end) of a budget for the selected month, or None if inactive."""
+    b_start = _parse_dt(b.get("start_date"))
+    b_start = _day_start(b_start, tz) if b_start else None
+    b_end = _parse_dt(b.get("end_date"))
+    b_end = _day_start(b_end, tz) + timedelta(days=1) if b_end else None  # inclusive end date
+    period = b.get("period", "monthly")
+    if period == "custom":
+        if not b_start or not b_end:
+            return None
+        if b_start >= m_end or b_end <= m_start:
+            return None
+        return b_start, b_end
+    if period == "weekly":
+        # Reference day: today when viewing the current month, else the last day of the month.
+        ref = now.astimezone(tz)
+        if not (m_start <= ref < m_end):
+            ref = m_end - timedelta(days=1)
+        ws = _day_start(ref, tz) - timedelta(days=ref.weekday())  # weeks start on Monday
+        we = ws + timedelta(days=7)
+    else:
+        ws, we = m_start, m_end
+    if b_start and b_start >= we:
+        return None
+    if b_end and b_end <= ws:
+        return None
+    return ws, we
+
+
+def _scope_ids(category_id, cats_by_id):
+    """A main group includes itself + its subcategories; a leaf only itself."""
+    if not category_id:
+        return set()
+    cat = cats_by_id.get(category_id)
+    ids = {category_id}
+    if cat and cat.get("is_group"):
+        ids |= {c["id"] for c in cats_by_id.values() if c.get("parent_id") == category_id}
+    return ids
+
+
+def _status(spent: Decimal, limit: Decimal, threshold: int) -> str:
+    if limit <= 0:
+        return "normal"
+    if spent > limit:
+        return "exceeded"
+    if spent == limit:
+        return "reached"
+    if spent * 100 >= limit * Decimal(threshold):
+        return "warning"
+    return "normal"
+
+
+async def _compute_budgets(year: int, month: int, tz_offset: int, only_id: Optional[str] = None):
+    tz = _local_tz(tz_offset)
+    m_start, m_end = _month_bounds(year, month, tz)
+    now = datetime.now(timezone.utc)
+    q = {"user_id": DEFAULT_USER_ID}
+    if only_id:
+        q["id"] = only_id
+    budgets = await db.budgets.find(q, {"_id": 0, "idempotency_key": 0}).to_list(1000)
+    cats = await db.categories.find({"user_id": DEFAULT_USER_ID}, PROJ).to_list(2000)
+    cats_by_id = {c["id"]: c for c in cats}
+    txs = await db.transactions.find({"user_id": DEFAULT_USER_ID, "type": "expense"}, PROJ).to_list(20000)
+    for t in txs:
+        t["_dt"] = _parse_dt(t.get("date"))
+
+    rows = []
+    for b in budgets:
+        win = _budget_window(b, m_start, m_end, tz, now)
+        scope = _scope_ids(b.get("category_id"), cats_by_id)
+        matched = []
+        if win:
+            ws, we = win
+            matched = [t for t in txs if t["_dt"] and t.get("category_id") in scope and ws <= t["_dt"] < we]
+        spent = sum((_dec(t["amount"]) for t in matched), Decimal("0.00"))
+        limit = _dec(b.get("amount_limit"))
+        threshold = int(b.get("alert_threshold") or 80)
+        status = _status(spent, limit, threshold)
+        pct = float((spent * 100 / limit).quantize(Decimal("0.1"))) if limit > 0 else None
+        rows.append({
+            **b,
+            "active": bool(win),
+            "window_start": win[0].isoformat() if win else None,
+            "window_end": (win[1] - timedelta(microseconds=1)).isoformat() if win else None,
+            "spent": float(spent),
+            "available": float(limit - spent),
+            "pct": pct,
+            "status": status,
+            "alert": bool(win) and bool(b.get("alerts_enabled", True)) and status != "normal",
+            "tx_count": len(matched),
+            "_matched": matched,
+            "_scope": scope,
+        })
+    return rows, cats_by_id, (m_start, m_end)
+
+
+def _public(row, with_tx=False):
+    out = {k: v for k, v in row.items() if not k.startswith("_")}
+    if with_tx:
+        out["transactions"] = sorted(
+            ({k: v for k, v in t.items() if k != "_dt"} for t in row["_matched"]),
+            key=lambda t: t.get("date") or "", reverse=True,
+        )
+    return out
+
+
+def _overlaps(a_start, a_end, b_start, b_end):
+    inf = datetime.max.replace(tzinfo=timezone.utc)
+    return (a_start or datetime.min.replace(tzinfo=timezone.utc)) < (b_end or inf) and \
+        (b_start or datetime.min.replace(tzinfo=timezone.utc)) < (a_end or inf)
+
+
+async def _validate_budget(data: BudgetCreate, replacing: Optional[str] = None) -> dict:
+    payload = data.model_dump()
+    try:
+        limit = _dec(payload["amount_limit"])
+    except Exception:
+        raise HTTPException(422, "El límite debe ser un número válido.")
+    if not limit.is_finite() or limit <= 0:
+        raise HTTPException(422, "El límite debe ser mayor que cero.")
+    payload["amount_limit"] = float(limit)
+    if payload["period"] not in BUDGET_PERIODS:
+        raise HTTPException(422, "Período inválido.")
+    thr = payload.get("alert_threshold")
+    if thr is None or not (1 <= int(thr) <= 100):
+        raise HTTPException(422, "El porcentaje de alerta debe estar entre 1 y 100.")
+    payload["alert_threshold"] = int(thr)
+    if not payload.get("category_id"):
+        raise HTTPException(422, "Selecciona una categoría.")
+    cat = await db.categories.find_one({"id": payload["category_id"], "user_id": DEFAULT_USER_ID}, PROJ)
+    if not cat or cat.get("type") != "expense":
+        raise HTTPException(422, "La categoría no existe o no es de gastos.")
+    start = _parse_dt(payload.get("start_date")) if payload.get("start_date") else datetime.now(timezone.utc)
+    if not start:
+        raise HTTPException(422, "Fecha de inicio inválida.")
+    payload["start_date"] = start.isoformat()
+    end = None
+    if payload.get("end_date"):
+        end = _parse_dt(payload["end_date"])
+        if not end:
+            raise HTTPException(422, "Fecha de finalización inválida.")
+        if end < start:
+            raise HTTPException(422, "La fecha de finalización debe ser posterior a la de inicio.")
+        payload["end_date"] = end.isoformat()
+    else:
+        payload["end_date"] = None
+    if payload["period"] == "custom" and not end:
+        raise HTTPException(422, "Un período personalizado requiere fecha de finalización.")
+    if not (payload.get("name") or "").strip():
+        payload["name"] = cat["name"]
+    # Duplicate guard: same category + same period type with overlapping dates.
+    q = {"user_id": DEFAULT_USER_ID, "category_id": payload["category_id"], "period": payload["period"]}
+    if replacing:
+        q["id"] = {"$ne": replacing}
+    async for other in db.budgets.find(q, PROJ):
+        if _overlaps(start, end, _parse_dt(other.get("start_date")), _parse_dt(other.get("end_date"))):
+            raise HTTPException(409, "Ya existe un presupuesto para esta categoría y período en esas fechas.")
+    return payload
+
+
 @api.get("/budgets")
 async def list_budgets():
-    return await db.budgets.find({"user_id": DEFAULT_USER_ID}, PROJ).to_list(500)
+    return await db.budgets.find({"user_id": DEFAULT_USER_ID}, {"_id": 0, "idempotency_key": 0}).sort("created_at", -1).to_list(500)
+
+
+@api.get("/budgets/overview")
+async def budgets_overview(year: Optional[int] = None, month: Optional[int] = None, tz_offset: int = 0):
+    now = datetime.now(_local_tz(tz_offset))
+    year = year or now.year
+    month = month or now.month
+    if not (1 <= month <= 12) or not (1970 <= year <= 9999):
+        raise HTTPException(422, "Mes o año inválido.")
+    rows, cats_by_id, (m_start, m_end) = await _compute_budgets(year, month, tz_offset)
+    active = [r for r in rows if r["active"]]
+    # Totals without double counting: a budget whose category is a subcategory of
+    # another ACTIVE budget's main group is already covered by that group budget.
+    group_ids = {r["category_id"] for r in active if cats_by_id.get(r["category_id"], {}).get("is_group")}
+    for r in rows:
+        parent = cats_by_id.get(r.get("category_id"), {}).get("parent_id")
+        r["counted_in_total"] = r["active"] and not (parent and parent in group_ids)
+    counted = [r for r in rows if r["counted_in_total"]]
+    budgeted = sum((_dec(r["amount_limit"]) for r in counted), Decimal("0.00"))
+    seen, spent = set(), Decimal("0.00")
+    for r in counted:
+        for t in r["_matched"]:
+            if t["id"] not in seen:
+                seen.add(t["id"])
+                spent += _dec(t["amount"])
+    pct = float((spent * 100 / budgeted).quantize(Decimal("0.1"))) if budgeted > 0 else None
+    alerts = [r for r in active if r["alert"]]
+    return {
+        "year": year,
+        "month": month,
+        "period_start": m_start.isoformat(),
+        "period_end": (m_end - timedelta(microseconds=1)).isoformat(),
+        "totals": {
+            "budgeted": float(budgeted),
+            "spent": float(spent),
+            "available": float(budgeted - spent),
+            "pct": pct,
+        },
+        "active_count": len(active),
+        "alerts_count": len(alerts),
+        "exceeded_count": len([r for r in alerts if r["status"] == "exceeded"]),
+        "budgets": [_public(r) for r in rows],
+    }
+
+
+@api.get("/budgets/{bid}/detail")
+async def budget_detail(bid: str, year: Optional[int] = None, month: Optional[int] = None, tz_offset: int = 0):
+    now = datetime.now(_local_tz(tz_offset))
+    rows, cats_by_id, _ = await _compute_budgets(year or now.year, month or now.month, tz_offset, only_id=bid)
+    if not rows:
+        raise HTTPException(404, "Presupuesto no encontrado.")
+    out = _public(rows[0], with_tx=True)
+    out["category"] = cats_by_id.get(rows[0].get("category_id"))
+    return out
 
 
 @api.post("/budgets")
-async def create_budget(data: BudgetCreate):
-    payload = data.model_dump()
-    if not payload.get("start_date"):
-        payload["start_date"] = now_iso()
+async def create_budget(data: BudgetCreate, idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
+    if idempotency_key:
+        existing = await db.budgets.find_one({"user_id": DEFAULT_USER_ID, "idempotency_key": idempotency_key}, PROJ)
+        if existing:
+            return {k: v for k, v in existing.items() if k != "idempotency_key"}
+    payload = await _validate_budget(data)
     b = Budget(user_id=DEFAULT_USER_ID, **payload).model_dump()
-    await db.budgets.insert_one(b)
+    doc = {**b, **({"idempotency_key": idempotency_key} if idempotency_key else {})}
+    await db.budgets.insert_one(doc)
     return {k: v for k, v in b.items() if k != "_id"}
 
 
 @api.put("/budgets/{bid}")
 async def update_budget(bid: str, data: BudgetCreate):
-    await db.budgets.update_one({"id": bid}, {"$set": data.model_dump()})
-    return await db.budgets.find_one({"id": bid}, PROJ)
+    if not await db.budgets.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ):
+        raise HTTPException(404, "Presupuesto no encontrado.")
+    payload = await _validate_budget(data, replacing=bid)
+    payload["updated_at"] = now_iso()
+    await db.budgets.update_one({"id": bid, "user_id": DEFAULT_USER_ID}, {"$set": payload})
+    doc = await db.budgets.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ)
+    return {k: v for k, v in doc.items() if k != "idempotency_key"}
 
 
 @api.delete("/budgets/{bid}")
 async def delete_budget(bid: str):
-    await db.budgets.delete_one({"id": bid})
+    await db.budgets.delete_one({"id": bid, "user_id": DEFAULT_USER_ID})
     return {"ok": True}
 
 

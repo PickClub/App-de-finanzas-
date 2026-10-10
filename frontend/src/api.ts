@@ -49,7 +49,16 @@ export const api = {
   deleteTransaction: (id: string) => request<any>(`/transactions/${id}`, { method: "DELETE" }),
   // Budgets
   listBudgets: () => request<any[]>("/budgets"),
-  createBudget: (d: any) => request<any>("/budgets", { method: "POST", body: JSON.stringify(d) }),
+  createBudget: (d: any, idempotencyKey?: string) =>
+    request<any>("/budgets", {
+      method: "POST",
+      body: JSON.stringify(d),
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {},
+    }),
+  budgetsOverview: (year: number, month: number) =>
+    request<any>(`/budgets/overview?year=${year}&month=${month}&tz_offset=${new Date().getTimezoneOffset()}`),
+  budgetDetail: (id: string, year: number, month: number) =>
+    request<any>(`/budgets/${id}/detail?year=${year}&month=${month}&tz_offset=${new Date().getTimezoneOffset()}`),
   updateBudget: (id: string, d: any) => request<any>(`/budgets/${id}`, { method: "PUT", body: JSON.stringify(d) }),
   deleteBudget: (id: string) => request<any>(`/budgets/${id}`, { method: "DELETE" }),
   // Goals

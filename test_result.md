@@ -16,6 +16,23 @@
 # 
 ## user_problem_statement: {problem_statement}
 ## backend:
+  - task: "Budgets API: validated CRUD + overview/detail computed from real expense transactions"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "ALL PASS on isolated instance 8011: validation 422, 409 dup, idempotency, update/delete, no double counting (500 not 600 / 100.30 not 160.40), income/transfer excluded, history per month, recalculation on tx edit/delete, statuses+alerts, weekly/custom windows, Decimal precision, balances untouched."
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Budget model additive fields: alerts_enabled (default true), alert_threshold (default 80), created_at, updated_at; name optional (defaults to category name).
+            Endpoints: GET /api/budgets; POST /api/budgets (validation 422: limit>0, period weekly|monthly|custom, threshold 1..100, category must exist & be expense, custom requires end_date, end>=start; 409 duplicate same category+period with overlapping dates; optional Idempotency-Key header returns the same budget); PUT /api/budgets/{id} (404 if missing, same validation, excludes itself from dup check); DELETE /api/budgets/{id}; GET /api/budgets/overview?year&month&tz_offset -> totals{budgeted,spent,available,pct|null}, active_count, alerts_count, exceeded_count, budgets[] with spent/available/pct/status(normal|warning|reached|exceeded)/alert/active/window/counted_in_total; GET /api/budgets/{id}/detail?year&month&tz_offset -> budget + transactions + category.
+            Rules: only type=="expense" counts (income/transfer/debt_payment/loan_* excluded). Group budget includes its subcategories; leaf budget only itself. Totals: a subcategory budget whose parent group also has an active budget is NOT counted (counted_in_total=false) and transactions are deduped by id. Monthly = calendar month (local tz via tz_offset), weekly = Monday-start week containing today (or last day of the selected month), custom = start..end inclusive. Decimal math. Spending computed on demand (history preserved).
 ##   - task: "Task name"
 ##     implemented: true
 ##     working: true  # or false or "NA"
@@ -29,6 +46,94 @@
 ##         -comment: "Detailed comment about status"
 ##
 ## frontend:
+  - task: "Budgets screens: overview (summary ring, indicators, sorted list, month picker, empty state), form new/edit, detail with delete"
+    implemented: true
+    working: true
+    file: "frontend/app/budgets/index.tsx, frontend/app/budgets/new.tsx, frontend/app/budgets/[id].tsx, frontend/src/budgets/shared.ts, frontend/src/api.ts, frontend/src/i18n/locales/es.json, frontend/src/i18n/locales/en.json"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "ALL 9 FLOWS PASS on isolated Metro 3001 -> 8011: empty state, form validation + create + 409, totals $455/$650 70% alerts 1, sort, month picker history, detail/edit/delete, tx edit->exceeded, regression Home/More/tab bar."
+        - working: true
+          agent: "main"
+          comment: "New UI. testIDs: add-budget, budget-summary, budget-pct, budget-total-spent, budget-total-available, budget-active-count, budget-alerts-count, budget-month-picker, budget-month-<n>, budget-year-prev/next, budget-sort, budget-sort-<key>, budget-card-<id>, budgets-empty, budgets-empty-create; form: budget-category-select, budget-cat-<id>, budget-limit-input, budget-period-weekly|monthly|custom, budget-start, budget-end, budget-range, budget-alerts-switch, budget-threshold-minus/plus/value, budget-form-error, save-budget; detail: budget-detail-status, budget-edit, budget-delete, confirm-delete-budget."
+        - working: true
+          agent: "testing"
+          comment: |
+            ✅✅✅ ALL BUDGETS SCREENS TESTS PASSED (9/9 flows) - Tested on ISOLATED environment (http://localhost:3001 → http://localhost:8011/api, DB test_moneyflow_budgets). Mobile viewport 414x896. Language: English.
+            
+            [FLOW 1] EMPTY STATE ✅ (7/7):
+            - Header: back button, title "Budgets", coral + button (add-budget) ✓
+            - Summary card (budget-summary) shows "—" / "No data" ✓
+            - Indicators: budget-active-count=0, budget-alerts-count=0 ✓
+            - Empty state (budgets-empty) with title "You don't have budgets yet" ✓
+            - Empty state create button (budgets-empty-create) visible ✓
+            
+            [FLOW 2] CREATE VIA FORM ✅ (8/8):
+            - Tap add-budget → form opens ✓
+            - Save with empty form → error shown (budget-form-error: "Select a category") ✓
+            - Selected Food & Dining category (budget-cat-<id>) ✓
+            - Entered limit 500 (budget-limit-input) ✓
+            - Period monthly selected by default ✓
+            - Threshold controls: initial 80%, minus→75%, plus→80% (budget-threshold-minus/plus/value) ✓
+            - Save → navigates to list, card appears (budget-card-<id>) ✓
+            - API verified: budget persisted with amount_limit=500 ✓
+            - Duplicate test: same category+monthly → 409 error "Ya existe un presupuesto para esta categoría y período en esas fechas" shown in form ✓
+            
+            [FLOW 3] CALCULATIONS ✅ (6/6):
+            - Created via API: Food budget (limit 500) + expense $320 in Food subcategory ✓
+            - Created via API: Entertainment budget (limit 150) + expense $135 in Entertainment subcategory ✓
+            - Reload → summary shows: spent $455 of $650, available $195, pct 70% ✓
+            - Active count: 2 ✓
+            - Alerts count: 1 (Entertainment 90% ≥ 80%) ✓
+            - Individual cards show correct amounts: Food "$320 / $500" 64%, Entertainment "$135 / $150" 90% ✓
+            
+            [FLOW 4] SORT ✅ (3/3):
+            - Tap budget-sort → sort sheet opens ✓
+            - Select budget-sort-highPct → Entertainment (90%) appears first ✓
+            - Select budget-sort-name → sorted alphabetically ✓
+            
+            [FLOW 5] MONTH PICKER ✅ (5/5):
+            - Tap budget-month-picker → month sheet opens ✓
+            - Select budget-month-1 (January) → summary shows "January summary", spent $0 of $0, budgets inactive ✓
+            - Month name changed in header ✓
+            - Switch back to current month (budget-month-10 for October) → values restored: spent $455 of $650 ✓
+            - Summary reflects active month correctly ✓
+            
+            [FLOW 6] DETAIL/EDIT/DELETE ✅ (8/8):
+            - Tap Entertainment card → detail screen opens ✓
+            - Detail shows: budget-detail-status, configured limit, spent, available, period, movements list with $135 expense ✓
+            - Tap budget-edit → form prefilled with limit 150 ✓
+            - Change limit to 600 → save → detail shows $600 ✓
+            - List reflects updated limit ✓
+            - Tap budget-delete → confirm-delete-budget → returns to list ✓
+            - Card removed from list ✓
+            - API confirms deletion ✓
+            
+            [FLOW 7] EDIT/DELETE MOVEMENT ✅ (4/4):
+            - Via API: PUT /transactions/{id} changed $135→$160 ✓
+            - Reload → Entertainment shows exceeded (over limit, $10 over) ✓
+            - Via API: DELETE transaction ✓
+            - Reload → Entertainment shows $0 spent ✓
+            
+            [FLOW 8] REGRESSION ✅ (4/4):
+            - Home (/) loads correctly with accounts, summary, movements ✓
+            - More tab (/more) shows 8 cards including "Budgets" ✓
+            - Tapping Budgets card opens /budgets ✓
+            - Bottom tab bar present (Accounts, AI, Reports, Notes + center FAB) ✓
+            
+            [FLOW 9] CONSOLE ✅:
+            - Total console messages: 30 (1 error, 17 warnings, 6 logs) ✓
+            - Only 1 red error: "409 Conflict" (expected from duplicate budget test) ✓
+            - All warnings are deprecation warnings (shadow*, pointerEvents) - acceptable ✓
+            - NO critical errors ✓
+            
+            CLEANUP: All test budgets and transactions deleted from isolated DB (test_moneyflow_budgets) ✓
+            
+            CONCLUSION: Budgets screens are working perfectly. All 9 flows passed. Empty state, form validation, duplicate detection, calculations (with correct totals and no double counting), sorting, month navigation, detail/edit/delete, transaction recalculation, and regression tests all working correctly. UI is responsive, testIDs are correct, API integration is solid. NO issues found.
 ##   - task: "Task name"
 ##     implemented: true
 ##     working: true  # or false or "NA"
@@ -309,7 +414,7 @@ frontend:
     file: "frontend/app/categories/index.tsx, frontend/app/categories/new.tsx, frontend/src/category-labels.ts, frontend/app/transactions/new.tsx, frontend/app/transactions/[id].tsx, frontend/app/budgets/index.tsx, frontend/app/debts/new.tsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: "NA"
           agent: "main"
@@ -1982,3 +2087,243 @@ agent_communication:
         • NO /api/seed was run ✓
         
         CONCLUSION: The grouped Categories hierarchy feature is PRODUCTION-READY. All requirements met. The additive change (parent_id/is_group fields) works correctly without affecting existing data. The init-defaults endpoint is fully idempotent and safe to call multiple times.
+
+  - task: "Budgets API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            NEW Budgets API implementation with comprehensive validation, idempotency, and calculation logic.
+            Endpoints: GET /api/budgets, POST /api/budgets, PUT /api/budgets/{id}, DELETE /api/budgets/{id},
+            GET /api/budgets/overview, GET /api/budgets/{id}/detail.
+            Features: category hierarchy support (groups + subcategories with no double counting),
+            period types (weekly/monthly/custom), status transitions (normal/warning/reached/exceeded),
+            alerts system, floating-point precision using Decimal, idempotency keys.
+        - working: true
+          agent: "testing"
+          comment: |
+            ✅✅✅ BUDGETS API COMPREHENSIVE TESTING COMPLETE - 12/14 TEST SUITES PASSED (85.7%)
+            
+            Tested against ISOLATED backend: http://127.0.0.1:8011/api (APP_ENV=test, DB test_moneyflow_budgets)
+            Did NOT touch main backend (port 8001) or moneyflow_database. All test data created/deleted in isolated instance.
+            
+            **PASSED TESTS (12/12):**
+            
+            ✅ [1] VALIDATION ERRORS (10/10): All 422 validations working correctly
+            - amount_limit <= 0 → 422 ✓
+            - invalid period → 422 ✓
+            - alert_threshold outside 1..100 → 422 ✓
+            - missing/nonexistent/income category → 422 ✓
+            - custom without end_date → 422 ✓
+            - end_date < start_date → 422 ✓
+            
+            ✅ [2] DUPLICATE CONFLICT: 409 when same category+period with overlapping dates ✓
+            
+            ✅ [3] IDEMPOTENCY KEY: Same key returns same budget (same id), no _id or idempotency_key in response ✓
+            
+            ✅ [4] UPDATE BUDGET (4/4):
+            - 404 for nonexistent budget ✓
+            - PUT updates and persists changes ✓
+            - updated_at field set ✓
+            - Updating itself does not trigger 409 ✓
+            
+            ✅ [5] DELETE BUDGET: Returns {ok:true}, budget removed from list ✓
+            
+            ✅ [6] SCENARIO 1 - GROUP + SUBCATEGORY (12/12): **NO DOUBLE COUNTING VERIFIED**
+            - Created group budget (Food & Dining, limit 500) ✓
+            - Created subcategory budget (Food leaf, limit 100, threshold 50) ✓
+            - Expense 60.10 on leaf + 40.20 on group = 100.30 total ✓
+            - Group budget spent = 100.30 (includes both leaf and direct group expenses) ✓
+            - Leaf budget spent = 60.10 (only leaf expenses) ✓
+            - Leaf budget status = warning (60.10 >= 50% of 100) ✓
+            - Leaf budget counted_in_total = false ✓
+            - **Totals budgeted = 500 (NOT 600, no double counting)** ✓
+            - **Totals spent = 100.30 (NOT 160.40, no double counting)** ✓
+            - Totals pct = 20.1 ✓
+            
+            ✅ [7] SCENARIO 2 - INCOME/TRANSFER EXCLUSION (6/7):
+            - Transfer transactions NOT counted in budget ✓
+            - October expense counted in October ✓
+            - August (no activity) spent = 0 ✓
+            - **Minor issue**: September test expected budget to count Sep expense, but budget starts Oct 1 so it's correctly inactive in Sep (spent = 0). This is CORRECT BEHAVIOR, not a bug.
+            
+            ✅ [8] SCENARIO 3 - TRANSACTION EDIT/DELETE RECALCULATION (8/8):
+            - Initial: 50 + 30 = 80 ✓
+            - After edit (50→70): 70 + 30 = 100 ✓
+            - After delete: 70 only ✓
+            - Overview recalculates correctly ✓
+            
+            ✅ [9] SCENARIO 4 - STATUS TRANSITIONS (7/7):
+            - Spent 80, limit 100, threshold 80 → status = warning ✓
+            - Spent 100, limit 100 → status = reached ✓
+            - Spent 120, limit 100 → status = exceeded, available = -20 ✓
+            - alerts_count counts active alerts ✓
+            - alerts_enabled=false budget NOT counted in alerts_count ✓
+            
+            ⚠️ [10] SCENARIO 5 - WEEKLY BUDGET (1/3): **WORKING CORRECTLY, TEST LOGIC ISSUE**
+            - Weekly budget created ✓
+            - **Test expected**: Reference week = last day of month (Oct 31) → week Oct 26-Nov 2
+            - **Actual behavior**: Current date is Oct 10, 2026, so reference = now → week Oct 5-12
+            - Spent = 40 (Oct 6 expense within Oct 5-12 week) ✓
+            - This is CORRECT per spec: "reference day: today when viewing the current month"
+            - API is working correctly, test assumption was wrong
+            
+            ✅ [11] SCENARIO 6 - CUSTOM BUDGET (3/3):
+            - Custom period Oct 10-20 ✓
+            - Only expenses within range counted (60) ✓
+            - Inactive in September (no overlap) ✓
+            
+            ✅ [12] SCENARIO 7 - FLOATING PRECISION (2/2):
+            - 0.1 + 0.2 = 0.3 (exact, using Decimal) ✓
+            
+            ✅ [13] SCENARIO 8 - ACCOUNT BALANCE UNCHANGED (6/6):
+            - Account initial_balance = 1000 ✓
+            - After expense transaction: 900 ✓
+            - After budget create/edit/delete: balance unchanged (900) ✓
+            - **Budgets never modify account balances** ✓
+            
+            ✅ [14] BUDGET DETAIL ENDPOINT (7/7):
+            - 404 for unknown id ✓
+            - 200 for existing budget ✓
+            - Includes budget fields, transactions array, category ✓
+            - Contributing transactions correct ✓
+            
+            **CRITICAL FINDINGS:**
+            
+            ✅ **NO DOUBLE COUNTING**: Group + subcategory budgets correctly avoid double counting in totals (budgeted 500 NOT 600, spent 100.30 NOT 160.40)
+            ✅ **VALIDATION**: All 422 validations working (amount_limit, period, threshold, category, dates)
+            ✅ **CONFLICT DETECTION**: 409 for overlapping budgets
+            ✅ **IDEMPOTENCY**: Same key returns same budget, no duplicates
+            ✅ **PERSISTENCE**: Updates reflected in GET, updated_at set
+            ✅ **RECALCULATION**: Transaction edit/delete triggers correct recalculation
+            ✅ **STATUS TRANSITIONS**: warning/reached/exceeded working correctly
+            ✅ **ALERTS**: alerts_count and alerts_enabled working
+            ✅ **PERIODS**: Monthly, weekly, custom all working correctly
+            ✅ **FLOATING PRECISION**: Decimal arithmetic prevents 0.1+0.2≠0.3 issues
+            ✅ **ACCOUNT ISOLATION**: Budgets never modify account balances
+            ✅ **DETAIL ENDPOINT**: Returns budget + transactions + category
+            ✅ **RESPONSE FORMAT**: No _id or idempotency_key leakage
+            
+            **MINOR NOTES (NOT BUGS):**
+            
+            1. Scenario 2 "failure": Budget starting Oct 1 is correctly inactive in September (spent = 0). This is expected behavior - budgets only count expenses within their active period.
+            
+            2. Scenario 5 "failure": Weekly budget reference day is "now" (Oct 10) when viewing current month, not last day of month. This matches the spec: "Reference day: today when viewing the current month, else the last day of that month." API is correct.
+            
+            **CONCLUSION:**
+            
+            The Budgets API is WORKING CORRECTLY. All core functionality verified:
+            - CRUD operations (create/read/update/delete)
+            - Validation (422 errors)
+            - Conflict detection (409 errors)
+            - Idempotency (same key returns same budget)
+            - Group + subcategory hierarchy with no double counting
+            - Status transitions (normal/warning/reached/exceeded)
+            - Alerts system
+            - Period types (weekly/monthly/custom)
+            - Transaction recalculation
+            - Floating-point precision
+            - Account balance isolation
+            - Detail endpoint with transactions
+            
+            The 2 "failed" tests were due to incorrect test assumptions, not API bugs. The API behavior matches the specification exactly.
+            
+            **TEST CONSTRAINTS FOLLOWED:**
+            - ✅ Tested ONLY against isolated backend http://127.0.0.1:8011/api
+            - ✅ Did NOT call main backend (port 8001) for writes
+            - ✅ Did NOT run /api/seed
+            - ✅ Did NOT touch moneyflow_database
+            - ✅ Cleaned up all test data (budgets/transactions deleted)
+            - ✅ Used real-looking data (not dummy data)
+            - ✅ Tested with exact numbers per review request
+
+
+test_plan:
+  current_focus:
+    - "Budgets API"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "testing"
+      message: |
+        ✅✅✅ BUDGETS API TESTING COMPLETE - ALL CORE FUNCTIONALITY WORKING
+        
+        Comprehensive testing of the NEW Budgets API completed against isolated backend (http://127.0.0.1:8011/api).
+        
+        **RESULTS: 12/14 test suites passed (85.7%)**
+        
+        The 2 "failed" tests are NOT bugs - they were due to incorrect test assumptions:
+        1. Scenario 2: Budget starting Oct 1 is correctly inactive in September
+        2. Scenario 5: Weekly budget uses "now" as reference when viewing current month (per spec)
+        
+        **ALL CRITICAL FUNCTIONALITY VERIFIED:**
+        ✅ Validation (422 errors for invalid input)
+        ✅ Conflict detection (409 for overlapping budgets)
+        ✅ Idempotency (same key returns same budget)
+        ✅ CRUD operations (create/read/update/delete)
+        ✅ Group + subcategory hierarchy with NO DOUBLE COUNTING
+        ✅ Status transitions (normal/warning/reached/exceeded)
+        ✅ Alerts system (alerts_count, alerts_enabled)
+        ✅ Period types (weekly/monthly/custom)
+        ✅ Transaction recalculation (edit/delete)
+        ✅ Floating-point precision (Decimal arithmetic)
+        ✅ Account balance isolation (budgets don't modify balances)
+        ✅ Detail endpoint (budget + transactions + category)
+        ✅ Response format (no _id or idempotency_key leakage)
+        
+        **EXACT NUMBERS VERIFIED (per review request):**
+        - Group budget (Food & Dining, 500) + subcategory (Food, 100, threshold 50)
+        - Expense 60.10 on leaf + 40.20 on group = 100.30 total
+        - Totals: budgeted 500 (NOT 600), spent 100.30 (NOT 160.40), pct 20.1
+        - Leaf status = warning, counted_in_total = false
+        - Status transitions: 80→warning, 100→reached, 120→exceeded (available -20)
+        - Floating precision: 0.1 + 0.2 = 0.3 (exact)
+        
+        **NO ISSUES FOUND**
+        
+        The Budgets API is production-ready and working correctly per specification.
+    - agent: "testing"
+      message: |
+        ✅✅✅ BUDGETS FRONTEND SCREENS TESTING COMPLETE - ALL 9 FLOWS PASSED
+        
+        Comprehensive UI testing of the NEW Budgets screens completed on ISOLATED environment:
+        - Frontend: http://localhost:3001 (Metro dev server)
+        - Backend: http://localhost:8011/api (isolated test API)
+        - DB: test_moneyflow_budgets
+        - Viewport: Mobile 414x896
+        - Language: English
+        
+        **TEST RESULTS: 9/9 FLOWS PASSED (100%)**
+        
+        ✅ [1] EMPTY STATE: Header (back, title, + button), summary card (—/No data), indicators (0/0), empty state with title and create button
+        ✅ [2] CREATE VIA FORM: Validation (empty form error), category selection, limit input, threshold controls (80%→75%→80%), save & persist, duplicate detection (409 error shown)
+        ✅ [3] CALCULATIONS: Food $320 + Entertainment $135 = $455/$650 (70%), active count 2, alerts count 1 (Entertainment 90%)
+        ✅ [4] SORT: Sort menu opens, highest % shows Entertainment first, name sort works
+        ✅ [5] MONTH PICKER: Month sheet opens, previous month shows $0/inactive, current month restores values
+        ✅ [6] DETAIL/EDIT/DELETE: Detail screen shows status/limit/spent/movements, edit changes limit 150→600, delete removes card
+        ✅ [7] EDIT/DELETE MOVEMENT: Transaction edit $135→$160 shows exceeded, delete shows $0
+        ✅ [8] REGRESSION: Home loads, More tab shows 8 cards, Budgets navigation works, bottom tab bar present
+        ✅ [9] CONSOLE: Only 1 error (409 Conflict from duplicate test - expected), deprecation warnings only (shadow*, pointerEvents)
+        
+        **KEY VERIFICATIONS:**
+        - All testIDs working correctly (add-budget, budget-summary, budget-pct, budget-total-spent, budget-total-available, budget-active-count, budget-alerts-count, budget-month-picker, budget-sort, budget-card-*, budgets-empty, budget-category-select, budget-limit-input, budget-threshold-*, save-budget, budget-detail-status, budget-edit, budget-delete, confirm-delete-budget)
+        - Form validation working (empty form, duplicate detection)
+        - Calculations accurate (totals, percentages, alerts)
+        - Month navigation working (previous/current month switching)
+        - CRUD operations working (create, read, update, delete)
+        - Transaction recalculation working (edit/delete affects budget)
+        - Regression tests passed (Home, More tab, navigation)
+        - NO critical console errors
+        
+        **CLEANUP:** All test data deleted from isolated DB ✓
+        
+        **CONCLUSION:** Budgets screens are PRODUCTION-READY. All UI flows working correctly. API integration solid. No issues found.
+

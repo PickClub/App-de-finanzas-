@@ -221,6 +221,88 @@ backend:
           comment: "✅✅✅ 5TH VERIFICATION COMPLETE (READ-ONLY after latest .env recreation). Backend supervisor: RUNNING (pid 790, uptime 0:03:15). Port 8001 listening confirmed (netstat shows tcp 0.0.0.0:8001 LISTEN). /app/backend/.env exists with MONGO_URL=mongodb://localhost:27017, DB_NAME=moneyflow_database, CORS_ORIGINS=*. All 8 GET endpoints return HTTP 200: (1) GET /api/user → HTTP 200, dict with keys: id, name, email, profile_photo, currency ✓ (2) GET /api/accounts → HTTP 200, empty array ✓ (3) GET /api/summary → HTTP 200, dict with keys: total_balance, month_income, month_expense, debts, accounts_count ✓ (4) GET /api/categories → HTTP 200, empty array ✓ (5) GET /api/transactions → HTTP 200, empty array ✓ (6) GET /api/budgets → HTTP 200, empty array ✓ (7) GET /api/goals → HTTP 200, empty array ✓ (8) GET /api/debts → HTTP 200, empty array ✓. Backend logs show NO KeyError for MONGO_URL or DB_NAME in current session (backend started Thu Sep 24 10:06:44 2026). Old KeyError traces in error log are from previous crash-loop sessions before .env was recreated. Current session shows only the documented transient ObjectId serialization error (HTTP 500 on first /api/user after cold boot: 'ObjectId' object is not iterable), followed by stable HTTP 200 responses. NO 502 Bad Gateway errors. Backend boots successfully, loads environment variables from /app/backend/.env, connects to MongoDB, and serves all API endpoints correctly. 502 Bad Gateway is RESOLVED."
 
 frontend:
+  - task: "Más screen: 'Tu dinero' redesign (8 pastel gradient cards) + cleaned header"
+    implemented: true
+    working: true
+    file: "frontend/app/(tabs)/more.tsx, frontend/src/i18n/locales/es.json, frontend/src/i18n/locales/en.json, frontend/assets/fonts/Montserrat-Bold.ttf, frontend/assets/fonts/Montserrat-ExtraBold.ttf"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Header: removed subtitle + premium banner; kept 'Más' title + profile pill (-> /settings); added circular gear button (testID more-settings-btn -> /settings). 'Tu dinero' grid now 2 cols x 4 rows = 8 uniform cards (height fixed) with expo-linear-gradient diagonal (start top-right strong pastel -> end bottom-left light), icon square top-left, white semi-transparent arrow circle top-right, Montserrat-Bold title (loaded locally via expo-font in this screen only), grey subtitle. No decorative background illustrations. Routes preserved: Cuentas /accounts, Categorías /categories, Presupuestos /budgets, Metas /goals, Deudas /debts, Pagos recurrentes (no route, as before). New cards Facturas + Calendario financiero have NO route (no screens exist). 'Aplicación' section + suggestion card untouched (same code/styles). 4 new i18n keys (es/en).
+        - working: true
+          agent: "testing"
+          comment: "ALL PASS: header (no subtitle/promo, profile + gear -> /settings), 8 uniform cards 2x4, gradients top-right->bottom-left, 5 routes OK, 3 no-route cards stay on /more, Aplicación section + suggestion intact, bottom tab bar intact, no console errors."
+        - working: true
+          agent: "testing"
+          comment: |
+            ✅✅✅ ALL TESTS PASSED - Más/More screen redesign working perfectly. Tested on WEB preview (http://localhost:3000/more) with mobile viewport (414x896). Waited 12 seconds after load as required. READ-ONLY testing (no code/data modifications).
+            
+            [TEST 1] HEADER VERIFICATION ✅ (6/6 PASS):
+            - Title "More" present ✓
+            - NO subtitle text "Todo lo que necesitas..."/"Everything you need..." ✓ (correctly removed)
+            - NO promo card "Saca más provecho..."/"Get more out of..." ✓ (correctly removed)
+            - testID "more-premium" does NOT exist ✓
+            - Profile pill testID "more-profile" exists with "Hi, User" text ✓ (navigates to /settings, tested and returned)
+            - Gear button testID "more-settings-btn" exists ✓ (navigates to /settings, tested and returned)
+            
+            [TEST 2] "YOUR MONEY" SECTION ✅ (ALL PASS):
+            - Section title "Your money" present ✓
+            - Exactly 8 cards found in correct order: Accounts, Categories, Budgets, Savings goals, Debts & loans, Recurring payments, Invoices, Financial calendar ✓
+            - All cards have IDENTICAL dimensions: width=184.1px, height=132.0px (0px variance) ✓
+            - Cards arranged in 2 columns x 4 rows (4 rows detected, each with 2 cards) ✓
+            - Gradient backgrounds present: 8 linear-gradient elements detected ✓
+            - Gradient direction verified in code: start {x:1, y:0} (top-right) → end {x:0, y:1} (bottom-left) ✓
+            - Icon squares visible at top-left of each card ✓
+            - Arrow circles visible at top-right of each card ✓
+            - No text overflow outside cards (visual inspection of screenshots) ✓
+            - Card labels and subtitles rendering correctly ✓
+            
+            [TEST 3] NAVIGATION ✅ (10/10 PASS):
+            - Accounts card → /accounts ✓ (navigated and returned)
+            - Categories card → /categories ✓ (navigated and returned)
+            - Budgets card → /budgets ✓ (navigated and returned)
+            - Savings goals card → /goals ✓ (navigated and returned)
+            - Debts & loans card → /debts ✓ (navigated and returned)
+            - Recurring payments card → stays on /more (no route, as expected) ✓
+            - Invoices card → stays on /more (no route, as expected) ✓
+            - Financial calendar card → stays on /more (no route, as expected) ✓
+            - Profile pill → /settings ✓ (navigated and returned)
+            - Gear button → /settings ✓ (navigated and returned)
+            
+            [TEST 4] "APPLICATION" SECTION ✅ (ALL PASS):
+            - Section title "Application" present ✓
+            - Subtitle "Customize your experience" present ✓
+            - All 5 rows present: Settings, Privacy & security, Help center, Rate the app, About MoneyFlow ✓
+            - Suggestion card testID "more-suggestion" exists ✓
+            - Suggestion card contains "Have a suggestion?" text ✓
+            - Suggestion card contains "Send" button ✓
+            - Page scrolls vertically to reach Application section ✓
+            
+            [TEST 5] BOTTOM TAB BAR ✅ (ALL PASS):
+            - Bottom tab bar present with 4 tabs: Accounts, IA, Reports, Notas ✓
+            - Center FAB button present ✓
+            - Tab bar unchanged and functional ✓
+            
+            [TEST 6] CONSOLE ERRORS ✅ (PASS):
+            - NO red errors or crashes ✓
+            - Total console messages: 40 (0 errors, 32 warnings)
+            - Only deprecation warnings: "shadow*" style props and "props.pointerEvents" (acceptable) ✓
+            - No critical warnings or unexpected errors ✓
+            
+            VISUAL VERIFICATION (Screenshots):
+            - All 8 cards display distinct pastel gradient backgrounds (mint, orange, coral, green, gold, violet, blue) ✓
+            - Gradients flow diagonally from top-right (stronger color) to bottom-left (lighter color) ✓
+            - Icon squares and arrow circles clearly visible on all cards ✓
+            - Layout is clean, uniform, and professional ✓
+            - Text is legible and properly sized ✓
+            - No visual glitches or rendering issues ✓
+            
+            CONCLUSION: The Más/More screen redesign is working perfectly. All requirements met: cleaned header (no subtitle, no promo card), 8 uniform gradient cards in 2x4 grid, correct navigation behavior, Application section intact, bottom tab bar present, no console errors. The implementation matches the design specification exactly. App language is English (both ES/EN are acceptable per requirements).
+
   - task: "Categories screen redesign: accordion (main groups + expandable subcategory grid) + create main/sub in new.tsx"
     implemented: true
     working: "NA"
@@ -696,12 +778,49 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Categories hierarchy: additive parent_id/is_group fields + idempotent grouped init-defaults (8 expense + 4 income groups)"
+    - "Categories screen redesign: accordion (main groups + expandable subcategory grid) + create main/sub in new.tsx"
+    - "Home MR filters: move Calendar right after 'Todas' + Reports periods reuse MR press-spring"
+    - "Account DETAIL / preview screen inserted between Home tap and Edit form"
+    - "Nueva deuda - first step (Yo debo / Me deben) VISUAL redesign to card chooser"
+    - "Distribución de mis cuentas -> DONUT synced to active accounts page (acctPage) + Resumen del mes sparklines"
+    - "Notes editor: minimal tools (checklist + ordered list) and note color selection"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+    - agent: "testing"
+      message: |
+        ✅✅✅ MÁS/MORE SCREEN TESTING COMPLETE - ALL REQUIREMENTS PASSED
+        
+        Completed comprehensive testing of the "Más"/"More" tab screen redesign per user's specific review request. Tested ONLY the /more screen at http://localhost:3000/more with mobile viewport (414x896), waited 12 seconds after load, performed READ-ONLY testing (no code/data modifications).
+        
+        **TEST SUMMARY: 100% PASS RATE**
+        • Header verification: 6/6 PASS
+        • "Your money" section: ALL PASS (8 cards, uniform dimensions, 2x4 layout, gradients)
+        • Navigation: 10/10 PASS (all routes working correctly)
+        • "Application" section: ALL PASS (5 rows + suggestion card)
+        • Bottom tab bar: PASS (4 tabs + FAB present)
+        • Console errors: PASS (no red errors, only acceptable deprecation warnings)
+        
+        **KEY FINDINGS:**
+        ✓ Header cleaned up correctly (no subtitle, no promo card, testID more-premium does not exist)
+        ✓ Profile pill and gear button both navigate to /settings correctly
+        ✓ Exactly 8 cards in "Your money" section with IDENTICAL dimensions (184.1px x 132.0px, 0px variance)
+        ✓ Cards arranged in perfect 2 columns x 4 rows layout
+        ✓ Gradient backgrounds present on all cards (8 linear-gradient elements detected)
+        ✓ Gradient direction verified: top-right → bottom-left (start {x:1,y:0}, end {x:0,y:1})
+        ✓ Navigation working correctly: Accounts/Categories/Budgets/Goals/Debts navigate to their routes; Recurring/Invoices/Calendar stay on /more (no route, as expected)
+        ✓ Application section intact with all 5 rows and suggestion card
+        ✓ Bottom tab bar present with 4 tabs (Accounts/IA/Reports/Notas) + center FAB
+        ✓ No console errors or crashes (only shadow*/pointerEvents deprecation warnings which are acceptable)
+        
+        **VISUAL VERIFICATION (Screenshots):**
+        All 8 cards display distinct pastel gradient backgrounds flowing diagonally from top-right (stronger color) to bottom-left (lighter color). Icon squares and arrow circles clearly visible on all cards. Layout is clean, uniform, and professional. No text overflow, no visual glitches.
+        
+        **CONCLUSION:** The Más/More screen redesign is PRODUCTION-READY. All requirements from the review request have been met. The implementation matches the design specification exactly. No issues found.
+        
+        **NEXT STEPS:** Main agent can proceed with testing other frontend tasks in the current_focus list (Categories screen, Home MR filters, Account detail, Nueva deuda, Distribución donut, Notes editor).
     - agent: "main"
       message: |
         CATEGORIES HIERARCHY — backend testing requested (backend changes only). Please test the new grouped categories feature in backend/server.py:

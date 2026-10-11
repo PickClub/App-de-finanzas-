@@ -8,7 +8,8 @@ export type CalEvent = {
   id: string;
   kind: CalKind;
   subtype: string;
-  source: "transaction" | "recurring" | "debt" | "goal";
+  source: "transaction" | "recurring" | "debt" | "goal" | "bill";
+  links?: { bill_id?: string; recurring_id?: string; debt_id?: string; goal_id?: string };
   ref_id: string;
   date: string;
   time: string | null;

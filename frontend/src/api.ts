@@ -108,6 +108,18 @@ export const api = {
   rpPay: (id: string, d: any, key?: string) =>
     request<any>(`/recurring-payments/${id}/payments`, { method: "POST", body: JSON.stringify(d), headers: key ? { "Idempotency-Key": key } : {} }),
   rpDeletePayment: (pid: string) => request<any>(`/recurring-payments/payments/${pid}`, { method: "DELETE" }),
+  // Bills (Facturas)
+  rpList: () => request<any[]>(`/recurring-payments?tz_offset=${new Date().getTimezoneOffset()}`),
+  billsList: (status = "all") => request<any>(`/bills?status=${status}&tz_offset=${new Date().getTimezoneOffset()}`),
+  billsSummary: () => request<any>(`/bills/summary?tz_offset=${new Date().getTimezoneOffset()}`),
+  billGet: (id: string) => request<any>(`/bills/${id}?tz_offset=${new Date().getTimezoneOffset()}`),
+  billCreate: (d: any, key?: string) =>
+    request<any>("/bills", { method: "POST", body: JSON.stringify(d), headers: key ? { "Idempotency-Key": key } : {} }),
+  billUpdate: (id: string, d: any) => request<any>(`/bills/${id}`, { method: "PUT", body: JSON.stringify(d) }),
+  billDelete: (id: string) => request<any>(`/bills/${id}`, { method: "DELETE" }),
+  billPay: (id: string, d: any, key?: string) =>
+    request<any>(`/bills/${id}/payments`, { method: "POST", body: JSON.stringify(d), headers: key ? { "Idempotency-Key": key } : {} }),
+  billDeletePayment: (pid: string) => request<any>(`/bills/payments/${pid}`, { method: "DELETE" }),
   // Financial calendar (read-only aggregation)
   calendarEvents: (start: string, end: string) =>
     request<any>(`/calendar/events?start=${start}&end=${end}&tz_offset=${new Date().getTimezoneOffset()}`),

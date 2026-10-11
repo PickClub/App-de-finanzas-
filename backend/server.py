@@ -697,6 +697,8 @@ async def update_transaction(tid: str, data: TransactionCreate):
         raise HTTPException(404, "Not found")
     if old.get("goal_contribution_id"):
         raise HTTPException(409, "Este movimiento está vinculado a un aporte de una meta de ahorro; adminístralo desde Metas de ahorro.")
+    if old.get("bill_payment_id"):
+        raise HTTPException(409, "Este movimiento está vinculado a una factura; adminístralo desde Facturas.")
     if old.get("recurring_record_id"):
         raise HTTPException(409, "Este movimiento está vinculado a un pago recurrente; adminístralo desde Pagos recurrentes.")
     if old.get("debt_payment_id"):
@@ -718,6 +720,8 @@ async def delete_transaction(tid: str):
     old = await db.transactions.find_one({"id": tid}, PROJ)
     if old and old.get("goal_contribution_id"):
         raise HTTPException(409, "Este movimiento está vinculado a un aporte de una meta de ahorro; adminístralo desde Metas de ahorro.")
+    if old and old.get("bill_payment_id"):
+        raise HTTPException(409, "Este movimiento está vinculado a una factura; adminístralo desde Facturas.")
     if old and old.get("recurring_record_id"):
         raise HTTPException(409, "Este movimiento está vinculado a un pago recurrente; adminístralo desde Pagos recurrentes.")
     if old and await db.recurring_templates.find_one({"source_transaction_id": tid}, PROJ):
@@ -1552,7 +1556,7 @@ RP_FREQS = {
     "bimonthly": ("m", 2), "quarterly": ("m", 3), "semiannual": ("m", 6), "annual": ("m", 12),
 }
 RP_REMINDERS = {None, 0, 1, 3, 7}
-RP_LINK_FIELDS = ("recurring_record_id", "goal_contribution_id", "debt_payment_id", "debt_id")
+RP_LINK_FIELDS = ("recurring_record_id", "goal_contribution_id", "debt_payment_id", "debt_id", "bill_payment_id")
 
 
 class RecurringPaymentCreate(BaseModel):
@@ -2109,6 +2113,356 @@ async def delete_recurring_record(pid: str):
     return await payment_transaction(operation)
 
 
+# ---------- Bills (Facturas) ----------
+# Each period is its own bill document linked to its series (series_id). Payments
+# always create ONE real expense movement (atomic, idempotent) and update the
+# account balance once. Fully paying a recurring bill creates the next period once
+# (deterministic id -> no duplicates). An optional link to an existing recurring
+# payment makes the SAME movement settle that recurring due (shared record).
+BILL_FREQS = ("once", "weekly", "monthly", "quarterly", "yearly")
+BILL_REMINDERS = (None, 1, 3, 7)
+
+
+class BillIn(BaseModel):
+    name: str
+    provider: Optional[str] = None
+    amount: float
+    category_id: Optional[str] = None
+    account_id: Optional[str] = None
+    due_date: str
+    frequency: Literal["once", "weekly", "monthly", "quarterly", "yearly"] = "once"
+    reminder_days: Optional[int] = None
+    description: Optional[str] = None
+    recurring_payment_id: Optional[str] = None
+    icon: Optional[str] = None
+    color: Optional[str] = None
+
+
+class BillPayIn(BaseModel):
+    amount: float
+    account_id: str
+    date: Optional[str] = None
+    notes: Optional[str] = None
+
+
+def _bill_add_period(d: date, freq: str, anchor_day: int) -> date:
+    if freq == "weekly":
+        return d + timedelta(days=7)
+    step = {"monthly": 1, "quarterly": 3, "yearly": 12}[freq]
+    idx = d.year * 12 + d.month - 1 + step
+    y, m0 = divmod(idx, 12)
+    return date(y, m0 + 1, min(anchor_day, calendar.monthrange(y, m0 + 1)[1]))
+
+
+def _bill_rp_due(rp, bill_due: str):
+    """Occurrence of the linked recurring payment that matches this bill period."""
+    d = date.fromisoformat(bill_due)
+    occ = _rp_occurrences(rp, d - timedelta(days=16), d + timedelta(days=16))
+    if not occ:
+        return None
+    return min(occ.keys(), key=lambda k: (abs((date.fromisoformat(k) - d).days), k))
+
+
+async def _bill_validate(data: BillIn, session=None):
+    name = (data.name or "").strip()
+    if not name:
+        raise HTTPException(422, "El nombre de la factura es obligatorio.")
+    amount = _positive_money(data.amount, "El monto debe ser mayor que cero.")
+    due = _rp_day(data.due_date, "La fecha de vencimiento no es válida.").isoformat()
+    if data.reminder_days not in BILL_REMINDERS:
+        raise HTTPException(422, "El recordatorio no es válido.")
+    if data.category_id:
+        cat = await db.categories.find_one({"id": data.category_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        if not cat or cat.get("type") != "expense" or cat.get("is_group"):
+            raise HTTPException(422, "La categoría debe ser una categoría de gasto existente.")
+    if data.account_id and not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+        raise HTTPException(422, "La cuenta seleccionada no existe.")
+    if data.recurring_payment_id and not await db.recurring_payments.find_one(
+            {"id": data.recurring_payment_id, "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1}, session=session):
+        raise HTTPException(422, "El pago recurrente vinculado no existe.")
+    return {
+        "name": name[:60], "provider": ((data.provider or "").strip()[:60] or None), "amount": amount,
+        "category_id": data.category_id or None, "account_id": data.account_id or None, "due_date": due,
+        "frequency": data.frequency, "reminder_days": data.reminder_days,
+        "description": ((data.description or "").strip()[:200] or None),
+        "recurring_payment_id": data.recurring_payment_id or None,
+        "icon": (data.icon or None), "color": (data.color or None),
+    }
+
+
+async def _bill_paid_map(bill_ids=None, session=None):
+    q = {"user_id": DEFAULT_USER_ID}
+    if bill_ids is not None:
+        q["bill_id"] = {"$in": list(bill_ids)}
+    out = {}
+    async for p in db.bill_payments.find(q, {"_id": 0, "bill_id": 1, "amount": 1}, session=session):
+        out[p["bill_id"]] = out.get(p["bill_id"], Decimal(0)) + Decimal(str(p["amount"]))
+    return out
+
+
+def _bill_public(b, paid: Decimal, today: date, cats=None, accounts=None):
+    amount = Decimal(str(b["amount"]))
+    is_paid = paid >= amount - Decimal("0.001")
+    remaining = Decimal(0) if is_paid else amount - paid
+    status = "paid" if is_paid else ("overdue" if b["due_date"] < today.isoformat() else "pending")
+    days_left = (date.fromisoformat(b["due_date"]) - today).days
+    cat = (cats or {}).get(b.get("category_id")) or {}
+    acc = (accounts or {}).get(b.get("account_id")) or {}
+    rem = b.get("reminder_days")
+    out = {k: v for k, v in b.items() if k not in ("_id", "request_fingerprint")}
+    out.update(
+        paid_amount=float(paid), remaining=float(remaining), status=status, partial=(not is_paid and paid > 0),
+        progress=float(min(Decimal(1), paid / amount)) if amount > 0 else 0.0, days_left=days_left,
+        reminder_active=bool(rem is not None and not is_paid and 0 <= days_left <= rem),
+        category_name=cat.get("name"), category_icon=cat.get("icon"), category_color=cat.get("color"),
+        account_name=acc.get("name"),
+    )
+    return out
+
+
+async def _bill_lookups():
+    cats = {c["id"]: c for c in await db.categories.find({"user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1, "icon": 1, "color": 1}).to_list(5000)}
+    accs = {a["id"]: a for a in await db.accounts.find({"user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1}).to_list(2000)}
+    return cats, accs
+
+
+@api.get("/bills")
+async def list_bills(status: str = "all", tz_offset: int = 0):
+    if status not in ("all", "pending", "paid", "overdue"):
+        raise HTTPException(422, "Filtro no válido.")
+    today = _rp_today(tz_offset)
+    bills = await db.bills.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("due_date", 1).to_list(5000)
+    paid = await _bill_paid_map([b["id"] for b in bills])
+    cats, accs = await _bill_lookups()
+    items = [_bill_public(b, paid.get(b["id"], Decimal(0)), today, cats, accs) for b in bills]
+    counts = {"all": len(items)}
+    for s in ("pending", "paid", "overdue"):
+        counts[s] = sum(1 for i in items if i["status"] == s)
+    if status != "all":
+        items = [i for i in items if i["status"] == status]
+    items.sort(key=lambda i: (i["due_date"], i["name"].lower()))
+    return {"today": today.isoformat(), "items": items, "counts": counts}
+
+
+@api.get("/bills/summary")
+async def bills_summary(tz_offset: int = 0, year: Optional[int] = None, month: Optional[int] = None):
+    today = _rp_today(tz_offset)
+    year, month = year or today.year, month or today.month
+    if not 1 <= month <= 12 or not 1900 <= year <= 3000:
+        raise HTTPException(422, "Mes no válido.")
+    tz = _local_tz(tz_offset)
+    bills = await db.bills.find({"user_id": DEFAULT_USER_ID}, PROJ).to_list(5000)
+    paid = await _bill_paid_map([b["id"] for b in bills])
+    pend, pend_n, over, over_n, nxt = Decimal(0), 0, Decimal(0), 0, None
+    for b in bills:
+        pub = _bill_public(b, paid.get(b["id"], Decimal(0)), today)
+        if pub["status"] == "paid":
+            continue
+        rem = Decimal(str(pub["remaining"]))
+        pend += rem
+        pend_n += 1
+        if pub["status"] == "overdue":
+            over += rem
+            over_n += 1
+        elif nxt is None or (b["due_date"], b["name"]) < (nxt["due_date"], nxt["name"]):
+            nxt = {"id": b["id"], "name": b["name"], "due_date": b["due_date"], "remaining": float(rem)}
+    a, z = date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1])
+    lo, hi = _cal_str_window(a, z)
+    pm, pm_n = Decimal(0), 0
+    async for p in db.bill_payments.find({"user_id": DEFAULT_USER_ID, "date": {"$gte": lo, "$lte": hi}}, {"_id": 0, "amount": 1, "date": 1}):
+        d, _ = _cal_dt(p.get("date"), tz)
+        if d and a <= d <= z:
+            pm += Decimal(str(p["amount"]))
+            pm_n += 1
+    return {
+        "today": today.isoformat(), "year": year, "month": month,
+        "pending": {"amount": float(pend), "count": pend_n},
+        "paid_month": {"amount": float(pm), "count": pm_n},
+        "next_due": nxt,
+        "overdue": {"amount": float(over), "count": over_n},
+    }
+
+
+@api.get("/bills/{bid}")
+async def get_bill(bid: str, tz_offset: int = 0):
+    b = await db.bills.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ)
+    if not b:
+        raise HTTPException(404, "Factura no encontrada.")
+    today = _rp_today(tz_offset)
+    pays = await db.bill_payments.find({"bill_id": bid, "user_id": DEFAULT_USER_ID}, {"_id": 0, "request_fingerprint": 0}).sort("date", -1).to_list(500)
+    paid = sum((Decimal(str(p["amount"])) for p in pays), Decimal(0))
+    cats, accs = await _bill_lookups()
+    out = _bill_public(b, paid, today, cats, accs)
+    for p in pays:
+        p["account_name"] = (accs.get(p.get("account_id")) or {}).get("name")
+    out["payments"] = pays
+    rp = await db.recurring_payments.find_one({"id": b.get("recurring_payment_id"), "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1}) if b.get("recurring_payment_id") else None
+    out["recurring_payment_name"] = (rp or {}).get("name")
+    return out
+
+
+@api.post("/bills")
+async def create_bill(data: BillIn, idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=128)):
+    fields = await _bill_validate(data)
+    bid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:bill:{idempotency_key}")) if idempotency_key else new_id()
+    prev = await db.bills.find_one({"_id": bid})
+    if prev:
+        return {k: v for k, v in prev.items() if k != "_id"}
+    now = now_iso()
+    doc = {"id": bid, "user_id": DEFAULT_USER_ID, **fields, "series_id": bid,
+           "anchor_day": int(fields["due_date"][8:10]), "next_bill_id": None, "created_at": now, "updated_at": now}
+    try:
+        await db.bills.insert_one(dict(doc, _id=bid))
+    except DuplicateKeyError:
+        prev = await db.bills.find_one({"_id": bid})
+        return {k: v for k, v in prev.items() if k != "_id"}
+    return doc
+
+
+@api.put("/bills/{bid}")
+async def update_bill(bid: str, data: BillIn):
+    fields = await _bill_validate(data)
+
+    async def operation(session):
+        b = await db.bills.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        if not b:
+            raise HTTPException(404, "Factura no encontrada.")
+        paid = (await _bill_paid_map([bid], session=session)).get(bid, Decimal(0))
+        if Decimal(str(fields["amount"])) < paid - Decimal("0.001"):
+            raise HTTPException(422, f"El monto no puede ser menor que lo ya pagado ({float(paid):.2f}).")
+        upd = dict(fields, updated_at=now_iso())
+        if fields["due_date"] != b["due_date"]:
+            upd["anchor_day"] = int(fields["due_date"][8:10])
+        await db.bills.update_one({"id": bid, "user_id": DEFAULT_USER_ID}, {"$set": upd}, session=session)
+        return await db.bills.find_one({"id": bid}, PROJ, session=session)
+
+    return await payment_transaction(operation)
+
+
+@api.delete("/bills/{bid}")
+async def delete_bill(bid: str):
+    async def operation(session):
+        if not await db.bills.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1}, session=session):
+            return {"ok": True}
+        # Real expenses stay (money was really spent); only the bill link is removed.
+        await db.transactions.update_many(
+            {"bill_id": bid, "user_id": DEFAULT_USER_ID},
+            {"$unset": {"bill_id": "", "bill_payment_id": ""}}, session=session,
+        )
+        await db.bill_payments.delete_many({"bill_id": bid, "user_id": DEFAULT_USER_ID}, session=session)
+        await db.bills.update_many({"next_bill_id": bid, "user_id": DEFAULT_USER_ID}, {"$set": {"next_bill_id": None}}, session=session)
+        await db.bills.delete_one({"id": bid, "user_id": DEFAULT_USER_ID}, session=session)
+        return {"ok": True}
+
+    return await payment_transaction(operation)
+
+
+@api.post("/bills/{bid}/payments")
+async def pay_bill(bid: str, data: BillPayIn, idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=128)):
+    pid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:bill-payment:{bid}:{idempotency_key}")) if idempotency_key else new_id()
+    tid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"bill-payment-movement:{pid}"))
+    fingerprint = hashlib.sha256(json.dumps({"bid": bid, **data.model_dump()}, sort_keys=True, allow_nan=False).encode()).hexdigest()
+    amount = _positive_money(data.amount, "El monto pagado debe ser mayor que cero.")
+    when = _parse_dt(data.date) if data.date else datetime.now(timezone.utc)
+    if when is None:
+        raise HTTPException(422, "La fecha del pago no es válida.")
+    notes = (data.notes or "").strip()[:200] or None
+    today = _rp_today()
+
+    async def operation(session):
+        prev = await db.bill_payments.find_one({"_id": pid, "user_id": DEFAULT_USER_ID}, session=session)
+        if prev:
+            if prev.get("request_fingerprint") != fingerprint:
+                raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
+            return {k: v for k, v in prev.items() if k not in ("_id", "request_fingerprint")}
+        b = await db.bills.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        if not b:
+            raise HTTPException(404, "Factura no encontrada.")
+        if not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+            raise HTTPException(422, "La cuenta seleccionada no existe.")
+        paid = (await _bill_paid_map([bid], session=session)).get(bid, Decimal(0))
+        remaining = Decimal(str(b["amount"])) - paid
+        if remaining <= Decimal("0.001"):
+            raise HTTPException(409, "Esta factura ya está pagada.")
+        if Decimal(str(amount)) > remaining + Decimal("0.001"):
+            raise HTTPException(422, f"El monto supera lo pendiente ({float(remaining):.2f}).")
+        tx = Transaction(
+            id=tid, user_id=DEFAULT_USER_ID, name=b["name"], amount=amount, type="expense", date=when.isoformat(),
+            category_id=b.get("category_id"), account_id=data.account_id, notes=notes,
+        ).model_dump()
+        tx.update(bill_id=bid, bill_payment_id=pid)
+        # Optional shared record with a linked recurring payment (same movement, no second charge).
+        rec_id = None
+        rp = await db.recurring_payments.find_one({"id": b.get("recurring_payment_id"), "user_id": DEFAULT_USER_ID}, PROJ, session=session) if b.get("recurring_payment_id") else None
+        rp_due = _bill_rp_due(rp, b["due_date"]) if rp else None
+        if rp and rp_due:
+            d = date.fromisoformat(rp_due)
+            recs = (await _rp_records(rid=rp["id"], a=d, b=d, session=session)).get((rp["id"], rp_due), [])
+            st = _rp_state(rp, rp_due, _rp_occurrences(rp, d, d).get(rp_due), recs, today)
+            if st["status"] != "paid":
+                rec_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"bill-rp-record:{pid}"))
+                await db.recurring_payment_records.insert_one({
+                    "_id": rec_id, "id": rec_id, "user_id": DEFAULT_USER_ID, "recurring_id": rp["id"], "due_date": rp_due,
+                    "mode": "link", "amount": amount, "expected_amount": st["expected"], "date": when.isoformat(),
+                    "account_id": data.account_id, "category_id": b.get("category_id"), "notes": notes,
+                    "transaction_id": tid, "settles": False, "created_at": now_iso(), "bill_payment_id": pid,
+                }, session=session)
+                tx.update(recurring_payment_id=rp["id"], recurring_record_id=rec_id)
+        await db.transactions.insert_one(dict(tx, _id=tid), session=session)
+        await recompute_account_balance(data.account_id, session=session)
+        payment = {
+            "id": pid, "user_id": DEFAULT_USER_ID, "bill_id": bid, "series_id": b.get("series_id") or bid,
+            "amount": amount, "date": when.isoformat(), "account_id": data.account_id, "notes": notes,
+            "transaction_id": tid, "recurring_record_id": rec_id, "created_at": now_iso(),
+        }
+        stored = dict(payment, _id=pid)
+        if idempotency_key:
+            stored["request_fingerprint"] = fingerprint
+        await db.bill_payments.insert_one(stored, session=session)
+        # Fully paid recurring bill -> next period, created once.
+        next_id = None
+        if b.get("frequency", "once") != "once" and paid + Decimal(str(amount)) >= Decimal(str(b["amount"])) - Decimal("0.001") and not b.get("next_bill_id"):
+            nd = _bill_add_period(date.fromisoformat(b["due_date"]), b["frequency"], int(b.get("anchor_day") or b["due_date"][8:10])).isoformat()
+            existing = await db.bills.find_one({"user_id": DEFAULT_USER_ID, "series_id": b.get("series_id") or bid, "due_date": nd}, PROJ, session=session)
+            if existing:
+                next_id = existing["id"]
+            else:
+                next_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"bill-next:{bid}"))
+                if not await db.bills.find_one({"_id": next_id}, session=session):
+                    now = now_iso()
+                    keep = ("name", "provider", "amount", "category_id", "account_id", "frequency", "reminder_days",
+                            "description", "recurring_payment_id", "icon", "color", "anchor_day")
+                    await db.bills.insert_one(dict({k: b.get(k) for k in keep}, _id=next_id, id=next_id, user_id=DEFAULT_USER_ID,
+                                                   series_id=b.get("series_id") or bid, due_date=nd, next_bill_id=None,
+                                                   created_at=now, updated_at=now), session=session)
+            await db.bills.update_one({"id": bid, "user_id": DEFAULT_USER_ID}, {"$set": {"next_bill_id": next_id}}, session=session)
+        return dict(payment, next_bill_id=next_id)
+
+    return await payment_transaction(operation)
+
+
+@api.delete("/bills/payments/{pid}")
+async def delete_bill_payment(pid: str):
+    async def operation(session):
+        p = await db.bill_payments.find_one({"id": pid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        if not p:
+            return {"ok": True}
+        tid = p.get("transaction_id")
+        if tid:
+            tx = await db.transactions.find_one({"id": tid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+            if tx and tx.get("bill_payment_id") == pid:
+                await db.transactions.delete_one({"id": tid, "user_id": DEFAULT_USER_ID}, session=session)
+                if tx.get("account_id"):
+                    await recompute_account_balance(tx["account_id"], session=session)
+            await db.recurring_payment_records.delete_many(
+                {"user_id": DEFAULT_USER_ID, "bill_payment_id": pid, "transaction_id": tid}, session=session)
+        await db.bill_payments.delete_one({"id": pid, "user_id": DEFAULT_USER_ID}, session=session)
+        # The next period (if already generated) is kept: it is a real future bill.
+        return {"ok": True}
+
+    return await payment_transaction(operation)
+
+
 # ---------- Financial calendar (READ-ONLY aggregation layer) ----------
 # Builds calendar events on demand from the existing collections (transactions,
 # recurring payments + records, debts, saving goals + contributions). Nothing is
@@ -2190,7 +2544,10 @@ async def _cal_events(a: date, b: date, tz, today: date):
                 kind, sub = "income", "income"
         elif typ == "expense":
             sign = -1
-            if t.get("recurring_record_id"):
+            if t.get("bill_payment_id"):
+                kind, sub = "bill", "bill_paid"
+                links["bill_id"] = t.get("bill_id")
+            elif t.get("recurring_record_id"):
                 kind, sub = "recurring", "recurring_paid"
                 links["recurring_id"] = t.get("recurring_payment_id")
             else:
@@ -2254,6 +2611,44 @@ async def _cal_events(a: date, b: date, tz, today: date):
             "flow": "goal", "status": status, "icon": g.get("icon"), "color": g.get("color"), "links": {"goal_id": g["id"]},
         })
 
+    # 3b) Bill dues (planned). Paid bills are represented by their payment movements.
+    #     Unpaid bills linked to a recurring payment hide that recurring due (single event).
+    hide_rp = set()
+    bills_in = await db.bills.find({"user_id": U, "due_date": {"$gte": a.isoformat(), "$lte": b.isoformat()}}, PROJ).to_list(5000)
+    if bills_in:
+        bpaid = await _bill_paid_map([x["id"] for x in bills_in])
+        for bl in bills_in:
+            pub = _bill_public(bl, bpaid.get(bl["id"], Decimal(0)), today)
+            if pub["status"] == "paid":
+                continue
+            rp = rp_by_id.get(bl.get("recurring_payment_id")) if bl.get("recurring_payment_id") else None
+            if rp:
+                rd = _bill_rp_due(rp, bl["due_date"])
+                if rd:
+                    hide_rp.add((rp["id"], rd))
+            cat = cats.get(bl.get("category_id")) or {}
+            events.append({
+                "id": f"bill:{bl['id']}", "kind": "bill", "subtype": "bill_due", "source": "bill", "ref_id": bl["id"],
+                "date": bl["due_date"], "time": None, "title": bl.get("name") or "",
+                "account": bl.get("provider") or acc_name(bl.get("account_id")), "category": cat.get("name"),
+                "amount": pub["remaining"], "sign": -1, "realized": False, "counts_in_net": False,
+                "flow": "planned_expense", "status": pub["status"], "partial": pub["partial"],
+                "icon": bl.get("icon") or cat.get("icon"), "color": bl.get("color") or cat.get("color"),
+                "links": {"bill_id": bl["id"]},
+            })
+    # Unpaid bills linked to a recurring payment whose due falls just outside the window.
+    for bl in await db.bills.find({"user_id": U, "recurring_payment_id": {"$ne": None},
+                                   "due_date": {"$gte": (a - timedelta(days=16)).isoformat(), "$lte": (b + timedelta(days=16)).isoformat()}}, PROJ).to_list(2000):
+        rp = rp_by_id.get(bl.get("recurring_payment_id"))
+        if not rp:
+            continue
+        paid_b = (await _bill_paid_map([bl["id"]])).get(bl["id"], Decimal(0))
+        if paid_b >= Decimal(str(bl["amount"])) - Decimal("0.001"):
+            continue
+        rd = _bill_rp_due(rp, bl["due_date"])
+        if rd:
+            hide_rp.add((rp["id"], rd))
+
     # 4) Recurring payment dues (planned). Paid dues settled by a movement are
     #    represented by that movement; tracking-only marks are shown as "marked".
     if rps:
@@ -2276,6 +2671,8 @@ async def _cal_events(a: date, b: date, tz, today: date):
                     events.append({**base, "id": f"rp:{rp['id']}:{st['due_date']}", "subtype": "recurring_marked",
                                    "amount": amt, "status": "marked", "sign": 0})
                 else:
+                    if (rp["id"], st["due_date"]) in hide_rp:
+                        continue  # shown once, as the linked bill
                     events.append({**base, "id": f"rp:{rp['id']}:{st['due_date']}", "subtype": "recurring_due",
                                    "amount": st["remaining"], "status": st["status"], "partial": st["partial"],
                                    "expected": st["expected"]})
@@ -2352,7 +2749,16 @@ async def calendar_summary(year: Optional[int] = None, month: Optional[int] = No
     sel = _cal_types(types)
     a, b = date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1])
     events = [e for e in await _cal_events(a, b, _local_tz(tz_offset), today) if e["kind"] in sel]
-    return {"year": year, "month": month, "today": today.isoformat(), **_cal_summary(events, a, b)}
+    out = {"year": year, "month": month, "today": today.isoformat(), **_cal_summary(events, a, b)}
+    # Bills due this month (full amount, paid or not). A separate concept from
+    # "payments": never added to real spending totals.
+    if "bill" in sel:
+        s, n = Decimal(0), 0
+        async for bl in db.bills.find({"user_id": DEFAULT_USER_ID, "due_date": {"$gte": a.isoformat(), "$lte": b.isoformat()}}, {"_id": 0, "amount": 1}):
+            s += Decimal(str(bl["amount"]))
+            n += 1
+        out["bills"] = {"amount": float(s), "count": n, "available": True}
+    return out
 
 
 @api.get("/calendar/upcoming")
@@ -2401,6 +2807,10 @@ async def goal_indexes():
         # Calendar range queries (non-destructive, additive indexes).
         await db.transactions.create_index([("user_id", 1), ("date", 1)])
         await db.goal_contributions.create_index([("user_id", 1), ("date", 1)])
+        await db.bills.create_index([("user_id", 1), ("due_date", 1)])
+        await db.bills.create_index([("user_id", 1), ("series_id", 1), ("due_date", 1)])
+        await db.bill_payments.create_index([("user_id", 1), ("bill_id", 1)])
+        await db.bill_payments.create_index([("user_id", 1), ("date", 1)])
     except PyMongoError:
         logger.warning("Could not ensure saving-goal indexes")
 

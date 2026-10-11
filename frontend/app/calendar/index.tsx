@@ -149,6 +149,7 @@ export default function FinancialCalendar() {
 
   const openEvent = useCallback((e: CalEvent) => {
     const route =
+      e.source === "bill" || e.links?.bill_id ? `/bills/${e.source === "bill" ? e.ref_id : e.links?.bill_id}` :
       e.source === "transaction" ? `/transactions/${e.ref_id}` :
       e.source === "recurring" ? `/recurring/${e.ref_id}` :
       e.source === "debt" ? `/debts/${e.ref_id}` :
@@ -577,7 +578,6 @@ export default function FinancialCalendar() {
                 <View style={[styles.legendDot, { backgroundColor: KIND_COLOR[k], width: us(10), height: us(10), borderRadius: us(5) }]} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.filterLabel}>{t(`calendar.kinds.${k}`)}</Text>
-                  {k === "bill" ? <Text style={styles.filterHint}>{t("calendar.billsSoon")}</Text> : null}
                 </View>
                 <Ionicons name={on ? "checkbox" : "square-outline"} size={us(22)} color={on ? forest : colors.muted} />
               </Pressable>

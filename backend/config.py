@@ -38,6 +38,18 @@ def settings_from_mapping(values: Mapping[str, str]) -> Settings:
     name = values.get("DB_NAME", "").strip()
     if not name or len(name.encode()) > 63 or re.search(r'[ /\\.\x00"$:*?<>|]', name):
         raise ConfigurationError("DB_NAME must be a valid explicit database name.")
+    if values.get("MONEYFLOW_LOCAL_MODE") == "1":
+        # Validate the final configuration, including external process overrides.
+        if env != "development":
+            raise ConfigurationError("Local mode requires APP_ENV=development.")
+        if parsed.scheme != "mongodb" or parsed.netloc != "127.0.0.1:27018":
+            raise ConfigurationError("Local mode requires MongoDB at 127.0.0.1:27018 only.")
+        if name != "development_local_finanzas" or parsed.path not in {"", "/", "/development_local_finanzas"}:
+            raise ConfigurationError("Local mode requires DB_NAME=development_local_finanzas and a matching URI database.")
+        if parse_qs(parsed.query, keep_blank_values=True) != {
+            "replicaSet": ["app_finanzas_dev_rs"], "directConnection": ["true"]
+        }:
+            raise ConfigurationError("Local mode requires replicaSet=app_finanzas_dev_rs and directConnection=true without additional options.")
     origins = tuple(x.strip() for x in values.get("CORS_ORIGINS", "*" if env == "development" else "").split(",") if x.strip())
     if not origins:
         raise ConfigurationError("CORS_ORIGINS must specify at least one origin.")

@@ -89,13 +89,24 @@ async function main() {
       ts.forEachChild(node, visitCatalog);
     }
     visitCatalog(tree); assert(initializer);
-    let calls = 0;
-    const context = { ensuredRef: { current: false }, q: { isSuccess: true }, cats: [{ id: 'c' }],
-      catQ: { isSuccess: true, data: [{ id: 'c' }] }, api: { initDefaultCategories: async () => { calls++; } },
-      qc: { invalidateQueries: async () => {} } };
-    vm.runInNewContext(`globalThis.run = ${initializer};`, context);
-    context.run(); context.cats = []; context.catQ.data = []; context.run();
-    assert.equal(calls, 0); // Deleting the last category must not repopulate it.
+    for (const scenario of [
+      { name: 'existing hierarchy', cats: [{ id: 'g', is_group: true }, { id: 'c', parent_id: 'g' }], expected: 0 },
+      { name: 'empty catalog', cats: [], expected: 1 },
+      { name: 'legacy ungrouped catalog', cats: [{ id: 'c' }], expected: file === 'app/categories/index.tsx' ? 1 : 0 },
+    ]) {
+      let calls = 0;
+      const context = { ensuredRef: { current: false }, q: { isSuccess: false }, cats: scenario.cats,
+        catQ: { isSuccess: false, data: scenario.cats }, api: { initDefaultCategories: async () => { calls++; } },
+        qc: { invalidateQueries: async () => {} } };
+      vm.runInNewContext(`globalThis.run = ${initializer};`, context);
+      context.run();
+      assert.equal(calls, 0, `${file}: do not initialize before the query succeeds`);
+      assert.equal(context.ensuredRef.current, false);
+      context.q.isSuccess = true; context.catQ.isSuccess = true; context.run();
+      assert.equal(calls, scenario.expected, `${file}: ${scenario.name}`);
+      context.cats = []; context.catQ.data = []; context.run(); context.run();
+      assert.equal(calls, scenario.expected, `${file}: deletion/refetch must not reinitialize in the same mount`);
+    }
   }
   // Exercise the actual local-note handler: persistence failure must keep its editor/data.
   const noteSource = fs.readFileSync(path.join(root, 'app/(tabs)/notes.tsx'), 'utf8');
@@ -126,6 +137,6 @@ async function main() {
   }
   console.log('PASS: 3 destinations × success, double press, pending refresh, 409, 404, missing resource; TSX syntax.');
   console.log('PASS: local-note deletion commits storage before closing; double press and storage failure controlled.');
-  console.log('PASS: deleting the last category does not trigger catalog initialization in the existing screens.');
+  console.log('PASS: catalog loading, existing hierarchy, empty/legacy initialization and no reinitialization after deletion in the same mount.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

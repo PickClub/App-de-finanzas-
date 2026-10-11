@@ -115,6 +115,50 @@ class TransactionCreate(BaseModel):
     notes: Optional[str] = None
 
 
+def transaction_edit_payload(data, old):
+    """Omitted optional fields preserve their stored value; explicit None does not."""
+    payload = data.model_dump()
+    supplied = data.model_dump(exclude_unset=True)
+    for field in payload:
+        if field not in supplied and field in old:
+            payload[field] = old[field]
+    if not payload.get("date"):
+        payload["date"] = old.get("date", now_iso())
+    return payload
+
+
+async def validate_transaction(payload, old=None, session=None):
+    """Validate writes without revalidating unchanged legacy financial fields."""
+    def changed(field):
+        return old is None or payload.get(field) != old.get(field)
+
+    if changed("type") and payload["type"] not in (
+        "income", "expense", "transfer", "debt_payment", "loan_given", "loan_received"
+    ):
+        raise HTTPException(422, "Tipo de movimiento desconocido.")
+    if changed("amount") and (not math.isfinite(payload["amount"]) or payload["amount"] <= 0):
+        raise HTTPException(422, "El importe debe ser positivo y finito.")
+    for field, collection in (("account_id", db.accounts), ("to_account_id", db.accounts),
+                              ("category_id", db.categories)):
+        value = payload.get(field)
+        if changed(field) and value is not None:
+            if not await collection.find_one({"id": value, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+                raise HTTPException(422, f"Referencia inválida: {field}.")
+    # A transfer is one relationship: changing either endpoint or its type must
+    # leave the whole relationship valid, even when the other endpoint is legacy.
+    if payload["type"] == "transfer" and any(changed(f) for f in ("type", "account_id", "to_account_id")):
+        source, target = payload.get("account_id"), payload.get("to_account_id")
+        if not source or not target or source == target:
+            raise HTTPException(422, "La transferencia requiere dos cuentas diferentes.")
+        for aid in (source, target):
+            if not await db.accounts.find_one({"id": aid, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+                raise HTTPException(422, "La transferencia requiere cuentas existentes.")
+    elif payload["type"] != "transfer" and payload.get("to_account_id") is not None and (
+        changed("type") or changed("to_account_id")
+    ):
+        raise HTTPException(422, "La cuenta destino solo corresponde a transferencias.")
+
+
 class RecurringTemplate(BaseModel):
     id: str = Field(default_factory=new_id)
     user_id: str = DEFAULT_USER_ID
@@ -361,6 +405,27 @@ async def payment_transaction(operation):
             raise HTTPException(503, "No se pudo confirmar la operación atómica. MongoDB debe admitir transacciones; reintenta con la misma Idempotency-Key.")
 
 
+async def ordinary_transaction(operation):
+    """Retry only aborted transient transactions, never an uncertain commit."""
+    for attempt in range(3):
+        try:
+            async with await client.start_session() as session:
+                async with session.start_transaction(
+                    read_concern=ReadConcern("snapshot"),
+                    write_concern=WriteConcern("majority"),
+                    read_preference=ReadPreference.PRIMARY,
+                ):
+                    return await operation(session)
+        except PyMongoError as error:
+            if error.has_error_label("UnknownTransactionCommitResult"):
+                raise HTTPException(503, "No se pudo confirmar el resultado. Comprueba el estado antes de repetir la operación; puede haberse guardado.")
+            if error.has_error_label("TransientTransactionError"):
+                if attempt < 2:
+                    continue
+                raise HTTPException(409, "Conflicto concurrente; la operación no se guardó. Reintenta más tarde.")
+            raise HTTPException(503, "No se pudo confirmar la operación atómica. MongoDB debe admitir transacciones; comprueba el estado antes de repetirla.")
+
+
 async def validate_payment(debt_id, amount, account_id, session, replacing=None):
     if not math.isfinite(amount) or amount <= 0:
         raise HTTPException(422, "El importe debe ser positivo y finito.")
@@ -430,17 +495,19 @@ async def edit_payment_movement(tid, data):
         payment = await db.debt_payments.find_one({"id": old.get("debt_payment_id"), "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ, session=session)
         if not payment or (await payment_movement(payment, session))["id"] != tid:
             raise HTTPException(409, "El movimiento requiere conciliación con su pago.")
-        if data.debt_id not in (None, payment["debt_id"]) or data.type != old["type"] or data.to_account_id is not None:
+        payload = transaction_edit_payload(data, old)
+        effective = TransactionCreate(**payload)
+        if effective.debt_id not in (None, payment["debt_id"]) or effective.type != old["type"] or effective.to_account_id is not None:
             raise HTTPException(409, "No se puede cambiar la deuda ni el tipo de un pago vinculado.")
-        await validate_payment(payment["debt_id"], data.amount, data.account_id, session, replacing=payment["id"])
-        payload = data.model_dump()
-        payload.update(debt_id=payment["debt_id"], date=data.date or old["date"])
+        await validate_payment(payment["debt_id"], effective.amount, effective.account_id, session, replacing=payment["id"])
+        await validate_transaction(payload, old, session=session)
+        payload.update(debt_id=payment["debt_id"], date=effective.date or old["date"])
         await db.transactions.update_one({"id": tid, "user_id": DEFAULT_USER_ID}, {"$set": payload}, session=session)
         await db.debt_payments.update_one({"id": payment["id"], "user_id": DEFAULT_USER_ID}, {"$set": {
             field: payload[field] for field in ("amount", "date", "account_id", "notes")
         }}, session=session)
         await recompute_debt(payment["debt_id"], session=session)
-        for aid in sorted({payment.get("account_id"), data.account_id} - {None}):
+        for aid in sorted({payment.get("account_id"), effective.account_id} - {None}):
             await recompute_account_balance(aid, session=session)
         return await db.transactions.find_one({"id": tid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
     return await payment_transaction(operation)
@@ -483,9 +550,11 @@ async def create_account(data: AccountCreate):
 
 @api.put("/accounts/{account_id}")
 async def update_account(account_id: str, data: AccountCreate):
-    await db.accounts.update_one({"id": account_id}, {"$set": data.model_dump()})
-    await recompute_account_balance(account_id)
-    return await db.accounts.find_one({"id": account_id}, PROJ)
+    async def operation(session):
+        await db.accounts.update_one({"id": account_id}, {"$set": data.model_dump()}, session=session)
+        await recompute_account_balance(account_id, session=session)
+        return await db.accounts.find_one({"id": account_id}, PROJ, session=session)
+    return await ordinary_transaction(operation)
 
 
 @api.delete("/accounts/{account_id}")
@@ -681,13 +750,16 @@ async def create_transaction(data: TransactionCreate):
     payload = data.model_dump()
     if not payload.get("date"):
         payload["date"] = now_iso()
-    tx = Transaction(user_id=DEFAULT_USER_ID, **payload).model_dump()
-    await db.transactions.insert_one(tx)
-    if tx.get("account_id"):
-        await recompute_account_balance(tx["account_id"])
-    if tx.get("to_account_id"):
-        await recompute_account_balance(tx["to_account_id"])
-    return {k: v for k, v in tx.items() if k != "_id"}
+    # Identity/date stay stable across retries of an aborted transaction.
+    tid = new_id()
+    async def operation(session):
+        await validate_transaction(payload, session=session)
+        tx = Transaction(id=tid, user_id=DEFAULT_USER_ID, **payload).model_dump()
+        await db.transactions.insert_one(dict(tx, _id=tid), session=session)
+        for aid in sorted({tx.get("account_id"), tx.get("to_account_id")} - {None}):
+            await recompute_account_balance(aid, session=session)
+        return tx
+    return await ordinary_transaction(operation)
 
 
 @api.put("/transactions/{tid}")
@@ -705,14 +777,22 @@ async def update_transaction(tid: str, data: TransactionCreate):
         return await edit_payment_movement(tid, data)
     if old.get("debt_id") or data.debt_id or data.type == "debt_payment":
         raise HTTPException(409, "El movimiento requiere un vínculo individual con su pago antes de editarlo.")
-    payload = data.model_dump()
-    if not payload.get("date"):
-        payload["date"] = old.get("date", now_iso())
-    await db.transactions.update_one({"id": tid}, {"$set": payload})
-    for aid in {old.get("account_id"), old.get("to_account_id"), payload.get("account_id"), payload.get("to_account_id")}:
-        if aid:
-            await recompute_account_balance(aid)
-    return await db.transactions.find_one({"id": tid}, PROJ)
+    async def operation(session):
+        current = await db.transactions.find_one({"id": tid}, PROJ, session=session)
+        if not current:
+            raise HTTPException(404, "Not found")
+        # The initial read only selects the existing payment route. Recheck
+        # financial links against the same snapshot as the ordinary writes.
+        for field in ("goal_contribution_id", "bill_payment_id", "recurring_record_id", "debt_payment_id", "debt_id"):
+            if current.get(field):
+                raise HTTPException(409, "Este movimiento está vinculado; adminístralo desde su operación financiera.")
+        payload = transaction_edit_payload(data, current)
+        await validate_transaction(payload, current, session=session)
+        await db.transactions.update_one({"id": tid}, {"$set": payload}, session=session)
+        for aid in sorted({current.get("account_id"), current.get("to_account_id"), payload.get("account_id"), payload.get("to_account_id")} - {None}):
+            await recompute_account_balance(aid, session=session)
+        return await db.transactions.find_one({"id": tid}, PROJ, session=session)
+    return await ordinary_transaction(operation)
 
 
 @api.delete("/transactions/{tid}")
@@ -738,12 +818,19 @@ async def delete_transaction(tid: str):
         return await payment_transaction(operation)
     if old and old.get("debt_id"):
         raise HTTPException(409, "Movimiento antiguo sin vínculo individual: requiere conciliación antes de borrar.")
-    if old:
-        await db.transactions.delete_one({"id": tid})
-        for aid in {old.get("account_id"), old.get("to_account_id")}:
-            if aid:
-                await recompute_account_balance(aid)
-    return {"ok": True}
+    async def operation(session):
+        current = await db.transactions.find_one({"id": tid}, PROJ, session=session)
+        if current:
+            for field in ("goal_contribution_id", "bill_payment_id", "recurring_record_id", "debt_payment_id", "debt_id"):
+                if current.get(field):
+                    raise HTTPException(409, "Este movimiento está vinculado; adminístralo desde su operación financiera.")
+            if await db.recurring_templates.find_one({"source_transaction_id": tid}, PROJ, session=session):
+                raise HTTPException(409, "Este movimiento es origen de una recurrencia. Elimina primero esa configuración de recurrencia.")
+            await db.transactions.delete_one({"id": tid}, session=session)
+            for aid in sorted({current.get("account_id"), current.get("to_account_id")} - {None}):
+                await recompute_account_balance(aid, session=session)
+        return {"ok": True}
+    return await ordinary_transaction(operation)
 
 
 # Recurring templates (MVP: stores configuration only; does NOT auto-create

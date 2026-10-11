@@ -130,7 +130,7 @@ export function ConfirmSheet({
 
 const s = StyleSheet.create(scaleStyles({
   root: { flex: 1, justifyContent: "flex-end" },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(20,16,12,0.45)" },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(20,16,12,0.45)" },
   sheet: {
     borderTopLeftRadius: radius.cardLg,
     borderTopRightRadius: radius.cardLg,

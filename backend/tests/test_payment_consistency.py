@@ -130,6 +130,9 @@ class Session:
     async def __aexit__(self, *args):
         pass
 
+    def start_transaction(self, **options):
+        return TransactionContext(self)
+
     async def with_transaction(self, callback, **options):
         async with self.database.lock:
             self.data = copy.deepcopy(self.database.data)
@@ -141,6 +144,33 @@ class Session:
                 self.database.commit_then_error = False
                 raise OperationFailure("Commit result unavailable")
             return result
+
+
+class TransactionContext:
+    """Explicit commit/abort double for the bounded ordinary-operation runner."""
+    def __init__(self, session):
+        self.session = session
+
+    async def __aenter__(self):
+        await self.session.database.lock.acquire()
+        self.session.data = copy.deepcopy(self.session.database.data)
+        return self
+
+    async def __aexit__(self, kind, error, traceback):
+        db = self.session.database
+        try:
+            if kind is not None:
+                return False
+            if db.fail_commit:
+                raise OperationFailure("Injected commit failure")
+            db.data = self.session.data
+            if db.commit_then_error:
+                db.commit_then_error = False
+                raise OperationFailure("Commit result unavailable", details={
+                    "errorLabels": ["UnknownTransactionCommitResult"]
+                })
+        finally:
+            db.lock.release()
 
 
 class Client:
@@ -161,13 +191,29 @@ class PaymentTests(unittest.IsolatedAsyncioTestCase):
             dict(id="a", user_id="default-user", initial_balance=1000, current_balance=1000),
             dict(id="b", user_id="default-user", initial_balance=500, current_balance=500),
         ]
+        self.db.data["categories"] = [dict(id="category", user_id="default-user", type="expense")]
         self.db.data["debts"] = [dict(
             id="d", user_id="default-user", name="Debt", direction="i_owe",
             original_amount=500, remaining_amount=500, total_paid=0, status="active",
             start_date="2026-01-01T00:00:00+00:00",
         )]
         tree = ast.parse((Path(__file__).resolve().parents[1] / "server.py").read_text())
-        nodes = [n for n in tree.body if isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and n.name != "shutdown"]
+        # Load only this suite's routes and dependencies. New server hooks/routes
+        # must not pull application startup or unrelated models into the double.
+        definitions = {
+            "now_iso", "new_id", "Transaction", "TransactionCreate", "DebtCreate", "AccountCreate", "update_account",
+            "DebtPayment", "DebtPaymentCreate", "recompute_account_balance",
+            "recompute_debt", "payment_transaction", "validate_payment",
+            "payment_movement", "remove_payment", "edit_payment_movement",
+            "delete_account", "create_transaction", "update_transaction",
+            "delete_transaction", "update_debt", "delete_debt",
+            "list_debt_payments", "create_debt_payment", "delete_debt_payment",
+            "summary", "transaction_edit_payload", "validate_transaction", "ordinary_transaction",
+        }
+        nodes = [n for n in tree.body
+                 if isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+                 and n.name in definitions]
+        self.assertEqual({n.name for n in nodes}, definitions)
         router = APIRouter(prefix="/api")
         self.ns = dict(globals(), api=router, db=self.db, client=self.client,
                        DEFAULT_USER_ID="default-user", PROJ={"_id": 0})
@@ -193,6 +239,15 @@ class PaymentTests(unittest.IsolatedAsyncioTestCase):
         response = await self.pay(**kwargs)
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
+
+    def test_harness_excludes_startup_and_unrelated_routes(self):
+        for name in ("settings", "app", "goal_indexes", "shutdown", "seed", "pay_bill"):
+            self.assertNotIn(name, self.ns)
+        self.assertEqual({route.path for route in self.app.routes if route.path.startswith("/api")}, {
+            "/api/accounts/{account_id}", "/api/transactions", "/api/transactions/{tid}",
+            "/api/debts/{did}", "/api/debts/{did}/payments", "/api/debt-payments",
+            "/api/debt-payments/{pid}", "/api/summary",
+        })
 
     async def test_create_links_both_records_and_balances(self):
         p = await self.created()
@@ -327,6 +382,7 @@ class PaymentTests(unittest.IsolatedAsyncioTestCase):
     async def test_metadata_edit_preserves_payment_link(self):
         p = await self.created()
         tx = copy.deepcopy(self.db.data["transactions"][0])
+        self.db.data["categories"].append(dict(id="new-category", user_id="default-user", type="expense"))
         tx["category_id"] = "new-category"
         response = await self.request("PUT", f"/transactions/{p['transaction_id']}", json=tx)
         self.assertEqual(response.status_code, 200)

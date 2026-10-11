@@ -522,7 +522,7 @@ export default function TransactionDetail() {
         <DateStepper
           testID="recur-start"
           value={recurStart}
-          onChange={(d) => {
+          onChange={(d: Date) => {
             setRecurStart(d);
             if (!recurNoEnd && recurEnd <= d) setRecurEnd(addDays(d, 1));
           }}

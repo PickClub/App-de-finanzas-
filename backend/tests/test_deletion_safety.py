@@ -46,7 +46,7 @@ class DeletionSafetyTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(self.db.data, before)
 
     async def test_empty_category_can_be_deleted(self):
-        self.db.data["categories"] = [{"id": "category"}]
+        self.db.data["categories"] = [{"id": "category", "user_id": "default-user"}]
         response = await self.context.request("DELETE", "/categories/category")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.db.data["categories"], [])
@@ -55,7 +55,7 @@ class DeletionSafetyTests(unittest.IsolatedAsyncioTestCase):
         for collection in ("transactions", "budgets", "debts", "recurring_templates"):
             with self.subTest(collection=collection):
                 self.setUp()
-                self.db.data["categories"] = [{"id": "category"}]
+                self.db.data["categories"] = [{"id": "category", "user_id": "default-user"}]
                 self.db.data[collection].append({"id": "reference", "category_id": "category"})
                 before = copy.deepcopy(self.db.data)
                 response = await self.context.request("DELETE", "/categories/category")

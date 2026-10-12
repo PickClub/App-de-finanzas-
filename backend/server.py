@@ -14,9 +14,11 @@ from pymongo.write_concern import WriteConcern
 if __package__:
     from .config import load_settings
     from .financial_context import get_financial_context, verify_payment_context
+    from .reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, check_movement_references, check_goal_contribution
 else:
     from config import load_settings
     from financial_context import get_financial_context, verify_payment_context
+    from reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, check_movement_references, check_goal_contribution
 
 settings = load_settings()
 client = AsyncIOMotorClient(settings.mongo_url)
@@ -159,6 +161,9 @@ async def validate_transaction(payload, old=None, session=None):
         changed("type") or changed("to_account_id")
     ):
         raise HTTPException(422, "La cuenta destino solo corresponde a transferencias.")
+    # R1 already writes both accounts during balance recomputation; debt edits
+    # also write their debt. Only the category was previously a read-only parent.
+    await coordinate(db, DEFAULT_USER_ID, {"category_id": payload.get("category_id")}, session, old)
 
 
 class RecurringTemplate(BaseModel):
@@ -335,7 +340,7 @@ class UserUpdate(BaseModel):
     profile_photo: Optional[str] = None
 
 
-PROJ = {"_id": 0}
+PROJ = {"_id": 0, "_reference_revision": 0}
 
 
 # ---------- Utilities ----------
@@ -497,6 +502,7 @@ async def edit_payment_movement(tid, data):
         payment = await db.debt_payments.find_one({"id": old.get("debt_payment_id"), "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ, session=session)
         if not payment or (await payment_movement(payment, session))["id"] != tid:
             raise HTTPException(409, "El movimiento requiere conciliación con su pago.")
+        await check_movement_references(db, DEFAULT_USER_ID, old, session, debt_payment_id=payment["id"])
         payload = transaction_edit_payload(data, old)
         effective = TransactionCreate(**payload)
         if effective.debt_id not in (None, payment["debt_id"]) or effective.type != old["type"] or effective.to_account_id is not None:
@@ -573,10 +579,17 @@ async def delete_account(account_id: str):
             if await db.transactions.find_one({field: account_id}, PROJ, session=session):
                 raise HTTPException(409, "Esta cuenta tiene movimientos vinculados. Elimina o resuelve primero sus movimientos; los pagos se anulan desde el historial de deuda.")
         for collection, fields, label in ((db.debts, ("account_id",), "deudas"),
-                                          (db.recurring_templates, ("account_id", "to_account_id"), "recurrencias")):
+                                          (db.recurring_templates, ("account_id", "to_account_id"), "plantillas recurrentes"),
+                                          (db.bills, ("account_id",), "facturas"),
+                                          (db.recurring_payments, ("account_id",), "pagos recurrentes"),
+                                          (db.saving_goals, ("account_id",), "metas de ahorro"),
+                                          (db.goal_contributions, ("account_id",), "aportes de ahorro")):
             for field in fields:
-                if await collection.find_one({field: account_id}, PROJ, session=session):
+                if await collection.find_one({field: account_id, "deleted": {"$ne": True}}, PROJ, session=session):
                     raise HTTPException(409, f"Esta cuenta está vinculada a {label}. Resuelve ese vínculo antes de eliminarla.")
+        for collection in (db.bill_payments, db.recurring_payment_records):
+            if await collection.find_one({"account_id": account_id, "deleted": {"$ne": True}}, PROJ, session=session):
+                raise HTTPException(409, "La cuenta tiene registros financieros activos vinculados.")
         await db.accounts.delete_one({"id": account_id, "user_id": DEFAULT_USER_ID}, session=session)
         return {"ok": True}
     return await payment_transaction(operation)
@@ -591,26 +604,39 @@ async def list_categories():
 @api.post("/categories")
 async def create_category(data: CategoryCreate):
     cat = Category(user_id=DEFAULT_USER_ID, **data.model_dump()).model_dump()
-    await db.categories.insert_one(cat)
-    return {k: v for k, v in cat.items() if k != "_id"}
+    async def operation(session):
+        await coordinate(db, DEFAULT_USER_ID, cat, session)
+        await db.categories.insert_one(cat.copy(), session=session)
+        return reference_public(cat)
+    return await payment_transaction(operation)
 
 
 @api.put("/categories/{cid}")
 async def update_category(cid: str, data: CategoryCreate):
-    # exclude_unset keeps hierarchy fields (parent_id/is_group) intact when a
-    # client sends only {name,type,icon,color}; never wipes existing links.
-    await db.categories.update_one({"id": cid}, {"$set": data.model_dump(exclude_unset=True)})
-    return await db.categories.find_one({"id": cid}, PROJ)
+    async def operation(session):
+        old = await db.categories.find_one({"id": cid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        if not old:
+            return None
+        payload = data.model_dump(exclude_unset=True)
+        await coordinate(db, DEFAULT_USER_ID, {**old, **payload}, session, old)
+        await db.categories.update_one({"id": cid, "user_id": DEFAULT_USER_ID}, {"$set": payload}, session=session)
+        return await db.categories.find_one({"id": cid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+    return await payment_transaction(operation)
 
 
 @api.delete("/categories/{cid}")
 async def delete_category(cid: str):
     async def operation(session):
         for collection, label in ((db.transactions, "movimientos"), (db.budgets, "presupuestos"),
-                                  (db.debts, "deudas"), (db.recurring_templates, "recurrencias")):
+                                  (db.debts, "deudas"), (db.recurring_templates, "recurrencias"),
+                                  (db.bills, "facturas"), (db.recurring_payments, "pagos recurrentes")):
             if await collection.find_one({"category_id": cid}, PROJ, session=session):
                 raise HTTPException(409, f"Esta categoría está utilizada por {label}. Resuelve sus referencias antes de eliminarla.")
-        await db.categories.delete_one({"id": cid}, session=session)
+        if await db.recurring_payment_records.find_one({"category_id": cid, "deleted": {"$ne": True}}, PROJ, session=session):
+            raise HTTPException(409, "La categoría está utilizada por registros recurrentes activos.")
+        if await db.categories.find_one({"parent_id": cid}, PROJ, session=session):
+            raise HTTPException(409, "La categoría tiene subcategorías vinculadas.")
+        await db.categories.delete_one({"id": cid, "user_id": DEFAULT_USER_ID}, session=session)
         return {"ok": True}
     return await payment_transaction(operation)
 
@@ -698,50 +724,53 @@ async def init_default_categories():
     Safe to run multiple times (used by 'Restaurar predeterminadas')."""
     await ensure_user()
 
-    async def ensure_leaf(name, typ, icon, color):
-        existing = await db.categories.find_one({"user_id": DEFAULT_USER_ID, "name": name, "type": typ}, PROJ)
-        if existing:
-            return existing, 0
-        c = Category(user_id=DEFAULT_USER_ID, name=name, type=typ, icon=icon, color=color).model_dump()
-        await db.categories.insert_one(c)
-        return {k: v for k, v in c.items() if k != "_id"}, 1
+    async def operation(session):
+        async def ensure_leaf(name, typ, icon, color):
+            existing = await db.categories.find_one({"user_id": DEFAULT_USER_ID, "name": name, "type": typ}, PROJ, session=session)
+            if existing:
+                return existing, 0
+            c = Category(user_id=DEFAULT_USER_ID, name=name, type=typ, icon=icon, color=color).model_dump()
+            await db.categories.insert_one(c, session=session)
+            return {k: v for k, v in c.items() if k != "_id"}, 1
 
-    created = 0
-    # 1) default leaf catalog
-    for name, icon, color in DEFAULT_EXPENSE_CATEGORIES:
-        _, n = await ensure_leaf(name, "expense", icon, color)
-        created += n
-    for name, icon, color in DEFAULT_INCOME_CATEGORIES:
-        _, n = await ensure_leaf(name, "income", icon, color)
-        created += n
-    # 2) new (empty) subcategories
-    for name, typ, icon, color in NEW_SUBCATEGORIES:
-        _, n = await ensure_leaf(name, typ, icon, color)
-        created += n
+        created = 0
+        # 1) default leaf catalog
+        for name, icon, color in DEFAULT_EXPENSE_CATEGORIES:
+            _, n = await ensure_leaf(name, "expense", icon, color)
+            created += n
+        for name, icon, color in DEFAULT_INCOME_CATEGORIES:
+            _, n = await ensure_leaf(name, "income", icon, color)
+            created += n
+        # 2) new (empty) subcategories
+        for name, typ, icon, color in NEW_SUBCATEGORIES:
+            _, n = await ensure_leaf(name, typ, icon, color)
+            created += n
 
-    groups_created = 0
-    links = 0
-    # 3) groups + 4) parent links (idempotent)
-    for groups, typ in ((EXPENSE_GROUPS, "expense"), (INCOME_GROUPS, "income")):
-        for gname, gicon, gcolor, children in groups:
-            g = await db.categories.find_one(
-                {"user_id": DEFAULT_USER_ID, "name": gname, "type": typ, "is_group": True}, PROJ)
-            if not g:
-                g = Category(user_id=DEFAULT_USER_ID, name=gname, type=typ, icon=gicon,
-                             color=gcolor, is_group=True).model_dump()
-                await db.categories.insert_one(g)
-                g = {k: v for k, v in g.items() if k != "_id"}
-                groups_created += 1
-            gid = g["id"]
-            for child_name in children:
-                child = await db.categories.find_one(
-                    {"user_id": DEFAULT_USER_ID, "name": child_name, "type": typ, "is_group": {"$ne": True}}, PROJ)
-                if child and child.get("parent_id") != gid:
-                    await db.categories.update_one({"id": child["id"]}, {"$set": {"parent_id": gid}})
-                    links += 1
+        groups_created = 0
+        links = 0
+        # 3) groups + 4) parent links (idempotent)
+        for groups, typ in ((EXPENSE_GROUPS, "expense"), (INCOME_GROUPS, "income")):
+            for gname, gicon, gcolor, children in groups:
+                g = await db.categories.find_one(
+                    {"user_id": DEFAULT_USER_ID, "name": gname, "type": typ, "is_group": True}, PROJ, session=session)
+                if not g:
+                    g = Category(user_id=DEFAULT_USER_ID, name=gname, type=typ, icon=gicon,
+                                 color=gcolor, is_group=True).model_dump()
+                    await db.categories.insert_one(g, session=session)
+                    g = {k: v for k, v in g.items() if k != "_id"}
+                    groups_created += 1
+                gid = g["id"]
+                for child_name in children:
+                    child = await db.categories.find_one(
+                        {"user_id": DEFAULT_USER_ID, "name": child_name, "type": typ, "is_group": {"$ne": True}}, PROJ, session=session)
+                    if child and child.get("parent_id") != gid:
+                        await coordinate(db, DEFAULT_USER_ID, {"parent_id": gid}, session)
+                        await db.categories.update_one({"id": child["id"]}, {"$set": {"parent_id": gid}}, session=session)
+                        links += 1
 
-    total = await db.categories.count_documents({"user_id": DEFAULT_USER_ID})
-    return {"ok": True, "created": created, "groups_created": groups_created, "links": links, "total": total}
+        total = await db.categories.count_documents({"user_id": DEFAULT_USER_ID}, session=session)
+        return {"ok": True, "created": created, "groups_created": groups_created, "links": links, "total": total}
+    return await payment_transaction(operation)
 
 
 # Transactions
@@ -793,6 +822,7 @@ async def update_transaction(tid: str, data: TransactionCreate):
         for field in ("goal_contribution_id", "bill_payment_id", "recurring_record_id", "debt_payment_id", "debt_id"):
             if current.get(field):
                 raise HTTPException(409, "Este movimiento está vinculado; adminístralo desde su operación financiera.")
+        await check_movement_references(db, DEFAULT_USER_ID, current, session)
         payload = transaction_edit_payload(data, current)
         await validate_transaction(payload, current, session=session)
         await db.transactions.update_one({"id": tid}, {"$set": payload}, session=session)
@@ -821,6 +851,7 @@ async def delete_transaction(tid: str):
             payment = await db.debt_payments.find_one({"id": current["debt_payment_id"], "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ, session=session)
             if not payment or payment.get("transaction_id") != tid:
                 raise HTTPException(409, "El movimiento requiere conciliación con su pago.")
+            await check_movement_references(db, DEFAULT_USER_ID, current, session, debt_payment_id=payment["id"])
             return await remove_payment(payment["id"], session)
         return await payment_transaction(operation)
     if old and old.get("debt_id"):
@@ -833,6 +864,7 @@ async def delete_transaction(tid: str):
                     raise HTTPException(409, "Este movimiento está vinculado; adminístralo desde su operación financiera.")
             if await db.recurring_templates.find_one({"source_transaction_id": tid}, PROJ, session=session):
                 raise HTTPException(409, "Este movimiento es origen de una recurrencia. Elimina primero esa configuración de recurrencia.")
+            await check_movement_references(db, DEFAULT_USER_ID, current, session)
             await db.transactions.delete_one({"id": tid}, session=session)
             for aid in sorted({current.get("account_id"), current.get("to_account_id")} - {None}):
                 await recompute_account_balance(aid, session=session)
@@ -853,8 +885,11 @@ async def create_recurring(data: RecurringCreate):
     if not payload.get("start_date"):
         payload.pop("start_date", None)
     rt = RecurringTemplate(user_id=DEFAULT_USER_ID, **payload).model_dump()
-    await db.recurring_templates.insert_one(rt)
-    return {k: v for k, v in rt.items() if k != "_id"}
+    async def operation(session):
+        await coordinate(db, DEFAULT_USER_ID, payload, session)
+        await db.recurring_templates.insert_one(rt.copy(), session=session)
+        return reference_public(rt)
+    return await payment_transaction(operation)
 
 
 @api.delete("/recurring/{rid}")
@@ -1017,7 +1052,7 @@ def _overlaps(a_start, a_end, b_start, b_end):
         (b_start or datetime.min.replace(tzinfo=timezone.utc)) < (a_end or inf)
 
 
-async def _validate_budget(data: BudgetCreate, replacing: Optional[str] = None) -> dict:
+async def _validate_budget(data: BudgetCreate, replacing: Optional[str] = None, session=None, old=None) -> dict:
     payload = data.model_dump()
     try:
         limit = _dec(payload["amount_limit"])
@@ -1034,8 +1069,8 @@ async def _validate_budget(data: BudgetCreate, replacing: Optional[str] = None) 
     payload["alert_threshold"] = int(thr)
     if not payload.get("category_id"):
         raise HTTPException(422, "Selecciona una categoría.")
-    cat = await db.categories.find_one({"id": payload["category_id"], "user_id": DEFAULT_USER_ID}, PROJ)
-    if not cat or cat.get("type") != "expense":
+    cat = await db.categories.find_one({"id": payload["category_id"], "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+    if (not cat or cat.get("type") != "expense") and (old is None or old.get("category_id") != payload["category_id"]):
         raise HTTPException(422, "La categoría no existe o no es de gastos.")
     start = _parse_dt(payload.get("start_date")) if payload.get("start_date") else datetime.now(timezone.utc)
     if not start:
@@ -1054,12 +1089,13 @@ async def _validate_budget(data: BudgetCreate, replacing: Optional[str] = None) 
     if payload["period"] == "custom" and not end:
         raise HTTPException(422, "Un período personalizado requiere fecha de finalización.")
     if not (payload.get("name") or "").strip():
-        payload["name"] = cat["name"]
+        payload["name"] = cat["name"] if cat else old.get("name", "")
     # Duplicate guard: same category + same period type with overlapping dates.
     q = {"user_id": DEFAULT_USER_ID, "category_id": payload["category_id"], "period": payload["period"]}
     if replacing:
         q["id"] = {"$ne": replacing}
-    async for other in db.budgets.find(q, PROJ):
+    await coordinate(db, DEFAULT_USER_ID, payload, session, old)
+    async for other in db.budgets.find(q, PROJ, session=session):
         if _overlaps(start, end, _parse_dt(other.get("start_date")), _parse_dt(other.get("end_date"))):
             raise HTTPException(409, "Ya existe un presupuesto para esta categoría y período en esas fechas.")
     return payload
@@ -1126,26 +1162,33 @@ async def budget_detail(bid: str, year: Optional[int] = None, month: Optional[in
 
 @api.post("/budgets")
 async def create_budget(data: BudgetCreate, idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
-    if idempotency_key:
-        existing = await db.budgets.find_one({"user_id": DEFAULT_USER_ID, "idempotency_key": idempotency_key}, PROJ)
-        if existing:
-            return {k: v for k, v in existing.items() if k != "idempotency_key"}
-    payload = await _validate_budget(data)
-    b = Budget(user_id=DEFAULT_USER_ID, **payload).model_dump()
-    doc = {**b, **({"idempotency_key": idempotency_key} if idempotency_key else {})}
-    await db.budgets.insert_one(doc)
-    return {k: v for k, v in b.items() if k != "_id"}
+    bid = new_id()
+    async def operation(session):
+        if idempotency_key:
+            existing = await db.budgets.find_one({"user_id": DEFAULT_USER_ID, "idempotency_key": idempotency_key}, PROJ, session=session)
+            if existing:
+                return {k: v for k, v in existing.items() if k != "idempotency_key"}
+        payload = await _validate_budget(data, session=session)
+        b = Budget(id=bid, user_id=DEFAULT_USER_ID, **payload).model_dump()
+        doc = {**b, **({"idempotency_key": idempotency_key} if idempotency_key else {})}
+        await db.budgets.insert_one(doc, session=session)
+        return reference_public(b)
+    return await payment_transaction(operation)
 
 
 @api.put("/budgets/{bid}")
 async def update_budget(bid: str, data: BudgetCreate):
-    if not await db.budgets.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ):
-        raise HTTPException(404, "Presupuesto no encontrado.")
-    payload = await _validate_budget(data, replacing=bid)
-    payload["updated_at"] = now_iso()
-    await db.budgets.update_one({"id": bid, "user_id": DEFAULT_USER_ID}, {"$set": payload})
-    doc = await db.budgets.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ)
-    return {k: v for k, v in doc.items() if k != "idempotency_key"}
+    async def operation(session):
+        old = await db.budgets.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        if not old:
+            raise HTTPException(404, "Presupuesto no encontrado.")
+        effective = data.model_copy(update={"category_id": old.get("category_id")}) if "category_id" not in data.model_fields_set else data
+        payload = await _validate_budget(effective, replacing=bid, session=session, old=old)
+        payload["updated_at"] = now_iso()
+        await db.budgets.update_one({"id": bid, "user_id": DEFAULT_USER_ID}, {"$set": payload}, session=session)
+        doc = await db.budgets.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        return {k: v for k, v in doc.items() if k != "idempotency_key"}
+    return await payment_transaction(operation)
 
 
 @api.delete("/budgets/{bid}")
@@ -1163,7 +1206,7 @@ async def delete_budget(bid: str):
 #   reverse for withdrawals). Transfers are neither income nor expense, so no fictitious
 #   income/expense is created and total money is never duplicated.
 # * Contribution history is append-only (withdrawals are stored as their own records).
-GOAL_HIDDEN = {"_id", "request_fingerprint"}
+GOAL_HIDDEN = {"_id", "request_fingerprint", "_reference_revision"}
 CENT = Decimal("0.01")
 
 
@@ -1227,7 +1270,7 @@ async def recompute_goal(gid, session=None):
     initial = Decimal(str(g["initial_amount"] if g.get("initial_amount") is not None else g.get("current_amount") or 0))
     total = initial
     pipeline = [
-        {"$match": {"user_id": DEFAULT_USER_ID, "goal_id": gid}},
+        {"$match": {"user_id": DEFAULT_USER_ID, "goal_id": gid, "deleted": {"$ne": True}}},
         {"$group": {"_id": "$kind", "s": {"$sum": {"$toDecimal": "$amount"}}}},
     ]
     async for row in db.goal_contributions.aggregate(pipeline, session=session):
@@ -1245,7 +1288,7 @@ async def recompute_goal(gid, session=None):
     return g
 
 
-async def _validate_goal(data: SavingGoalCreate, replacing=None, session=None):
+async def _validate_goal(data: SavingGoalCreate, replacing=None, session=None, old=None, supplied=None):
     name = (data.name or "").strip()
     if not name:
         raise HTTPException(422, "El nombre de la meta es obligatorio.")
@@ -1257,24 +1300,27 @@ async def _validate_goal(data: SavingGoalCreate, replacing=None, session=None):
         if not math.isfinite(initial) or initial < 0:
             raise HTTPException(422, "El monto inicial no puede ser negativo.")
         initial = float(Decimal(str(initial)).quantize(CENT, rounding=ROUND_HALF_UP))
-    if data.account_id and not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+    if data.account_id and (old is None or data.account_id != old.get("account_id")) and not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
         raise HTTPException(422, "La cuenta asociada no existe.")
     q = {"user_id": DEFAULT_USER_ID, "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}
     if replacing:
         q["id"] = {"$ne": replacing}
     if await db.saving_goals.find_one(q, PROJ, session=session):
         raise HTTPException(409, "Ya existe una meta con ese nombre.")
-    return {
+    fields = {
         "name": name, "target_amount": target, "target_date": _goal_target_date(data.target_date),
         "priority": data.priority, "color": data.color or "#29C4A9", "icon": data.icon or "flag-outline",
         "account_id": data.account_id or None,
-    }, initial
+    }
+    preserve_references(fields, data, old, ("account_id",), supplied)
+    await coordinate(db, DEFAULT_USER_ID, fields, session, old)
+    return fields, initial
 
 
 async def _contributions_page(gid, limit, offset, session=None):
     limit = max(1, min(int(limit or 20), 100))
     offset = max(0, int(offset or 0))
-    q = {"user_id": DEFAULT_USER_ID, "goal_id": gid}
+    q = {"user_id": DEFAULT_USER_ID, "goal_id": gid, "deleted": {"$ne": True}}
     items = await db.goal_contributions.find(q, {"_id": 0, "request_fingerprint": 0}, session=session) \
         .sort([("date", -1), ("created_at", -1)]).skip(offset).limit(limit).to_list(limit)
     total = await db.goal_contributions.count_documents(q, session=session)
@@ -1332,27 +1378,23 @@ async def create_goal(
 ):
     gid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:goal:{idempotency_key}")) if idempotency_key else new_id()
     fingerprint = hashlib.sha256(json.dumps(data.model_dump(), sort_keys=True, allow_nan=False).encode()).hexdigest()
-    previous = await db.saving_goals.find_one({"_id": gid, "user_id": DEFAULT_USER_ID})
-    if previous:
-        if previous.get("request_fingerprint") != fingerprint:
-            raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
-        return _goal_public(previous)
-    fields, initial = await _validate_goal(data)
-    initial = initial or 0.0
-    g = SavingGoal(id=gid, user_id=DEFAULT_USER_ID, current_amount=initial, initial_amount=initial, **fields).model_dump()
-    if g["target_amount"] > 0 and initial >= g["target_amount"]:
-        g["completed_at"] = now_iso()
-    stored = dict(g, _id=gid)
-    if idempotency_key:
-        stored["request_fingerprint"] = fingerprint
-    try:
-        await db.saving_goals.insert_one(stored)
-    except DuplicateKeyError:
-        previous = await db.saving_goals.find_one({"_id": gid, "user_id": DEFAULT_USER_ID})
-        if previous and previous.get("request_fingerprint") == fingerprint:
+    async def operation(session):
+        previous = await db.saving_goals.find_one({"_id": gid, "user_id": DEFAULT_USER_ID}, session=session)
+        if previous:
+            if previous.get("request_fingerprint") != fingerprint:
+                raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
             return _goal_public(previous)
-        raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
-    return _goal_public(g)
+        fields, initial = await _validate_goal(data, session=session)
+        initial = initial or 0.0
+        g = SavingGoal(id=gid, user_id=DEFAULT_USER_ID, current_amount=initial, initial_amount=initial, **fields).model_dump()
+        if g["target_amount"] > 0 and initial >= g["target_amount"]:
+            g["completed_at"] = now_iso()
+        stored = dict(g, _id=gid)
+        if idempotency_key:
+            stored["request_fingerprint"] = fingerprint
+        await db.saving_goals.insert_one(stored, session=session)
+        return _goal_public(g)
+    return await payment_transaction(operation)
 
 
 @api.put("/goals/{gid}")
@@ -1360,7 +1402,9 @@ async def update_goal(gid: str, data: SavingGoalCreate):
     async def operation(session):
         if not await db.saving_goals.find_one({"id": gid, "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1}, session=session):
             raise HTTPException(404, "Meta no encontrada.")
-        fields, initial = await _validate_goal(data, replacing=gid, session=session)
+        old = await db.saving_goals.find_one({"id": gid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        effective = data.model_copy(update={"account_id": old.get("account_id")}) if "account_id" not in data.model_fields_set else data
+        fields, initial = await _validate_goal(effective, replacing=gid, session=session, old=old, supplied=data.model_fields_set)
         fields["updated_at"] = now_iso()
         if initial is not None:
             fields["initial_amount"] = initial
@@ -1376,7 +1420,15 @@ async def delete_goal(gid: str):
         g = await db.saving_goals.find_one({"id": gid, "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1}, session=session)
         if not g:
             return {"ok": True}
-        await db.goal_contributions.delete_many({"goal_id": gid, "user_id": DEFAULT_USER_ID}, session=session)
+        await coordinate(db, DEFAULT_USER_ID, {"goal_id": gid}, session)
+        contributions = await db.goal_contributions.find({"goal_id": gid, "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, session=session).to_list(None)
+        ids = {c["id"] for c in contributions}
+        async for tx in db.transactions.find({"goal_id": gid, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+            if tx.get("goal_contribution_id") not in ids:
+                raise HTTPException(409, "La meta tiene movimientos sin un aporte verificable.")
+        for contribution in contributions:
+            await check_goal_contribution(db, DEFAULT_USER_ID, contribution, session)
+            await retire(db, "goal_contributions", contribution, DEFAULT_USER_ID, session)
         # Real transfers already moved money between the user's accounts: keep them
         # (balances unchanged) and only remove the link to the deleted goal.
         await db.transactions.update_many(
@@ -1409,6 +1461,8 @@ async def create_goal_contribution(
         if previous:
             if previous.get("request_fingerprint") != fingerprint:
                 raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
+            if previous.get("deleted"):
+                raise HTTPException(409, "El aporte ya fue anulado; no se volverá a crear.")
             g = await db.saving_goals.find_one({"id": gid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
             return {"contribution": _goal_clean(previous), "goal": _goal_public(g) if g else None}
         g = await recompute_goal(gid, session=session)
@@ -1416,6 +1470,7 @@ async def create_goal_contribution(
             raise HTTPException(404, "Meta no encontrada.")
         if data.account_id and not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
             raise HTTPException(422, "La cuenta seleccionada no existe.")
+        await coordinate(db, DEFAULT_USER_ID, {"goal_id": gid, "account_id": data.account_id}, session)
         if data.kind == "withdrawal" and Decimal(str(amount)) > Decimal(str(g["current_amount"])):
             raise HTTPException(422, "El retiro supera el ahorro acumulado de la meta.")
         tx_id = None
@@ -1472,13 +1527,12 @@ async def create_debt(data: DebtCreate):
     payload = data.model_dump()
     if not payload.get("start_date"):
         payload["start_date"] = now_iso()
-    d = Debt(
-        user_id=DEFAULT_USER_ID,
-        remaining_amount=payload["original_amount"],
-        **payload,
-    ).model_dump()
-    await db.debts.insert_one(d)
-    return {k: v for k, v in d.items() if k != "_id"}
+    d = Debt(user_id=DEFAULT_USER_ID, remaining_amount=payload["original_amount"], **payload).model_dump()
+    async def operation(session):
+        await coordinate(db, DEFAULT_USER_ID, payload, session)
+        await db.debts.insert_one(d.copy(), session=session)
+        return reference_public(d)
+    return await payment_transaction(operation)
 
 
 @api.put("/debts/{did}")
@@ -1497,6 +1551,10 @@ async def update_debt(did: str, data: DebtCreate):
         if not math.isfinite(data.original_amount) or data.original_amount < paid or data.original_amount < 0:
             raise HTTPException(422, "El importe de la deuda no puede ser menor que lo pagado.")
         payload = data.model_dump()
+        for field in ("account_id", "category_id"):
+            if field not in data.model_fields_set:
+                payload[field] = old.get(field)
+        await coordinate(db, DEFAULT_USER_ID, payload, session, old)
         payload["start_date"] = data.start_date or old["start_date"]
         await db.debts.update_one({"id": did, "user_id": DEFAULT_USER_ID}, {"$set": payload}, session=session)
         await recompute_debt(did, session=session)
@@ -1549,6 +1607,7 @@ async def create_debt_payment(
                 raise HTTPException(409, "La operación ya fue anulada; no se volverá a crear.")
             return DebtPayment(**previous).model_dump()
         debt = await validate_payment(data.debt_id, data.amount, data.account_id, session)
+        # Existing recomputations write the debt/account parents in this session.
         payment = DebtPayment(id=pid, transaction_id=tid, user_id=DEFAULT_USER_ID, **payload).model_dump()
         tx = Transaction(
             id=tid, debt_payment_id=pid, user_id=DEFAULT_USER_ID,
@@ -1856,14 +1915,14 @@ def _rp_current(rp):
 
 def _rp_public(rp, today):
     v = _rp_current(rp)
-    out = {k: val for k, val in rp.items() if k not in ("_id", "request_fingerprint", "versions", "pauses")}
+    out = {k: val for k, val in rp.items() if k not in ("_id", "request_fingerprint", "versions", "pauses", "_reference_revision")}
     out.update(amount=v.get("amount"), frequency=v.get("frequency"), start_date=v.get("start_date"),
                due_day=v.get("due_day"), state=_rp_state_name(rp, today))
     return out
 
 
 async def _rp_records(rid=None, a=None, b=None, session=None):
-    q = {"user_id": DEFAULT_USER_ID}
+    q = {"user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}
     if rid:
         q["recurring_id"] = rid
     if a or b:
@@ -1894,7 +1953,7 @@ def _rp_next_due(rp, records, today, horizon_days=800):
     return None
 
 
-async def _rp_validate(data: RecurringPaymentCreate, session=None):
+async def _rp_validate(data: RecurringPaymentCreate, session=None, old=None, supplied=None):
     name = (data.name or "").strip()
     if not name:
         raise HTTPException(422, "El nombre del pago es obligatorio.")
@@ -1914,11 +1973,11 @@ async def _rp_validate(data: RecurringPaymentCreate, session=None):
             raise HTTPException(422, "El día de vencimiento debe estar entre 1 y 31.")
     if data.reminder_days not in RP_REMINDERS:
         raise HTTPException(422, "Recordatorio no válido.")
-    if data.category_id:
+    if data.category_id and (old is None or data.category_id != old.get("category_id")):
         cat = await db.categories.find_one({"id": data.category_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
         if not cat or cat.get("type") != "expense" or cat.get("is_group"):
             raise HTTPException(422, "La categoría debe ser una categoría de gasto existente.")
-    if data.account_id and not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+    if data.account_id and (old is None or data.account_id != old.get("account_id")) and not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
         raise HTTPException(422, "La cuenta asociada no existe.")
     color = data.color if re.fullmatch(r"#[0-9a-fA-F]{6}", data.color or "") else "#2FA47C"
     fields = {
@@ -1928,6 +1987,8 @@ async def _rp_validate(data: RecurringPaymentCreate, session=None):
         "notes": (data.notes or "").strip()[:200] or None, "reminder_days": data.reminder_days,
     }
     version = {"frequency": data.frequency, "start_date": start.isoformat(), "due_day": due_day, "amount": amount}
+    preserve_references(fields, data, old, ("account_id", "category_id"), supplied)
+    await coordinate(db, DEFAULT_USER_ID, fields, session, old)
     return fields, version
 
 
@@ -2064,30 +2125,26 @@ async def create_recurring_payment(
     rid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:recurring-payment:{idempotency_key}")) if idempotency_key else new_id()
     fingerprint = hashlib.sha256(json.dumps(data.model_dump(), sort_keys=True, allow_nan=False).encode()).hexdigest()
     today = _rp_today()
-    prev = await db.recurring_payments.find_one({"_id": rid, "user_id": DEFAULT_USER_ID})
-    if prev:
-        if prev.get("request_fingerprint") != fingerprint:
-            raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
-        return _rp_public(prev, today)
-    fields, version = await _rp_validate(data)
-    now = now_iso()
-    rp = {
-        "id": rid, "user_id": DEFAULT_USER_ID, **fields, "state": "active" if data.active else "paused",
-        "versions": [{**version, "valid_from": version["start_date"]}],
-        "pauses": [] if data.active else [{"start": min(today, date.fromisoformat(version["start_date"])).isoformat(), "end": None}],
-        "created_at": now, "updated_at": None,
-    }
-    stored = dict(rp, _id=rid)
-    if idempotency_key:
-        stored["request_fingerprint"] = fingerprint
-    try:
-        await db.recurring_payments.insert_one(stored)
-    except DuplicateKeyError:
-        prev = await db.recurring_payments.find_one({"_id": rid, "user_id": DEFAULT_USER_ID})
-        if prev and prev.get("request_fingerprint") == fingerprint:
+    async def operation(session):
+        prev = await db.recurring_payments.find_one({"_id": rid, "user_id": DEFAULT_USER_ID}, session=session)
+        if prev:
+            if prev.get("request_fingerprint") != fingerprint:
+                raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
             return _rp_public(prev, today)
-        raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
-    return _rp_public(rp, today)
+        fields, version = await _rp_validate(data, session=session)
+        now = now_iso()
+        rp = {
+            "id": rid, "user_id": DEFAULT_USER_ID, **fields, "state": "active" if data.active else "paused",
+            "versions": [{**version, "valid_from": version["start_date"]}],
+            "pauses": [] if data.active else [{"start": min(today, date.fromisoformat(version["start_date"])).isoformat(), "end": None}],
+            "created_at": now, "updated_at": None,
+        }
+        stored = dict(rp, _id=rid)
+        if idempotency_key:
+            stored["request_fingerprint"] = fingerprint
+        await db.recurring_payments.insert_one(stored, session=session)
+        return _rp_public(rp, today)
+    return await payment_transaction(operation)
 
 
 @api.put("/recurring-payments/{rid}")
@@ -2096,7 +2153,8 @@ async def update_recurring_payment(rid: str, data: RecurringPaymentCreate):
 
     async def operation(session):
         rp = await _rp_get(rid, session)
-        fields, version = await _rp_validate(data, session)
+        effective = data.model_copy(update={f: rp.get(f) for f in ("account_id", "category_id") if f not in data.model_fields_set})
+        fields, version = await _rp_validate(effective, session, old=rp, supplied=data.model_fields_set)
         cur = _rp_current(rp)
         vers = rp.get("versions") or []
         if any(cur.get(k) != version[k] for k in ("frequency", "start_date", "due_day", "amount")):
@@ -2157,17 +2215,26 @@ async def end_recurring_payment(rid: str):
 @api.delete("/recurring-payments/{rid}")
 async def delete_recurring_payment(rid: str):
     async def operation(session):
-        if not await db.recurring_payments.find_one({"id": rid, "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1}, session=session):
+        if not await db.recurring_payments.find_one({"id": rid, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
             return {"ok": True}
-        await db.recurring_payment_records.delete_many({"recurring_id": rid, "user_id": DEFAULT_USER_ID}, session=session)
-        # Real expenses stay (money was really spent); only the link is removed. Balances unchanged.
-        await db.transactions.update_many(
-            {"recurring_payment_id": rid, "user_id": DEFAULT_USER_ID},
-            {"$unset": {"recurring_payment_id": "", "recurring_record_id": ""}}, session=session,
-        )
+        await coordinate(db, DEFAULT_USER_ID, {"recurring_id": rid}, session)
+        records = await db.recurring_payment_records.find({"recurring_id": rid, "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, session=session).to_list(None)
+        ids = {r["id"] for r in records}
+        async for tx in db.transactions.find({"recurring_payment_id": rid, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+            if tx.get("recurring_record_id") not in ids:
+                raise HTTPException(409, "La recurrencia tiene movimientos sin un registro verificable.")
+        for rec in records:
+            await check_record(db, DEFAULT_USER_ID, rec, session)
+            if rec.get("bill_payment_id"):
+                payment = await db.bill_payments.find_one({"id": rec["bill_payment_id"]}, PROJ, session=session)
+                await _bill_for_write(payment["bill_id"], session)
+                await db.bill_payments.update_one({"id": payment["id"], "user_id": DEFAULT_USER_ID}, {"$set": {"recurring_record_id": None}}, session=session)
+            await retire(db, "recurring_payment_records", rec, DEFAULT_USER_ID, session)
+        await db.bills.update_many({"recurring_payment_id": rid, "user_id": DEFAULT_USER_ID}, {"$set": {"recurring_payment_id": None}}, session=session)
+        # Keep expenses and bill payments; remove both sides of the recurring link.
+        await db.transactions.update_many({"recurring_payment_id": rid, "user_id": DEFAULT_USER_ID}, {"$unset": {"recurring_payment_id": "", "recurring_record_id": ""}}, session=session)
         await db.recurring_payments.delete_one({"id": rid, "user_id": DEFAULT_USER_ID}, session=session)
         return {"ok": True}
-
     return await payment_transaction(operation)
 
 
@@ -2192,8 +2259,11 @@ async def create_recurring_record(
         if prev:
             if prev.get("request_fingerprint") != fingerprint:
                 raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
-            return {k: v for k, v in prev.items() if k not in ("_id", "request_fingerprint")}
+            if prev.get("deleted"):
+                raise HTTPException(409, "La operación ya fue anulada; no se volverá a crear.")
+            return {k: v for k, v in prev.items() if k not in ("_id", "request_fingerprint", "_reference_revision")}
         rp = await _rp_get(rid, session)
+        await coordinate(db, DEFAULT_USER_ID, {"recurring_id": rid}, session)
         d = date.fromisoformat(due)
         occ = _rp_occurrences(rp, d, d)
         records = await _rp_records(rid=rid, a=d, b=d, session=session)
@@ -2221,6 +2291,8 @@ async def create_recurring_record(
             cat = await db.categories.find_one({"id": data.category_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
             if not cat or cat.get("type") != "expense" or cat.get("is_group"):
                 raise HTTPException(422, "La categoría debe ser una categoría de gasto existente.")
+        await coordinate(db, DEFAULT_USER_ID, {"account_id": tx.get("account_id") if tx else data.account_id,
+                                               "category_id": tx.get("category_id") if tx else cat_id}, session)
         if not rp.get("variable") and not data.allow_overpay:
             if st["status"] == "paid":
                 raise HTTPException(409, "Este vencimiento ya está pagado.")
@@ -2262,24 +2334,25 @@ async def create_recurring_record(
 @api.delete("/recurring-payments/payments/{pid}")
 async def delete_recurring_record(pid: str):
     async def operation(session):
-        rec = await db.recurring_payment_records.find_one({"id": pid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
-        if not rec:
+        rec = await db.recurring_payment_records.find_one({"id": pid, "user_id": DEFAULT_USER_ID}, session=session)
+        if not rec or rec.get("deleted"):
             return {"ok": True}
-        tid = rec.get("transaction_id")
-        if tid and rec["mode"] == "expense":
-            tx = await db.transactions.find_one({"id": tid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
-            if tx and tx.get("recurring_record_id") == pid:
-                await db.transactions.delete_one({"id": tid, "user_id": DEFAULT_USER_ID}, session=session)
-                if tx.get("account_id"):
-                    await recompute_account_balance(tx["account_id"], session=session)
-        elif tid:
-            await db.transactions.update_one(
-                {"id": tid, "user_id": DEFAULT_USER_ID, "recurring_record_id": pid},
-                {"$unset": {"recurring_payment_id": "", "recurring_record_id": ""}}, session=session,
-            )
-        await db.recurring_payment_records.delete_one({"id": pid, "user_id": DEFAULT_USER_ID}, session=session)
+        await coordinate(db, DEFAULT_USER_ID, {"recurring_id": rec["recurring_id"]}, session)
+        tx = await check_record(db, DEFAULT_USER_ID, rec, session)
+        if rec.get("bill_payment_id"):
+            payment = await db.bill_payments.find_one({"id": rec["bill_payment_id"]}, PROJ, session=session)
+            await _bill_for_write(payment["bill_id"], session)
+            await db.bill_payments.update_one({"id": payment["id"], "user_id": DEFAULT_USER_ID}, {"$set": {"recurring_record_id": None}}, session=session)
+        if tx and rec["mode"] == "expense":
+            if await db.recurring_templates.find_one({"source_transaction_id": tx["id"]}, PROJ, session=session):
+                raise HTTPException(409, "El movimiento es origen de una plantilla recurrente.")
+            await db.transactions.delete_one({"id": tx["id"], "user_id": DEFAULT_USER_ID}, session=session)
+            if tx.get("account_id"):
+                await recompute_account_balance(tx["account_id"], session=session)
+        elif tx:
+            await db.transactions.update_one({"id": tx["id"], "user_id": DEFAULT_USER_ID}, {"$unset": {"recurring_payment_id": "", "recurring_record_id": ""}}, session=session)
+        await retire(db, "recurring_payment_records", rec, DEFAULT_USER_ID, session)
         return {"ok": True}
-
     return await payment_transaction(operation)
 
 
@@ -2333,7 +2406,7 @@ def _bill_rp_due(rp, bill_due: str):
     return min(occ.keys(), key=lambda k: (abs((date.fromisoformat(k) - d).days), k))
 
 
-async def _bill_validate(data: BillIn, session=None):
+async def _bill_validate(data: BillIn, session=None, old=None, supplied=None):
     name = (data.name or "").strip()
     if not name:
         raise HTTPException(422, "El nombre de la factura es obligatorio.")
@@ -2341,16 +2414,16 @@ async def _bill_validate(data: BillIn, session=None):
     due = _rp_day(data.due_date, "La fecha de vencimiento no es válida.").isoformat()
     if data.reminder_days not in BILL_REMINDERS:
         raise HTTPException(422, "El recordatorio no es válido.")
-    if data.category_id:
+    if data.category_id and (old is None or data.category_id != old.get("category_id")):
         cat = await db.categories.find_one({"id": data.category_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
         if not cat or cat.get("type") != "expense" or cat.get("is_group"):
             raise HTTPException(422, "La categoría debe ser una categoría de gasto existente.")
-    if data.account_id and not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+    if data.account_id and (old is None or data.account_id != old.get("account_id")) and not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
         raise HTTPException(422, "La cuenta seleccionada no existe.")
-    if data.recurring_payment_id and not await db.recurring_payments.find_one(
+    if data.recurring_payment_id and (old is None or data.recurring_payment_id != old.get("recurring_payment_id")) and not await db.recurring_payments.find_one(
             {"id": data.recurring_payment_id, "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1}, session=session):
         raise HTTPException(422, "El pago recurrente vinculado no existe.")
-    return {
+    fields = {
         "name": name[:60], "provider": ((data.provider or "").strip()[:60] or None), "amount": amount,
         "category_id": data.category_id or None, "account_id": data.account_id or None, "due_date": due,
         "frequency": data.frequency, "reminder_days": data.reminder_days,
@@ -2358,10 +2431,13 @@ async def _bill_validate(data: BillIn, session=None):
         "recurring_payment_id": data.recurring_payment_id or None,
         "icon": (data.icon or None), "color": (data.color or None),
     }
+    preserve_references(fields, data, old, ("account_id", "category_id", "recurring_payment_id"), supplied)
+    await coordinate(db, DEFAULT_USER_ID, fields, session, old)
+    return fields
 
 
 async def _bill_paid_map(bill_ids=None, session=None):
-    q = {"user_id": DEFAULT_USER_ID}
+    q = {"user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}
     if bill_ids is not None:
         q["bill_id"] = {"$in": list(bill_ids)}
     out = {}
@@ -2393,7 +2469,7 @@ def _bill_public(b, paid: Decimal, today: date, cats=None, accounts=None):
     cat = (cats or {}).get(b.get("category_id")) or {}
     acc = (accounts or {}).get(b.get("account_id")) or {}
     rem = b.get("reminder_days")
-    out = {k: v for k, v in b.items() if k not in ("_id", "request_fingerprint", "_payment_revision")}
+    out = {k: v for k, v in b.items() if k not in ("_id", "request_fingerprint", "_payment_revision", "_reference_revision")}
     out.update(
         paid_amount=float(paid), remaining=float(remaining), status=status, partial=(not is_paid and paid > 0),
         progress=float(min(Decimal(1), paid / amount)) if amount > 0 else 0.0, days_left=days_left,
@@ -2453,7 +2529,7 @@ async def bills_summary(tz_offset: int = 0, year: Optional[int] = None, month: O
     a, z = date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1])
     lo, hi = _cal_str_window(a, z)
     pm, pm_n = Decimal(0), 0
-    async for p in db.bill_payments.find({"user_id": DEFAULT_USER_ID, "date": {"$gte": lo, "$lte": hi}}, {"_id": 0, "amount": 1, "date": 1}):
+    async for p in db.bill_payments.find({"user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}, "date": {"$gte": lo, "$lte": hi}}, {"_id": 0, "amount": 1, "date": 1}):
         d, _ = _cal_dt(p.get("date"), tz)
         if d and a <= d <= z:
             pm += Decimal(str(p["amount"]))
@@ -2473,7 +2549,7 @@ async def get_bill(bid: str, tz_offset: int = 0):
     if not b:
         raise HTTPException(404, "Factura no encontrada.")
     today = _rp_today(tz_offset)
-    pays = await db.bill_payments.find({"bill_id": bid, "user_id": DEFAULT_USER_ID}, {"_id": 0, "request_fingerprint": 0}).sort("date", -1).to_list(500)
+    pays = await db.bill_payments.find({"bill_id": bid, "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, {"_id": 0, "request_fingerprint": 0}).sort("date", -1).to_list(500)
     paid = sum((Decimal(str(p["amount"])) for p in pays), Decimal(0))
     cats, accs = await _bill_lookups()
     out = _bill_public(b, paid, today, cats, accs)
@@ -2487,28 +2563,26 @@ async def get_bill(bid: str, tz_offset: int = 0):
 
 @api.post("/bills")
 async def create_bill(data: BillIn, idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=128)):
-    fields = await _bill_validate(data)
     bid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:bill:{idempotency_key}")) if idempotency_key else new_id()
-    prev = await db.bills.find_one({"_id": bid})
-    if prev:
-        return {k: v for k, v in prev.items() if k not in ("_id", "_payment_revision")}
-    now = now_iso()
-    doc = {"id": bid, "user_id": DEFAULT_USER_ID, **fields, "series_id": bid,
-           "anchor_day": int(fields["due_date"][8:10]), "next_bill_id": None, "created_at": now, "updated_at": now}
-    try:
-        await db.bills.insert_one(dict(doc, _id=bid))
-    except DuplicateKeyError:
-        prev = await db.bills.find_one({"_id": bid})
-        return {k: v for k, v in prev.items() if k not in ("_id", "_payment_revision")}
-    return doc
+    async def operation(session):
+        fields = await _bill_validate(data, session=session)
+        prev = await db.bills.find_one({"_id": bid}, session=session)
+        if prev:
+            return {k: v for k, v in prev.items() if k not in ("_id", "_payment_revision", "_reference_revision")}
+        now = now_iso()
+        doc = {"id": bid, "user_id": DEFAULT_USER_ID, **fields, "series_id": bid,
+               "anchor_day": int(fields["due_date"][8:10]), "next_bill_id": None, "created_at": now, "updated_at": now}
+        await db.bills.insert_one(dict(doc, _id=bid), session=session)
+        return doc
+    return await payment_transaction(operation)
 
 
 @api.put("/bills/{bid}")
 async def update_bill(bid: str, data: BillIn):
-    fields = await _bill_validate(data)
-
     async def operation(session):
         b = await _bill_for_write(bid, session)
+        effective = data.model_copy(update={f: b.get(f) for f in ("account_id", "category_id", "recurring_payment_id") if f not in data.model_fields_set})
+        fields = await _bill_validate(effective, session, old=b, supplied=data.model_fields_set)
         paid = (await _bill_paid_map([bid], session=session)).get(bid, Decimal(0))
         if Decimal(str(fields["amount"])) < paid - Decimal("0.001"):
             raise HTTPException(422, f"El monto no puede ser menor que lo ya pagado ({float(paid):.2f}).")
@@ -2516,7 +2590,7 @@ async def update_bill(bid: str, data: BillIn):
         if fields["due_date"] != b["due_date"]:
             upd["anchor_day"] = int(fields["due_date"][8:10])
         await db.bills.update_one({"id": bid, "user_id": DEFAULT_USER_ID}, {"$set": upd}, session=session)
-        return await db.bills.find_one({"id": bid}, {"_id": 0, "_payment_revision": 0}, session=session)
+        return await db.bills.find_one({"id": bid}, {"_id": 0, "_payment_revision": 0, "_reference_revision": 0}, session=session)
 
     return await payment_transaction(operation)
 
@@ -2524,18 +2598,25 @@ async def update_bill(bid: str, data: BillIn):
 @api.delete("/bills/{bid}")
 async def delete_bill(bid: str):
     async def operation(session):
-        if not await db.bills.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1}, session=session):
+        if not await db.bills.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
             return {"ok": True}
-        # Real expenses stay (money was really spent); only the bill link is removed.
-        await db.transactions.update_many(
-            {"bill_id": bid, "user_id": DEFAULT_USER_ID},
-            {"$unset": {"bill_id": "", "bill_payment_id": ""}}, session=session,
-        )
-        await db.bill_payments.delete_many({"bill_id": bid, "user_id": DEFAULT_USER_ID}, session=session)
+        await _bill_for_write(bid, session)
+        payments = await db.bill_payments.find({"bill_id": bid, "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, session=session).to_list(None)
+        ids = {p["id"] for p in payments}
+        async for tx in db.transactions.find({"bill_id": bid, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+            if tx.get("bill_payment_id") not in ids:
+                raise HTTPException(409, "La factura tiene movimientos sin un pago verificable.")
+        for payment in payments:
+            await check_bill_payment(db, DEFAULT_USER_ID, payment, session)
+            if payment.get("recurring_record_id"):
+                await coordinate(db, DEFAULT_USER_ID, {"recurring_id": (await db.recurring_payment_records.find_one({"id": payment["recurring_record_id"]}, PROJ, session=session))["recurring_id"]}, session)
+                await db.recurring_payment_records.update_one({"id": payment["recurring_record_id"], "user_id": DEFAULT_USER_ID}, {"$unset": {"bill_payment_id": ""}}, session=session)
+            await retire(db, "bill_payments", payment, DEFAULT_USER_ID, session)
+        # Keep actual expenses and any independent recurring tracking; no refund.
+        await db.transactions.update_many({"bill_id": bid, "user_id": DEFAULT_USER_ID}, {"$unset": {"bill_id": "", "bill_payment_id": ""}}, session=session)
         await db.bills.update_many({"next_bill_id": bid, "user_id": DEFAULT_USER_ID}, {"$set": {"next_bill_id": None}}, session=session)
         await db.bills.delete_one({"id": bid, "user_id": DEFAULT_USER_ID}, session=session)
         return {"ok": True}
-
     return await payment_transaction(operation)
 
 
@@ -2556,10 +2637,13 @@ async def pay_bill(bid: str, data: BillPayIn, idempotency_key: Optional[str] = H
         if prev:
             if prev.get("request_fingerprint") != fingerprint:
                 raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
-            return {k: v for k, v in prev.items() if k not in ("_id", "request_fingerprint")}
+            if prev.get("deleted"):
+                raise HTTPException(409, "La operación ya fue anulada; no se volverá a crear.")
+            return {k: v for k, v in prev.items() if k not in ("_id", "request_fingerprint", "_reference_revision")}
         b = await _bill_for_write(bid, session)
         if not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
             raise HTTPException(422, "La cuenta seleccionada no existe.")
+        await coordinate(db, DEFAULT_USER_ID, {"account_id": data.account_id, "category_id": b.get("category_id")}, session)
         paid = (await _bill_paid_map([bid], session=session)).get(bid, Decimal(0))
         remaining = Decimal(str(b["amount"])) - paid
         if remaining <= Decimal("0.001"):
@@ -2574,6 +2658,10 @@ async def pay_bill(bid: str, data: BillPayIn, idempotency_key: Optional[str] = H
         # Optional shared record with a linked recurring payment (same movement, no second charge).
         rec_id = None
         rp = await db.recurring_payments.find_one({"id": b.get("recurring_payment_id"), "user_id": DEFAULT_USER_ID}, PROJ, session=session) if b.get("recurring_payment_id") else None
+        # An unused missing legacy reference stays on the old bill. A new
+        # shared record (or copied next period) still requires a valid parent.
+        if rp:
+            await coordinate(db, DEFAULT_USER_ID, {"recurring_payment_id": rp["id"]}, session)
         rp_due = _bill_rp_due(rp, b["due_date"]) if rp else None
         if rp and rp_due:
             d = date.fromisoformat(rp_due)
@@ -2612,6 +2700,7 @@ async def pay_bill(bid: str, data: BillPayIn, idempotency_key: Optional[str] = H
                     now = now_iso()
                     keep = ("name", "provider", "amount", "category_id", "account_id", "frequency", "reminder_days",
                             "description", "recurring_payment_id", "icon", "color", "anchor_day")
+                    await coordinate(db, DEFAULT_USER_ID, {k: b.get(k) for k in keep}, session)
                     await db.bills.insert_one(dict({k: b.get(k) for k in keep}, _id=next_id, id=next_id, user_id=DEFAULT_USER_ID,
                                                    series_id=b.get("series_id") or bid, due_date=nd, next_bill_id=None,
                                                    created_at=now, updated_at=now), session=session)
@@ -2624,22 +2713,23 @@ async def pay_bill(bid: str, data: BillPayIn, idempotency_key: Optional[str] = H
 @api.delete("/bills/payments/{pid}")
 async def delete_bill_payment(pid: str):
     async def operation(session):
-        p = await db.bill_payments.find_one({"id": pid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
-        if not p:
+        p = await db.bill_payments.find_one({"id": pid, "user_id": DEFAULT_USER_ID}, session=session)
+        if not p or p.get("deleted"):
             return {"ok": True}
-        tid = p.get("transaction_id")
-        if tid:
-            tx = await db.transactions.find_one({"id": tid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
-            if tx and tx.get("bill_payment_id") == pid:
-                await db.transactions.delete_one({"id": tid, "user_id": DEFAULT_USER_ID}, session=session)
-                if tx.get("account_id"):
-                    await recompute_account_balance(tx["account_id"], session=session)
-            await db.recurring_payment_records.delete_many(
-                {"user_id": DEFAULT_USER_ID, "bill_payment_id": pid, "transaction_id": tid}, session=session)
-        await db.bill_payments.delete_one({"id": pid, "user_id": DEFAULT_USER_ID}, session=session)
-        # The next period (if already generated) is kept: it is a real future bill.
+        await _bill_for_write(p["bill_id"], session)
+        tx = await check_bill_payment(db, DEFAULT_USER_ID, p, session)
+        if await db.recurring_templates.find_one({"source_transaction_id": tx["id"]}, PROJ, session=session):
+            raise HTTPException(409, "El movimiento es origen de una plantilla recurrente.")
+        if p.get("recurring_record_id"):
+            rec = await db.recurring_payment_records.find_one({"id": p["recurring_record_id"]}, session=session)
+            await coordinate(db, DEFAULT_USER_ID, {"recurring_id": rec["recurring_id"]}, session)
+            await retire(db, "recurring_payment_records", rec, DEFAULT_USER_ID, session)
+        await db.transactions.delete_one({"id": tx["id"], "user_id": DEFAULT_USER_ID}, session=session)
+        if tx.get("account_id"):
+            await recompute_account_balance(tx["account_id"], session=session)
+        await retire(db, "bill_payments", p, DEFAULT_USER_ID, session)
+        # Keep a generated future period; series_id is a grouping key, not a FK.
         return {"ok": True}
-
     return await payment_transaction(operation)
 
 
@@ -2757,7 +2847,7 @@ async def _cal_events(a: date, b: date, tz, today: date):
         })
 
     # 2) Goal contributions (tracking only -> never income/expense).
-    async for c in db.goal_contributions.find({"user_id": U, "date": {"$gte": lo, "$lte": hi}}, {"_id": 0, "request_fingerprint": 0}):
+    async for c in db.goal_contributions.find({"user_id": U, "deleted": {"$ne": True}, "date": {"$gte": lo, "$lte": hi}}, {"_id": 0, "request_fingerprint": 0}):
         d, hm = _cal_dt(c.get("date"), tz)
         if not d or not (a <= d <= b):
             continue

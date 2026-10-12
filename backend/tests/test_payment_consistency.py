@@ -9,6 +9,7 @@ import copy
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import List, Literal, Optional
@@ -19,6 +20,7 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field, ValidationError, field_validator
+from backend.reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, check_movement_references, check_goal_contribution
 from backend.financial_context import get_financial_context, verify_payment_context
 from pymongo import ReadPreference
 from pymongo.errors import DuplicateKeyError, OperationFailure, PyMongoError
@@ -27,12 +29,22 @@ from pymongo.write_concern import WriteConcern
 
 
 def matches(doc, query):
-    for key, value in query.items():
+    for key, wanted in query.items():
         actual = doc.get(key)
-        if isinstance(value, dict) and "$ne" in value:
-            if actual == value["$ne"]:
-                return False
-        elif actual != value:
+        if isinstance(wanted, dict):
+            for op, value in wanted.items():
+                if op == "$ne" and actual == value:
+                    return False
+                if op == "$in" and actual not in value:
+                    return False
+                if op == "$regex" and not re.search(value, actual or "", re.I if wanted.get("$options") == "i" else 0):
+                    return False
+                if op in ("$gte", "$lte", "$lt", "$gt"):
+                    if actual is None:
+                        return False
+                    if op == "$gte" and actual < value or op == "$lte" and actual > value or op == "$lt" and actual >= value or op == "$gt" and actual <= value:
+                        return False
+        elif actual != wanted:
             return False
     return True
 
@@ -67,7 +79,10 @@ class Collection:
         return (session.data if session else self.database.data)[self.name]
 
     async def find_one(self, query, projection=None, *, session=None):
-        return copy.deepcopy(next((d for d in self.docs(session) if matches(d, query)), None))
+        doc = copy.deepcopy(next((d for d in self.docs(session) if matches(d, query)), None))
+        if doc is not None and projection:
+            doc = {k: v for k, v in doc.items() if (projection.get(k) if any(projection.values()) else k not in projection)}
+        return doc
 
     def find(self, query, projection=None, *, session=None):
         return Cursor([d for d in self.docs(session) if matches(d, query)])
@@ -81,7 +96,9 @@ class Collection:
 
     async def insert_one(self, doc, *, session=None):
         self.before_write(session)
-        if any(d.get("_id") == doc.get("_id") for d in self.docs(session)):
+        doc = dict(doc)
+        doc.setdefault("_id", str(uuid.uuid4()))
+        if any(d.get("_id") == doc["_id"] for d in self.docs(session)):
             raise DuplicateKeyError("Duplicate _id")
         self.docs(session).append(copy.deepcopy(doc))
 
@@ -90,6 +107,10 @@ class Collection:
         for doc in self.docs(session):
             if matches(doc, query):
                 doc.update(copy.deepcopy(update.get("$set", {})))
+                for key, value in update.get("$inc", {}).items():
+                    doc[key] = doc.get(key, 0) + value
+                for key in update.get("$unset", {}):
+                    doc.pop(key, None)
                 return SimpleNamespace(matched_count=1)
         return SimpleNamespace(matched_count=0)
 
@@ -108,6 +129,7 @@ class Database:
         self.data = {name: [] for name in (
             "accounts", "debts", "debt_payments", "transactions", "users",
             "categories", "budgets", "saving_goals", "recurring_templates", "moneyflow_metadata",
+            "bills", "bill_payments", "recurring_payments", "recurring_payment_records", "goal_contributions",
         )}
         self.writes = 0
         self.fail_at = None
@@ -217,7 +239,7 @@ class PaymentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({n.name for n in nodes}, definitions)
         router = APIRouter(prefix="/api")
         self.ns = dict(globals(), api=router, db=self.db, client=self.client,
-                       DEFAULT_USER_ID="default-user", PROJ={"_id": 0})
+                       DEFAULT_USER_ID="default-user", PROJ={"_id": 0, "_reference_revision": 0})
         exec(compile(ast.Module(body=nodes, type_ignores=[]), "<isolated backend>", "exec"), self.ns)
         self.app = FastAPI()
         self.app.include_router(router)

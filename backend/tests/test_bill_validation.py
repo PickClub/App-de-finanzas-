@@ -19,6 +19,7 @@ from pymongo import ReadPreference, ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
+from backend.reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references
 from backend.tests import test_payment_consistency as memory
 
 
@@ -36,7 +37,7 @@ def bill_context(db, client):
              or isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id in constants for t in n.targets)]
     assert {n.name for n in nodes if hasattr(n, 'name')} == names
     router = APIRouter(prefix='/api')
-    ns = dict(globals(), api=router, db=db, client=client, DEFAULT_USER_ID='default-user', PROJ={'_id': 0})
+    ns = dict(globals(), api=router, db=db, client=client, DEFAULT_USER_ID='default-user', PROJ={'_id': 0, '_reference_revision': 0})
     exec(compile(ast.Module(body=nodes, type_ignores=[]), '<isolated bill code>', 'exec'), ns)
     app = FastAPI()
     app.include_router(router)
@@ -57,6 +58,8 @@ def matches(doc, query):
         actual = doc.get(k)
         if isinstance(wanted, dict):
             for op, value in wanted.items():
+                if op == '$ne' and actual == value:
+                    return False
                 if op == '$in' and actual not in value or op == '$gte' and actual < value or op == '$lte' and actual > value:
                     return False
         elif actual != wanted:

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Literal
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal, ROUND_HALF_UP, ROUND_CEILING
-from pymongo import ReadPreference
+from pymongo import ReadPreference, ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
@@ -2370,6 +2370,20 @@ async def _bill_paid_map(bill_ids=None, session=None):
     return out
 
 
+async def _bill_for_write(bid, session):
+    # Every payment/amount edit must write this shared document before reading
+    # the paid total. A real increment (not a no-op) forces concurrent snapshots
+    # to conflict and revalidate through the existing transaction runner.
+    bill = await db.bills.find_one_and_update(
+        {"id": bid, "user_id": DEFAULT_USER_ID},
+        {"$inc": {"_payment_revision": 1}},
+        projection=PROJ, return_document=ReturnDocument.AFTER, session=session,
+    )
+    if not bill:
+        raise HTTPException(404, "Factura no encontrada.")
+    return bill
+
+
 def _bill_public(b, paid: Decimal, today: date, cats=None, accounts=None):
     amount = Decimal(str(b["amount"]))
     is_paid = paid >= amount - Decimal("0.001")
@@ -2379,7 +2393,7 @@ def _bill_public(b, paid: Decimal, today: date, cats=None, accounts=None):
     cat = (cats or {}).get(b.get("category_id")) or {}
     acc = (accounts or {}).get(b.get("account_id")) or {}
     rem = b.get("reminder_days")
-    out = {k: v for k, v in b.items() if k not in ("_id", "request_fingerprint")}
+    out = {k: v for k, v in b.items() if k not in ("_id", "request_fingerprint", "_payment_revision")}
     out.update(
         paid_amount=float(paid), remaining=float(remaining), status=status, partial=(not is_paid and paid > 0),
         progress=float(min(Decimal(1), paid / amount)) if amount > 0 else 0.0, days_left=days_left,
@@ -2477,7 +2491,7 @@ async def create_bill(data: BillIn, idempotency_key: Optional[str] = Header(defa
     bid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:bill:{idempotency_key}")) if idempotency_key else new_id()
     prev = await db.bills.find_one({"_id": bid})
     if prev:
-        return {k: v for k, v in prev.items() if k != "_id"}
+        return {k: v for k, v in prev.items() if k not in ("_id", "_payment_revision")}
     now = now_iso()
     doc = {"id": bid, "user_id": DEFAULT_USER_ID, **fields, "series_id": bid,
            "anchor_day": int(fields["due_date"][8:10]), "next_bill_id": None, "created_at": now, "updated_at": now}
@@ -2485,7 +2499,7 @@ async def create_bill(data: BillIn, idempotency_key: Optional[str] = Header(defa
         await db.bills.insert_one(dict(doc, _id=bid))
     except DuplicateKeyError:
         prev = await db.bills.find_one({"_id": bid})
-        return {k: v for k, v in prev.items() if k != "_id"}
+        return {k: v for k, v in prev.items() if k not in ("_id", "_payment_revision")}
     return doc
 
 
@@ -2494,9 +2508,7 @@ async def update_bill(bid: str, data: BillIn):
     fields = await _bill_validate(data)
 
     async def operation(session):
-        b = await db.bills.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
-        if not b:
-            raise HTTPException(404, "Factura no encontrada.")
+        b = await _bill_for_write(bid, session)
         paid = (await _bill_paid_map([bid], session=session)).get(bid, Decimal(0))
         if Decimal(str(fields["amount"])) < paid - Decimal("0.001"):
             raise HTTPException(422, f"El monto no puede ser menor que lo ya pagado ({float(paid):.2f}).")
@@ -2504,7 +2516,7 @@ async def update_bill(bid: str, data: BillIn):
         if fields["due_date"] != b["due_date"]:
             upd["anchor_day"] = int(fields["due_date"][8:10])
         await db.bills.update_one({"id": bid, "user_id": DEFAULT_USER_ID}, {"$set": upd}, session=session)
-        return await db.bills.find_one({"id": bid}, PROJ, session=session)
+        return await db.bills.find_one({"id": bid}, {"_id": 0, "_payment_revision": 0}, session=session)
 
     return await payment_transaction(operation)
 
@@ -2545,9 +2557,7 @@ async def pay_bill(bid: str, data: BillPayIn, idempotency_key: Optional[str] = H
             if prev.get("request_fingerprint") != fingerprint:
                 raise HTTPException(409, "La Idempotency-Key ya se utilizó con otros datos.")
             return {k: v for k, v in prev.items() if k not in ("_id", "request_fingerprint")}
-        b = await db.bills.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
-        if not b:
-            raise HTTPException(404, "Factura no encontrada.")
+        b = await _bill_for_write(bid, session)
         if not await db.accounts.find_one({"id": data.account_id, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
             raise HTTPException(422, "La cuenta seleccionada no existe.")
         paid = (await _bill_paid_map([bid], session=session)).get(bid, Decimal(0))

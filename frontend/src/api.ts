@@ -1,4 +1,7 @@
+import type { FinancialContext } from "./debt-payments/journal-v2";
+
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "";
+export const debtPaymentBackend = () => BASE || (typeof location !== "undefined" ? location.origin : "");
 
 export class ApiError extends Error {
   readonly detail: string;
@@ -28,6 +31,31 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  // Additive context API; deliberately not used by the production payment screen yet.
+  getFinancialContext: () => request<FinancialContext>("/financial-context"),
+  createContextProtectedDebtPayment: (d: any, key: string, context: FinancialContext) => request<any>("/debt-payments", {
+    method: "POST", body: JSON.stringify(d), headers: {
+      "Idempotency-Key": key,
+      "MoneyFlow-Environment-ID": context.environment_id,
+      "MoneyFlow-User-ID": context.user_id,
+    },
+  }),
+  reconcileDebtPayment: (d: any, key: string, context?: FinancialContext) => request<{
+    status: "matched" | "discrepancy" | "cancelled" | "not_found" | "unverifiable";
+    reason: string | null;
+    payment_id: string;
+    retry_requires_original_key_and_payload: boolean;
+    original_request_matches?: boolean;
+    current_payment?: any;
+    changed_fields?: string[];
+    generated_date_history_verifiable?: boolean;
+    current_submission_matches?: boolean | null;
+  }>("/debt-payments/reconcile", {
+    method: "POST", body: JSON.stringify(d), headers: {
+      "Idempotency-Key": key,
+      ...(context ? { "MoneyFlow-Environment-ID": context.environment_id, "MoneyFlow-User-ID": context.user_id } : {}),
+    },
+  }),
   // User
   getUser: () => request<any>("/user"),
   updateUser: (data: any) => request<any>("/user", { method: "PUT", body: JSON.stringify(data) }),
@@ -88,7 +116,10 @@ export const api = {
   updateDebt: (id: string, d: any) => request<any>(`/debts/${id}`, { method: "PUT", body: JSON.stringify(d) }),
   deleteDebt: (id: string) => request<any>(`/debts/${id}`, { method: "DELETE" }),
   listDebtPayments: (id: string) => request<any[]>(`/debts/${id}/payments`),
-  createDebtPayment: (d: any) => request<any>("/debt-payments", { method: "POST", body: JSON.stringify(d) }),
+  createDebtPayment: (d: any, idempotencyKey?: string) => request<any>("/debt-payments", {
+    method: "POST", body: JSON.stringify(d),
+    headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {},
+  }),
   deleteDebtPayment: (id: string) => request<any>(`/debt-payments/${id}`, { method: "DELETE" }),
   // Summary
   summary: () => request<any>("/summary"),

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, Alert, KeyboardAvoidingView, Platform } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
@@ -7,12 +7,16 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/src/api";
+import { PaymentPayload } from "@/src/debt-payments/pending";
+import type { PaymentDisplay } from "@/src/debt-payments/flow-v2";
+import { localPaymentFlow as pendingDebtPayments } from "@/src/debt-payments/local-flow";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatCurrency, formatCurrencyInt } from "@/src/format";
 import { IconTile } from "@/src/components/ui";
 import { AppSheet } from "@/src/components/sheets";
 
 import { us } from "@/src/ui-scale";
+import { paymentView } from "@/src/debt-payments/view";
 
 // Local visual identity (same light-mode values as Detalle de deuda / Nueva cuenta).
 function payPalette(colors: any, scheme: string) {
@@ -52,24 +56,112 @@ export default function PayDebt() {
   const [accountId, setAccountId] = useState<string | undefined>();
   const [notes, setNotes] = useState("");
 
+  const [operation, setOperation] = useState<PaymentDisplay | null>(null);
+  const [ready, setReady] = useState(false);
+  const recoveryReady = useRef(false);
+  const recoveryError = useRef<unknown>(null);
+  useEffect(() => {
+    let mounted = true;
+    recoveryReady.current = false;
+    setReady(false);
+    recoveryError.current = null;
+    pendingDebtPayments.recover().then(record => {
+      if (!mounted) return;
+      setOperation(record);
+      if (record && record.debtId === params.id) {
+        setAmount(String(record.payload.amount));
+        setAccountId(record.payload.account_id ?? undefined);
+        setNotes(record.payload.notes ?? "");
+      }
+      recoveryReady.current = true;
+      setReady(true);
+    }).catch(error => {
+      if (mounted) recoveryError.current = error;
+    });
+    return () => { mounted = false; };
+  }, [params.id]);
+
   const d = debtQ.data;
   if (!d) return <View style={{ flex: 1, backgroundColor: pal.bg }} />;
 
+  const view = paymentView(operation, d.id, ready);
   const amt = parseFloat(amount) || 0;
   const newBalance = Math.max(0, d.remaining_amount - amt);
 
   const save = async () => {
-    if (!amt) return Alert.alert("Ingresa un monto válido");
-    if (savingRef.current) return; // ignore double taps while the request is in flight
+    if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
     try {
-      await api.createDebtPayment({ debt_id: d.id, amount: amt, account_id: accountId, notes });
+      if (!recoveryReady.current) {
+        const record = await pendingDebtPayments.verify();
+        setOperation(record);
+        if (record && record.debtId === d.id) {
+          setAmount(String(record.payload.amount));
+          setAccountId(record.payload.account_id ?? undefined);
+          setNotes(record.payload.notes ?? "");
+        }
+        recoveryError.current = null;
+        recoveryReady.current = true;
+        setReady(true);
+        qc.invalidateQueries();
+        return; // Verification is a separate click, never a financial submission.
+      }
+      const pending = await pendingDebtPayments.recover();
+      setOperation(pending);
+      if (pending && pending.debtId !== d.id) {
+        throw new Error("Hay un pago anterior de otra deuda. Vuelve a esa deuda para resolverlo antes de registrar uno nuevo.");
+      }
+      if (pending?.state === "conflict" && !pendingDebtPayments.supportsReconciliation) {
+        throw new Error("La discrepancia requiere conciliación. Se conserva la clave y no se enviará ningún pago.");
+      }
+      if (operation?.state === "confirmed") {
+        // Only a click displayed as "Registrar nuevo pago" can clear confirmation.
+        if (pending && pending.state !== "confirmed") {
+          throw new Error("El registro cambió. Revisa el pago anterior antes de continuar.");
+        }
+        setAmount("");
+        setAccountId(undefined);
+        setNotes("");
+        if (pending) await pendingDebtPayments.startNew();
+        setOperation(null);
+        return;
+      }
+      if (pending?.state === "confirmed") {
+        qc.invalidateQueries();
+        return; // First show the confirmation; do not start a new intention implicitly.
+      }
+      if (operation && (!pending || operation.key !== pending.key)) {
+        throw new Error("El registro del pago anterior cambió. No se enviará un pago nuevo.");
+      }
+      // Never rebuild a recovered intention from editable form values.
+      const data: PaymentPayload = pending ? { ...pending.payload } : {
+        debt_id: d.id, amount: amt, account_id: accountId ?? null, notes, date: null,
+      };
+      const confirmed = await pendingDebtPayments.submit(data);
+      setOperation(confirmed);
       qc.invalidateQueries();
-      router.back();
     } catch (error) {
-      // Keep the entered data so the user can retry.
-      Alert.alert("No se pudo registrar el pago", error instanceof Error ? error.message : "Inténtalo de nuevo.");
+      if (!recoveryReady.current) recoveryError.current = error;
+      // Refresh durable state (including HTTP 409); failed reads keep sending blocked.
+      try {
+        const record = await pendingDebtPayments.recover();
+        setOperation(record);
+        if (record && record.debtId === d.id) {
+          setAmount(String(record.payload.amount));
+          setAccountId(record.payload.account_id ?? undefined);
+          setNotes(record.payload.notes ?? "");
+        } else if (!record && operation) {
+          setAmount("");
+          setAccountId(undefined);
+          setNotes("");
+        }
+      } catch (readError) {
+        recoveryReady.current = false;
+        recoveryError.current = readError;
+        setReady(false);
+      }
+      Alert.alert("Estado del pago", error instanceof Error ? error.message : "No se pudo verificar el pago.");
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -90,7 +182,7 @@ export default function PayDebt() {
           <Pressable onPress={() => router.back()} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
             <Ionicons name="chevron-back" size={us(24)} color={pal.forest} />
           </Pressable>
-          <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest }]}>Registrar pago</Text>
+          <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest }]}>{view.title}</Text>
         </View>
 
         {/* Deuda */}
@@ -122,6 +214,7 @@ export default function PayDebt() {
             <TextInput
               testID="pay-amount"
               value={amount}
+              editable={view.editable && !saving}
               onChangeText={setAmount}
               keyboardType="decimal-pad"
               placeholder="0.00"
@@ -129,7 +222,7 @@ export default function PayDebt() {
               style={[styles.amountText, styles.amountInput, { color: pal.forest }]}
             />
           </View>
-          {amt > 0 && (
+          {view.preview && amt > 0 && (
             <View style={[styles.preview, { borderTopColor: pal.divider }]}>
               <View style={styles.pRow}><Text style={[styles.pLabel, { color: pal.muted }]}>Saldo anterior</Text><Text style={[styles.pVal, { color: pal.onSurface }]}>{formatCurrencyInt(d.remaining_amount)}</Text></View>
               <View style={styles.pRow}><Text style={[styles.pLabel, { color: pal.muted }]}>Pago</Text><Text style={[styles.pVal, { color: pal.coral }]}>-{formatCurrencyInt(amt)}</Text></View>
@@ -143,7 +236,7 @@ export default function PayDebt() {
           <Text style={[styles.label, { color: pal.muted }]}>Cuenta de origen</Text>
           <Pressable
             testID="pay-account-select"
-            onPress={() => setPickerOpen(true)}
+            onPress={() => { if (view.editable && !saving) setPickerOpen(true); }}
             style={({ pressed }) => [styles.selectRow, { backgroundColor: pal.field, borderColor: pal.border }, pressed && { opacity: 0.85 }]}
           >
             {selected ? (
@@ -168,6 +261,7 @@ export default function PayDebt() {
           <Text style={[styles.label, { color: pal.muted }]}>Notas (opcional)</Text>
           <TextInput
             value={notes}
+            editable={view.editable && !saving}
             onChangeText={setNotes}
             multiline
             placeholder="Agregar una descripción del pago..."
@@ -182,7 +276,7 @@ export default function PayDebt() {
           disabled={saving}
           style={[styles.saveBtn, { backgroundColor: pal.forest, opacity: saving ? 0.7 : 1 }, shadow]}
         >
-          <Text style={[styles.saveText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>Confirmar pago</Text>
+          <Text style={[styles.saveText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{view.action}</Text>
         </Pressable>
       </ScrollView>
 
@@ -198,7 +292,7 @@ export default function PayDebt() {
                 <Pressable
                   key={a.id}
                   testID={`pay-acc-${a.id}`}
-                  onPress={() => { setAccountId(a.id); setPickerOpen(false); }}
+                  onPress={() => { if (view.editable && !saving) setAccountId(a.id); setPickerOpen(false); }}
                   style={({ pressed }) => [styles.sheetRow, { backgroundColor: sel ? pal.mintSoft : pal.card, borderColor: sel ? (a.color || pal.forest) : pal.border, borderWidth: sel ? 2 : 1 }, pressed && { opacity: 0.85 }]}
                 >
                   <IconTile icon={a.icon} tint={a.color} size={us(38)} />

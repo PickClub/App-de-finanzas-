@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field, ValidationError, field_validator
+from backend.financial_context import get_financial_context, verify_payment_context
 from pymongo import ReadPreference
 from pymongo.errors import DuplicateKeyError, OperationFailure, PyMongoError
 from pymongo.read_concern import ReadConcern
@@ -106,7 +107,7 @@ class Database:
     def __init__(self):
         self.data = {name: [] for name in (
             "accounts", "debts", "debt_payments", "transactions", "users",
-            "categories", "budgets", "saving_goals", "recurring_templates",
+            "categories", "budgets", "saving_goals", "recurring_templates", "moneyflow_metadata",
         )}
         self.writes = 0
         self.fail_at = None

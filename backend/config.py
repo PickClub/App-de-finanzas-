@@ -21,6 +21,7 @@ class Settings:
     db_name: str
     cors_origins: tuple[str, ...]
     log_level: str
+    expected_financial_environment_id: str | None = None
 
 
 def settings_from_mapping(values: Mapping[str, str]) -> Settings:
@@ -85,7 +86,10 @@ def settings_from_mapping(values: Mapping[str, str]) -> Settings:
             raise ConfigurationError("Test DB_NAME must begin with test_.")
         if parsed.path not in {"", "/", "/" + name}:
             raise ConfigurationError("Test URI database must match DB_NAME.")
-    return Settings(env, uri, name, origins, level)
+    # Validate this optional pin only when the new protected API is used.
+    # Legacy startup and payments remain compatible even without provisioning.
+    expected = values.get("MONEYFLOW_EXPECTED_ENVIRONMENT_ID", "").strip() or None
+    return Settings(env, uri, name, origins, level, expected)
 
 
 def load_settings(environ=None, *, dotenv_path=None, testing=None) -> Settings:

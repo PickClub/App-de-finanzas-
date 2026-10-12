@@ -13,8 +13,10 @@ from pymongo.write_concern import WriteConcern
 
 if __package__:
     from .config import load_settings
+    from .financial_context import get_financial_context, verify_payment_context
 else:
     from config import load_settings
+    from financial_context import get_financial_context, verify_payment_context
 
 settings = load_settings()
 client = AsyncIOMotorClient(settings.mongo_url)
@@ -517,6 +519,11 @@ async def edit_payment_movement(tid, data):
 @api.get("/")
 async def root():
     return {"message": "MoneyFlow API"}
+
+
+@api.get("/financial-context")
+async def financial_context():
+    return await get_financial_context(db, settings.expected_financial_environment_id, DEFAULT_USER_ID)
 
 
 # User
@@ -1518,7 +1525,11 @@ async def list_debt_payments(did: str):
 async def create_debt_payment(
     data: DebtPaymentCreate,
     idempotency_key: Optional[str] = Header(default=None, min_length=1, max_length=128),
+    expected_environment: Optional[str] = Header(default=None, alias="MoneyFlow-Environment-ID", min_length=1, max_length=36),
+    expected_user: Optional[str] = Header(default=None, alias="MoneyFlow-User-ID", min_length=1, max_length=128),
 ):
+    if (expected_environment is None) != (expected_user is None):
+        raise HTTPException(422, "Envía ambas cabeceras de contexto o ninguna.")
     # IDs and request fingerprint stay stable across transaction retries.
     pid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:debt-payment:{idempotency_key}")) if idempotency_key else new_id()
     tid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"debt-payment-movement:{pid}"))
@@ -1527,6 +1538,9 @@ async def create_debt_payment(
     payload["date"] = data.date or now_iso()
 
     async def operation(session):
+        if expected_environment is not None:
+            await verify_payment_context(db, settings.expected_financial_environment_id, DEFAULT_USER_ID,
+                                         expected_environment, expected_user, session)
         previous = await db.debt_payments.find_one({"_id": pid, "user_id": DEFAULT_USER_ID}, session=session)
         if previous:
             if previous.get("request_fingerprint") != fingerprint:
@@ -1555,6 +1569,75 @@ async def create_debt_payment(
         return payment
 
     return await payment_transaction(operation)
+
+
+@api.post("/debt-payments/reconcile")
+async def reconcile_debt_payment(
+    data: DebtPaymentCreate,
+    idempotency_key: str = Header(min_length=1, max_length=128),
+    expected_environment: Optional[str] = Header(default=None, alias="MoneyFlow-Environment-ID", min_length=1, max_length=36),
+    expected_user: Optional[str] = Header(default=None, alias="MoneyFlow-User-ID", min_length=1, max_length=128),
+):
+    """Read-only snapshot lookup, using the original request's existing normalization."""
+    if (expected_environment is None) != (expected_user is None):
+        raise HTTPException(422, "Envía ambas cabeceras de contexto o ninguna.")
+    pid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:debt-payment:{idempotency_key}"))
+    fingerprint = hashlib.sha256(json.dumps(data.model_dump(), sort_keys=True, allow_nan=False).encode()).hexdigest()
+    original = data.model_dump()
+
+    def response(status, reason=None, **extra):
+        return {"status": status, "reason": reason, "payment_id": pid,
+                "retry_requires_original_key_and_payload": True, **extra}
+
+    async def operation(session):
+        if expected_environment is not None:
+            await verify_payment_context(db, settings.expected_financial_environment_id, DEFAULT_USER_ID,
+                                         expected_environment, expected_user, session)
+        payment = await db.debt_payments.find_one({"_id": pid, "user_id": DEFAULT_USER_ID}, session=session)
+        if not payment:
+            return response("not_found", "No existe un registro visible para esta clave en este snapshot; no autoriza una clave nueva.")
+        stored_hash = payment.get("request_fingerprint")
+        if payment.get("id") != pid or not isinstance(stored_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", stored_hash):
+            return response("unverifiable", "La identidad o huella original no es verificable.")
+        if stored_hash != fingerprint:
+            return response("discrepancy", "La clave corresponde a otra solicitud original.",
+                            original_request_matches=False, annulled=payment.get("deleted") is True)
+        if payment.get("deleted") is True:
+            if await db.transactions.find_one({"debt_payment_id": pid, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
+                return response("unverifiable", "El pago anulado conserva un movimiento; requiere revisión.")
+            return response("cancelled", original_request_matches=True)
+        if payment.get("deleted") is not None and type(payment["deleted"]) is not bool:
+            return response("unverifiable", "El estado de anulación es inválido.")
+        if (not isinstance(payment.get("amount"), (int, float)) or isinstance(payment.get("amount"), bool)
+                or not math.isfinite(payment["amount"]) or payment["amount"] <= 0
+                or not isinstance(payment.get("date"), str) or not payment["date"]
+                or not payment.get("transaction_id")):
+            return response("unverifiable", "El estado actual del pago requiere revisión.")
+        try:
+            movement = await payment_movement(payment, session)
+        except HTTPException:
+            return response("unverifiable", "No se puede verificar el vínculo financiero actual.")
+        if any(movement.get(field) != payment.get(field) for field in ("date", "notes")):
+            return response("unverifiable", "El movimiento y el pago tienen datos actuales diferentes.")
+        changed = [field for field in ("debt_id", "amount", "account_id", "notes")
+                   if payment.get(field) != original[field]]
+        if original["date"] is not None and payment["date"] != original["date"]:
+            changed.append("date")
+        # Date=None was an original request value, not the server-generated date.
+        # Its original hash is fully verifiable; later changes to the generated
+        # date cannot be inferred from the retained records.
+        current = {field: payment.get(field) for field in
+                   ("id", "user_id", "debt_id", "amount", "date", "account_id", "notes", "transaction_id")}
+        return response("matched", original_request_matches=True, current_payment=current,
+                        changed_fields=changed, generated_date_history_verifiable=original["date"] is not None,
+                        current_submission_matches=(False if changed else True if original["date"] is not None else None))
+
+    try:
+        return await ordinary_transaction(operation)
+    except HTTPException as error:
+        if error.status_code == 503:
+            return response("unverifiable", "No se pudo verificar el contexto o completar la lectura consistente.")
+        raise
 
 
 @api.delete("/debt-payments/{pid}")

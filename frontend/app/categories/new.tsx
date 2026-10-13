@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, StyleSheet, Alert } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
@@ -6,7 +6,7 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/src/api";
+import { api, ApiError } from "@/src/api";
 import i18n from "@/src/i18n";
 import { catLabel } from "@/src/category-labels";
 import { useResourceDeletion } from "@/src/use-resource-deletion";
@@ -36,6 +36,14 @@ export default function CategoryForm() {
   const deletion = useResourceDeletion("/categories", [["accounts"], ["transactions"], ["categories"], ["debts"], ["debt-payments"], ["debt"], ["summary"]]);
   const [loadedId, setResourceLoaded] = useState<string>();
   const resourceLoaded = loadedId === params.id;
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const saveComplete = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const isEs = i18n.language.startsWith("es");
   const l10n = (es: string, en: string) => (isEs ? es : en);
@@ -49,6 +57,7 @@ export default function CategoryForm() {
   const [parentId, setParentId] = useState<string | null>(params.parent ?? null);
 
   useEffect(() => {
+    saveComplete.current = false;
     if (params.id) {
       api.listCategories().then((all) => {
         const c = all.find((x: any) => x.id === params.id);
@@ -63,34 +72,51 @@ export default function CategoryForm() {
   }, [params.id]);
 
   const save = async () => {
-    if (deletion.locked.current || (params.id && !resourceLoaded)) return;
+    if (savingRef.current || saveComplete.current || deletion.locked.current || (params.id && !resourceLoaded)) return;
     if (!name.trim()) return Alert.alert("Falta nombre");
     const payload = { name, type, icon, color, is_group: isGroup, parent_id: isGroup ? null : parentId };
-    if (params.id) await api.updateCategory(params.id as string, payload);
-    else await api.createCategory(payload);
-    qc.invalidateQueries();
-    router.back();
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const result = params.id ? await api.updateCategory(params.id as string, payload) : await api.createCategory(payload);
+      if (!result || typeof result.id !== "string" || !result.id || (params.id && result.id !== params.id)) {
+        throw new Error("No se pudo confirmar el guardado. Revisa la lista antes de reintentar; tus datos se conservan.");
+      }
+      saveComplete.current = true;
+      const refreshError = () => { if (mounted.current) Alert.alert("Actualizar categorías", "La categoría se guardó, pero no se pudo refrescar la lista. No es necesario volver a guardarla."); };
+      try { void qc.invalidateQueries().catch(refreshError); } catch { refreshError(); }
+      if (mounted.current) router.back();
+    } catch (error) {
+      if (mounted.current) {
+        if (saveComplete.current) Alert.alert("Categoría guardada", "No se pudo regresar a la lista. El guardado está confirmado; no es necesario repetirlo.");
+        else if (error instanceof ApiError && error.status < 500) Alert.alert("No se pudo guardar", error.detail);
+        else Alert.alert("No se pudo confirmar el guardado", "Tu formulario se conserva. Comprueba la conexión y revisa la lista antes de reintentar para evitar duplicados.");
+      }
+    } finally {
+      savingRef.current = false;
+      if (mounted.current) setSaving(false);
+    }
   };
 
   const remove = async () => {
-    if (!params.id) return;
+    if (!params.id || savingRef.current || saveComplete.current) return;
     await deletion.remove(() => api.deleteCategory(params.id as string));
   };
 
   if (params.id && (!resourceLoaded || deletion.deleted.current)) return <View />;
 
   return (
-    <ScrollView pointerEvents={deletion.busy ? "none" : "auto"} style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+    <ScrollView pointerEvents={deletion.busy || saving ? "none" : "auto"} style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{params.id ? "Editar" : "Nueva"} categoría</Text>
-        {params.id && <Pressable onPress={remove} disabled={deletion.busy} style={styles.backBtn}><Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} /></Pressable>}
+        {params.id && <Pressable onPress={remove} disabled={deletion.busy || saving} style={styles.backBtn}><Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} /></Pressable>}
       </View>
 
       <Text style={styles.label}>Nombre</Text>
-      <TextInput value={name} onChangeText={setName} placeholder="Ej. Comida" placeholderTextColor={colors.muted} style={styles.input} />
+      <TextInput editable={!saving && !deletion.busy} value={name} onChangeText={setName} placeholder="Ej. Comida" placeholderTextColor={colors.muted} style={styles.input} />
 
       <Text style={styles.label}>Tipo</Text>
       <View style={{ flexDirection: "row", gap: us(10) }}>
@@ -141,8 +167,8 @@ export default function CategoryForm() {
         ))}
       </View>
 
-      <Pressable testID="save-category" onPress={save} style={styles.saveBtn}>
-        <Text style={styles.saveText}>Guardar</Text>
+      <Pressable testID="save-category" onPress={save} disabled={saving || deletion.busy || saveComplete.current} style={styles.saveBtn}>
+        <Text style={styles.saveText}>{saving ? "Guardando…" : "Guardar"}</Text>
       </Pressable>
     </ScrollView>
   );

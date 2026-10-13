@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, ScrollView, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import { View, ScrollView, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/src/api";
+import { api, ApiError } from "@/src/api";
 import { PaymentPayload } from "@/src/debt-payments/pending";
 import type { PaymentDisplay } from "@/src/debt-payments/flow-v2";
 import { localPaymentFlow as pendingDebtPayments } from "@/src/debt-payments/local-flow";
@@ -49,7 +49,7 @@ export default function PayDebt() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
-  const debtQ = useQuery({ queryKey: ["debt", params.id], queryFn: () => api.getDebt(params.id as string) });
+  const debtQ = useQuery({ queryKey: ["debt", params.id], queryFn: () => api.getDebt(params.id as string), enabled: !!params.id });
   const accQ = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
 
   const [amount, setAmount] = useState("");
@@ -82,7 +82,30 @@ export default function PayDebt() {
   }, [params.id]);
 
   const d = debtQ.data;
-  if (!d) return <View style={{ flex: 1, backgroundColor: pal.bg }} />;
+  const resourceState = !params.id || (debtQ.error instanceof ApiError && debtQ.error.status === 404)
+    ? "missing" : debtQ.isLoading && !d ? "loading" : debtQ.isError ? "error" : d ? "ready" : "missing";
+  if (resourceState !== "ready") return (
+    <View style={{ flex: 1, backgroundColor: pal.bg }}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
+        <View style={styles.headerRow}>
+          <Pressable testID="debt-pay-back" onPress={() => router.back()} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, pal.dark ? null : styles.softShadow]}>
+            <Ionicons name="chevron-back" size={us(24)} color={pal.forest} />
+          </Pressable>
+          <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest }]}>Pago de deuda</Text>
+        </View>
+        {resourceState === "loading" ? <ActivityIndicator testID="debt-pay-loading" color={pal.forest} /> : (
+          <View style={[styles.card, { backgroundColor: pal.card, borderColor: pal.border }]} testID="debt-pay-query-error">
+            <Text style={[styles.debtName, { color: pal.onSurface }]}>{resourceState === "missing" ? "No se encontró la deuda." : "No se pudo consultar la deuda."}</Text>
+            <Text style={[styles.debtSub, { color: pal.muted }]}>{resourceState === "missing" ? "Puede que ya no exista. Puedes regresar o volver a consultar." : "Comprueba tu conexión y vuelve a intentarlo."}</Text>
+            {operation ? <Text style={[styles.debtSub, { color: pal.muted }]} testID="debt-pay-preserved">El registro del pago se conserva. Esta consulta no confirma ni anula pagos.</Text> : null}
+            {params.id ? <Pressable testID="debt-pay-retry" disabled={debtQ.isFetching} onPress={() => { void debtQ.refetch(); }} style={[styles.saveBtn, { backgroundColor: pal.forest }]}>
+              <Text style={[styles.saveText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{debtQ.isFetching ? "Reintentando…" : "Reintentar"}</Text>
+            </Pressable> : null}
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
 
   const view = paymentView(operation, d.id, ready);
   const amt = parseFloat(amount) || 0;

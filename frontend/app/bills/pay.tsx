@@ -29,9 +29,11 @@ export default function BillPay() {
   const { t, i18n } = useTranslation();
   const mont = useMontserrat();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const billQ = useQuery({ queryKey: ["bill", id], queryFn: () => api.billGet(id as string) });
+  const billQ = useQuery({ queryKey: ["bill", id], queryFn: () => api.billGet(id as string), enabled: !!id });
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
   const b = billQ.data;
+  const resourceState = !id || (billQ.error instanceof ApiError && billQ.error.status === 404)
+    ? "missing" : billQ.isLoading && !b ? "loading" : billQ.isError ? "error" : b ? "ready" : "missing";
   const payment = useObligationPayment({ kind: "bill", id: id || "", due: b?.due_date || "" });
   const accounts: any[] = accountsQ.data || [];
 
@@ -123,7 +125,20 @@ export default function BillPay() {
             <Text style={[styles.title, mont()]}>{t("bills.payTitle")}</Text>
           </View>
 
-          {billQ.isLoading || !b ? <ActivityIndicator color={forest} /> : (
+          {resourceState === "loading" ? <ActivityIndicator testID="bill-pay-loading" color={forest} /> : resourceState !== "ready" ? (
+            <View testID="bill-pay-query-error">
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle" size={us(16)} color={colors.expenseRed} />
+                <Text style={styles.errorText}>{(i18n.language || "es").startsWith("en")
+                  ? resourceState === "missing" ? "Bill not found. It may no longer exist." : "Unable to load the bill. Check your connection and try again."
+                  : resourceState === "missing" ? "No se encontró la factura. Puede que ya no exista." : "No se pudo consultar la factura. Comprueba tu conexión y vuelve a intentarlo."}</Text>
+              </View>
+              {payment.record || payment.problem ? <Text style={styles.hint} testID="bill-pay-preserved">{(i18n.language || "es").startsWith("en") ? "The payment record is preserved. This query does not confirm or cancel payments." : "El registro del pago se conserva. Esta consulta no confirma ni anula pagos."}</Text> : null}
+              {id ? <Pressable testID="bill-pay-retry" disabled={billQ.isFetching} onPress={() => { void billQ.refetch(); }} style={styles.saveBtn}>
+                <Text style={styles.saveText}>{(i18n.language || "es").startsWith("en") ? billQ.isFetching ? "Retrying…" : "Retry" : billQ.isFetching ? "Reintentando…" : "Reintentar"}</Text>
+              </Pressable> : null}
+            </View>
+          ) : (
             <>
               <View style={[styles.head, { backgroundColor: base + (isDark ? "1F" : "1A") }]}>
                 <View style={[styles.headIcon, { backgroundColor: base + "29" }]}>
@@ -182,7 +197,7 @@ export default function BillPay() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <AppSheet visible={sheet} onClose={() => setSheet(false)} testID="bill-pay-sheet">
+      <AppSheet visible={sheet && resourceState === "ready"} onClose={() => setSheet(false)} testID="bill-pay-sheet">
         <Text style={[styles.sheetTitle, mont()]}>{t("bills.payAccount")}</Text>
         <ScrollView style={{ maxHeight: us(420) }}>
           {accounts.map((o: any) => (
@@ -196,7 +211,7 @@ export default function BillPay() {
       </AppSheet>
 
       <ConfirmSheet
-        visible={confirm}
+        visible={confirm && resourceState === "ready"}
         onClose={() => setConfirm(false)}
         icon="card-outline"
         accent={forest}

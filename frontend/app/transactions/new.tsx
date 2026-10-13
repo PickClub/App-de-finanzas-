@@ -115,16 +115,8 @@ export default function NewTransaction() {
   const accQ = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
   const cats = (catQ.data || []).filter((c: any) => (type === "income" ? c.type === "income" : c.type === "expense") && !c.is_group);
 
-  // Ensure the default category catalog exists so selection always has options.
-  const ensuredRef = React.useRef(false);
-  useEffect(() => {
-    if (!catQ.isSuccess || ensuredRef.current) return;
-    ensuredRef.current = true;
-    if ((catQ.data || []).length === 0) {
-      api.initDefaultCategories().then(() => qc.invalidateQueries({ queryKey: ["categories"] })).catch(() => {});
-    }
-  }, [catQ.isSuccess, catQ.data, qc]);
-
+  // Catalog provisioning is explicit in Categories, never a side effect of
+  // opening this financial form or querying its category choices.
   useEffect(() => {
     if (params.id) {
       api.listTransactions().then((all) => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { View, ScrollView } from "react-native";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { Pressable } from "@/src/components/pressable";
@@ -48,17 +48,8 @@ export default function Categories() {
   const cats: any[] = q.data || [];
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Ensure the grouped hierarchy exists (idempotent) if there are no groups yet.
-  const ensuredRef = React.useRef(false);
-  useEffect(() => {
-    if (!q.isSuccess || ensuredRef.current) return;
-    ensuredRef.current = true;
-    const hasGroups = cats.some((c) => c.is_group);
-    if (cats.length === 0 || !hasGroups) {
-      api.initDefaultCategories().then(() => qc.invalidateQueries({ queryKey: ["categories"] })).catch(() => {});
-    }
-  }, [q.isSuccess, q.data, qc]);
-
+  // Reading/navigation never provisions or reorganizes the catalog.
+  // Defaults remain available through the existing explicit restore action.
   const restore = async () => {
     await api.initDefaultCategories();
     qc.invalidateQueries({ queryKey: ["categories"] });

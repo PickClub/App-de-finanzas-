@@ -82,31 +82,14 @@ async function main() {
   for (const file of ['app/categories/index.tsx', 'app/transactions/new.tsx']) {
     const text = fs.readFileSync(path.join(root, file), 'utf8');
     const tree = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    let initializer;
+    let automaticInitialization = false;
     function visitCatalog(node) {
       if (ts.isCallExpression(node) && node.expression.getText(tree) === 'useEffect' &&
-          node.arguments[0]?.getText(tree).includes('api.initDefaultCategories()')) initializer = node.arguments[0].getText(tree);
+          node.arguments[0]?.getText(tree).includes('api.initDefaultCategories()')) automaticInitialization = true;
       ts.forEachChild(node, visitCatalog);
     }
-    visitCatalog(tree); assert(initializer);
-    for (const scenario of [
-      { name: 'existing hierarchy', cats: [{ id: 'g', is_group: true }, { id: 'c', parent_id: 'g' }], expected: 0 },
-      { name: 'empty catalog', cats: [], expected: 1 },
-      { name: 'legacy ungrouped catalog', cats: [{ id: 'c' }], expected: file === 'app/categories/index.tsx' ? 1 : 0 },
-    ]) {
-      let calls = 0;
-      const context = { ensuredRef: { current: false }, q: { isSuccess: false }, cats: scenario.cats,
-        catQ: { isSuccess: false, data: scenario.cats }, api: { initDefaultCategories: async () => { calls++; } },
-        qc: { invalidateQueries: async () => {} } };
-      vm.runInNewContext(`globalThis.run = ${initializer};`, context);
-      context.run();
-      assert.equal(calls, 0, `${file}: do not initialize before the query succeeds`);
-      assert.equal(context.ensuredRef.current, false);
-      context.q.isSuccess = true; context.catQ.isSuccess = true; context.run();
-      assert.equal(calls, scenario.expected, `${file}: ${scenario.name}`);
-      context.cats = []; context.catQ.data = []; context.run(); context.run();
-      assert.equal(calls, scenario.expected, `${file}: deletion/refetch must not reinitialize in the same mount`);
-    }
+    visitCatalog(tree);
+    assert.equal(automaticInitialization, false, `${file}: navigation must not initialize the catalog`);
   }
   // Exercise the actual local-note handler: persistence failure must keep its editor/data.
   const noteSource = fs.readFileSync(path.join(root, 'app/(tabs)/notes.tsx'), 'utf8');
@@ -137,6 +120,6 @@ async function main() {
   }
   console.log('PASS: 3 destinations × success, double press, pending refresh, 409, 404, missing resource; TSX syntax.');
   console.log('PASS: local-note deletion commits storage before closing; double press and storage failure controlled.');
-  console.log('PASS: catalog loading, existing hierarchy, empty/legacy initialization and no reinitialization after deletion in the same mount.');
+  console.log('PASS: catalog queries and navigation never initialize or restore empty/legacy categories.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

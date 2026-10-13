@@ -1,10 +1,10 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, ScrollView, Platform, RefreshControl } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/src/api";
@@ -73,6 +73,7 @@ export default function AllTransactions() {
   const styles = useStyles();
   const { t } = useTranslation();
   const router = useRouter();
+  const { accountId } = useLocalSearchParams<{ accountId?: string }>();
   const insets = useSafeAreaInsets();
   const { guard } = useLock();
   const en = (i18n.language || "es").startsWith("en");
@@ -87,6 +88,7 @@ export default function AllTransactions() {
   const [type, setType] = useState<TypeFilter>("all");
   const [sort, setSort] = useState<SortKey>("recent");
   const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [accountId]);
   const [sortOpen, setSortOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const listY = useRef(0);
@@ -118,6 +120,7 @@ export default function AllTransactions() {
 
   const filtered = useMemo(() => {
     let items: any[] = txQ.data || [];
+    if (accountId) items = items.filter((x) => x.account_id === accountId || (x.type === "transfer" && x.to_account_id === accountId));
     if (type === "income") items = items.filter((x) => x.type === "income" || x.type === "loan_received");
     else if (type === "expense") items = items.filter((x) => x.type === "expense" || x.type === "debt_payment");
     else if (type === "transfer") items = items.filter((x) => x.type === "transfer");
@@ -128,7 +131,7 @@ export default function AllTransactions() {
     else if (sort === "high") sorted.sort((a, b) => (b.amount || 0) - (a.amount || 0));
     else sorted.sort((a, b) => (a.amount || 0) - (b.amount || 0));
     return sorted;
-  }, [txQ.data, type, range, sort]);
+  }, [txQ.data, accountId, type, range, sort]);
 
   const total = filtered.length;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));

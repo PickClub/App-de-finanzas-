@@ -194,7 +194,7 @@ export default function AccountDetail() {
             <Text style={styles.cardTitle}>{t("transactions.recent")}</Text>
             <Pressable
               testID="acc-see-all"
-              onPress={() => router.push("/(tabs)/transactions")}
+              onPress={() => router.push({ pathname: "/transactions/all", params: { accountId: account.id } })}
               style={[styles.seePill, { backgroundColor: forest + "14" }]}
               hitSlop={8}
             >

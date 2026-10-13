@@ -201,14 +201,14 @@ class OrdinaryKeyCases:
         self.assertEqual(tx["id"], seen[0][0])
         self.assertEqual(await self.balance(), 900)
 
-    async def test_debt_payment_and_linked_edit_remain_outside_keys(self):
+    async def test_debt_payment_and_linked_edit_keep_idempotent_original_receipt(self):
         response = await self.request("POST", "/debt-payments", json={"debt_id": "d", "amount": 100, "account_id": "a"}, headers={"Idempotency-Key": "original"})
         self.assertEqual(response.status_code, 200, response.text)
         payment = response.json()
-        self.assertNotIn("_history_keys", await self.stored(payment["transaction_id"]))
+        self.assertEqual(inspect_history_keys(await self.stored(payment["transaction_id"]), 1), "ready")
         response = await self.request("PUT", "/transactions/" + payment["transaction_id"], json={"name": "Edited debt", "amount": 80, "type": "debt_payment", "account_id": "a"})
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertNotIn("_history_keys", await self.stored(payment["transaction_id"]))
+        self.assertEqual(inspect_history_keys(await self.stored(payment["transaction_id"]), 1), "ready")
         before = await self.snapshot()
         response = await self.request("POST", "/debt-payments", json={"debt_id": "d", "amount": 100, "account_id": "a"}, headers={"Idempotency-Key": "original"})
         self.assertEqual(response.status_code, 200, response.text)

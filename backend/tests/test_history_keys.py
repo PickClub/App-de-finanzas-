@@ -114,7 +114,7 @@ class HelperTests(unittest.TestCase):
                     name = call.func.id if isinstance(call.func, ast.Name) else call.func.attr if isinstance(call.func, ast.Attribute) else None
                     if name in helpers:
                         self.assertEqual(path.name, "server.py")
-                        self.assertIn(function.name, {"create_transaction", "update_transaction"})
+                        self.assertIn(function.name, {"create_transaction", "update_transaction", "create_debt_payment", "edit_payment_movement"})
                         self.assertIn(name, {"with_history_keys", "history_update_fields"})
 
     def test_import_does_not_connect_load_environment_or_import_experiments(self):
@@ -132,7 +132,6 @@ with patch("pymongo.MongoClient", side_effect=AssertionError("client forbidden")
         required = {
             "payment_transaction": "61318560a6ce5c6378a380d20b54832f10e08e15b129501708fd27d89aa3dd48",
             "ordinary_transaction": "66920ed2bf165fcd585a5381fa6b4fafbb7023a28ccf1e71e327e28b4054a97f",
-            "edit_payment_movement": "7af274b42ba852a48ac827be1c7af7e29260a71a54c73f33ff961fb0cad102a0",
             "_public": "0993ca3f09c7bc931c98079653cc684c76d7d06aa1ac327580303e53c42457a8"}
         class RemovePublicWrapper(ast.NodeTransformer):
             def visit_Call(self, node):

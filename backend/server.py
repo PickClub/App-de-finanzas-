@@ -503,7 +503,7 @@ async def remove_payment(pid, session):
 
 async def edit_payment_movement(tid, data):
     async def operation(session):
-        old = await db.transactions.find_one({"id": tid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+        old = await db.transactions.find_one({"id": tid, "user_id": DEFAULT_USER_ID}, INTERNAL_PROJ, session=session)
         if not old:
             raise HTTPException(404, "Not found")
         payment = await db.debt_payments.find_one({"id": old.get("debt_payment_id"), "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ, session=session)
@@ -517,7 +517,11 @@ async def edit_payment_movement(tid, data):
         await validate_payment(payment["debt_id"], effective.amount, effective.account_id, session, replacing=payment["id"])
         await validate_transaction(payload, old, session=session)
         payload.update(debt_id=payment["debt_id"], date=effective.date or old["date"])
-        await db.transactions.update_one({"id": tid, "user_id": DEFAULT_USER_ID}, {"$set": payload}, session=session)
+        changes = dict(payload)
+        if getattr(settings, "history_keys_write_enabled", False):
+            final = {**old, **payload}
+            changes.update(history_update_fields(old, final, settings.history_keys_generation))
+        await db.transactions.update_one({"id": tid, "user_id": DEFAULT_USER_ID}, {"$set": changes}, session=session)
         await db.debt_payments.update_one({"id": payment["id"], "user_id": DEFAULT_USER_ID}, {"$set": {
             field: payload[field] for field in ("amount", "date", "account_id", "notes")
         }}, session=session)
@@ -1668,7 +1672,10 @@ async def create_debt_payment(
         if idempotency_key:
             stored_payment["request_fingerprint"] = fingerprint
         await db.debt_payments.insert_one(stored_payment, session=session)
-        await db.transactions.insert_one(dict(tx, _id=tid), session=session)
+        stored_movement = dict(tx, _id=tid)
+        if getattr(settings, "history_keys_write_enabled", False):
+            stored_movement = with_history_keys(stored_movement, settings.history_keys_generation)
+        await db.transactions.insert_one(stored_movement, session=session)
         await recompute_debt(data.debt_id, session=session)
         if data.account_id:
             await recompute_account_balance(data.account_id, session=session)

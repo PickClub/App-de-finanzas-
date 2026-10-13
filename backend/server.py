@@ -2437,7 +2437,10 @@ async def create_recurring_record(
                 date=when.isoformat(), category_id=cat_id, account_id=data.account_id, notes=notes,
             ).model_dump()
             new_tx.update(link)
-            await db.transactions.insert_one(dict(new_tx, _id=tid), session=session)
+            stored_movement = dict(new_tx, _id=tid)
+            if getattr(settings, "history_keys_write_enabled", False):
+                stored_movement = with_history_keys(stored_movement, settings.history_keys_generation)
+            await db.transactions.insert_one(stored_movement, session=session)
             await recompute_account_balance(data.account_id, session=session)
             tx_id = tid
         elif data.mode == "link":

@@ -1,9 +1,9 @@
-from fastapi import FastAPI, APIRouter, Header, HTTPException
+from fastapi import FastAPI, APIRouter, Header, HTTPException, Query
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import logging, uuid, hashlib, json, math, re, calendar
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Annotated
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal, ROUND_HALF_UP, ROUND_CEILING
 from pymongo import ReadPreference, ReturnDocument
@@ -12,11 +12,13 @@ from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
 
 if __package__:
+    from .transaction_history import read_page as read_transaction_page, read_detail as read_transaction_detail
     from .shared_obligations import public_financial_document as shared_public, read_shared_view, shared_bill_public, shared_recurring_public, shared_read_route, read_database, current_shared_view, current_shared_periods, shared_paid_events, dispatch_shared_payment, shared_parent_context, edit_shared_bill, edit_shared_recurring, guard_shared_state_change, dispatch_shared_change, shared_link_candidates, reconcile_payment_intent
     from .config import load_settings
     from .financial_context import get_financial_context, verify_payment_context
     from .reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, check_movement_references, check_goal_contribution, guard_legacy_bill, guard_legacy_recurring, guard_legacy_receipt, guard_legacy_movement
 else:
+    from transaction_history import read_page as read_transaction_page, read_detail as read_transaction_detail
     from shared_obligations import public_financial_document as shared_public, read_shared_view, shared_bill_public, shared_recurring_public, shared_read_route, read_database, current_shared_view, current_shared_periods, shared_paid_events, dispatch_shared_payment, shared_parent_context, edit_shared_bill, edit_shared_recurring, guard_shared_state_change, dispatch_shared_change, shared_link_candidates, reconcile_payment_intent
     from config import load_settings
     from financial_context import get_financial_context, verify_payment_context
@@ -776,6 +778,28 @@ async def init_default_categories():
 
 
 # Transactions
+@api.get("/transactions/page")
+async def transaction_page(
+    account_id: Annotated[Optional[str], Query(min_length=1, max_length=256)] = None,
+    category_id: Annotated[Optional[str], Query(min_length=1, max_length=256)] = None,
+    types: Annotated[Optional[List[str]], Query(alias="type")] = None,
+    start: Optional[str] = None, end: Optional[str] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    order: Literal["recent", "oldest"] = "recent",
+    cursor: Annotated[Optional[str], Query(min_length=1, max_length=2048)] = None,
+):
+    return await read_transaction_page(
+        db, DEFAULT_USER_ID, PROJ, shared_public,
+        context=[settings.mongo_url, settings.db_name, settings.expected_financial_environment_id],
+        account_id=account_id, category_id=category_id, types=types,
+        start=start, end=end, limit=limit, order=order, cursor=cursor)
+
+
+@api.get("/transactions/{tid}")
+async def get_transaction(tid: str):
+    return await read_transaction_detail(db, DEFAULT_USER_ID, tid, PROJ, shared_public)
+
+
 @api.get("/transactions")
 async def list_transactions(limit: int = 500):
     return shared_public(await db.transactions.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("date", -1).to_list(limit))

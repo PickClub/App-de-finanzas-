@@ -152,3 +152,60 @@ heredada y orden por importe. No modificar pagos, journals, escrituras financier
 pantallas ni zona persistida todavía. Índices persistentes y pruebas MongoDB requieren
 autorización separada. La integración frontend y los agregados completos son etapas
 posteriores: añadir paginación sola no cierra C3 ni R9.
+
+## Etapa 2 — Lecturas implementadas, sin integrar el frontend
+
+Disponibles `GET /api/transactions/page` y `GET /api/transactions/{tid}`.
+`GET /api/transactions` conserva literalmente su implementación anterior y sus
+consumidores siguen utilizándolo. El límite global y los seis defectos esperados
+de etapa 1 permanecen; no deben retirarse esas regresiones todavía.
+
+Parámetros de la nueva página: los descritos arriba. Varios tipos se solicitan
+repitiendo `type`, por ejemplo `?type=expense&type=debt_payment`. El tamaño puede
+cambiar entre páginas; filtros y orden deben conservarse. `start == end` devuelve
+una ventana vacía; `start > end`, fecha sin zona, filtro inválido o cursor incompatible
+devuelven 422. La ruta estática `/page` se registra antes de `/{tid}`.
+
+Estrategia de compatibilidad sin migración: filtrar usuario, cuenta (ambos extremos
+de transferencias), categoría y tipo mediante `find`; recorrer candidatos con cursor
+Motor, normalizar instantes **solo para comparar en el servidor**, aplicar ventana
+y cursor antes de conservar resultados. Mantener como máximo `limit + 1` documentos.
+Ordenar con precisión de microsegundos; no sustituirlo por `$toDate` y asumir que
+la precisión BSON en milisegundos conserva todos los empates históricos.
+Los valores de `date` públicos y almacenados permanecen literales. Fechas sin zona
+siguen la convención UTC de `_parse_dt`; esto no configura una zona financiera R9.
+
+Historial candidato con fecha/identificador no verificable produce 409; no se omite
+silenciosamente. Un empate de fecha e ID duplicado detectado en la selección también
+produce 409. Los IDs deben ser únicos conforme al contrato de movimientos existente;
+esta lectura no repara corrupción histórica ni crea un índice de unicidad.
+El detalle devuelve 404 bajo el usuario efectivo o 409 si el ID tiene varios documentos.
+Errores PyMongo de lectura devuelven 503 sin presentar una página vacía como éxito.
+No se devuelve texto interno del driver. Se reutiliza el saneador financiero existente.
+
+Cursor v1: JSON base64url canónico con versión, huella de consulta/contexto, instante
+normalizado e ID. La huella incluye el usuario efectivo, filtros, orden y configuración
+de destino del servidor (URI, base e identidad esperada, cuando existe). No se incluyen
+credenciales ni URI en claro. Cambiar esa configuración invalida cursores; reiniciar con
+la misma configuración los conserva. No es token de autenticación ni firma criptográfica:
+un cursor manipulado no concede acceso, porque `user_id` se impone desde el servidor.
+No pretende sustituir las cabeceras de contexto financiero de operaciones de pago.
+
+Rendimiento: cada página recorre N candidatos, retiene O(limit) documentos y tiene
+coste de selección O(N * limit) con límite máximo 100. No descarga el historial completo
+al teléfono, pero no garantiza latencia constante en historiales grandes. No se activa
+`allowDiskUse`, no hay `$out`/`$merge`, ni escrituras de consulta. Índices de selección
+recomendados para evaluar después: `(user_id, account_id)`,
+`(user_id, type, to_account_id)`, `(user_id, category_id)`, `(user_id, type)` y
+`(user_id, id)` para el detalle y la verificación de identificadores.
+No se han creado. Un índice textual sobre `date` no garantiza orden de instantes con
+offsets mixtos. El salto a una fecha normalizada indexable requiere decisión separada
+de esquema/compatibilidad; no realizar backfill automático.
+
+Pruebas nuevas: `python3 -B -m unittest backend.tests.test_transaction_history -v`.
+Ejecutan rutas reales extraídas por AST y el lector de producción mediante ASGI en
+memoria; no importan el arranque de FastAPI ni abren MongoDB. Incluyen 501, 2.001 y
+10.001 movimientos, ambos órdenes, offsets/microsegundos, filtros, seis tipos, cursores,
+lectura directa, saneado y errores. Inserciones/ediciones se intercalan entre peticiones
+sintéticas: no constituyen evidencia de concurrencia real o rendimiento en MongoDB.
+Las pruebas financieras existentes se ejecutan aparte, sin cambiar sus flujos.

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { View, FlatList, ActivityIndicator, RefreshControl } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
@@ -27,6 +27,22 @@ export default function BillsScreen() {
 
   const listQ = useQuery({ queryKey: ["bills"], queryFn: () => api.billsList("all"), placeholderData: keepPreviousData });
   const sumQ = useQuery({ queryKey: ["bills-summary"], queryFn: api.billsSummary, placeholderData: keepPreviousData });
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshingRef = useRef(false);
+  const onRefresh = async () => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshing(true);
+    try {
+      await Promise.allSettled([
+        Promise.resolve().then(() => listQ.refetch({ cancelRefetch: false })),
+        Promise.resolve().then(() => sumQ.refetch({ cancelRefetch: false })),
+      ]);
+    } finally {
+      refreshingRef.current = false;
+      setRefreshing(false);
+    }
+  };
   const [ready, setReady] = useState(false);
   useFocusEffect(useCallback(() => {
     if (ready) { listQ.refetch(); sumQ.refetch(); }
@@ -164,7 +180,7 @@ export default function BillsScreen() {
         initialNumToRender={12}
         windowSize={7}
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={() => { listQ.refetch(); sumQ.refetch(); }} tintColor={forest} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={forest} />}
         showsVerticalScrollIndicator={false}
       />
     </View>

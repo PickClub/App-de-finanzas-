@@ -39,6 +39,19 @@ export default function BillDetail() {
     if (context && deletionContext.current?.id !== id) deletionContext.current = { id: id as string, context };
     return bill;
   } });
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshingRef = useRef(false);
+  const onRefresh = async () => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshing(true);
+    try {
+      await Promise.allSettled([Promise.resolve().then(() => q.refetch({ cancelRefetch: false }))]);
+    } finally {
+      refreshingRef.current = false;
+      setRefreshing(false);
+    }
+  };
   const b = q.data;
   const [confirm, setConfirm] = useState<null | "delete" | { pay: string }>(null);
   const [busy, setBusy] = useState(false);
@@ -96,7 +109,7 @@ export default function BillDetail() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <ScrollView
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={() => q.refetch()} tintColor={forest} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={forest} />}
       >
         <View style={styles.header}>
           <Pressable testID="bill-back" onPress={() => router.back()} style={styles.backBtn}>

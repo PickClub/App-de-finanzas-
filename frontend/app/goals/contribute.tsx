@@ -86,7 +86,7 @@ export default function GoalContribution() {
         notes: notes.trim() || null,
         real_movement: realOn,
       }, idemKey);
-      const keys = [["goals-overview"], ["goal-detail"], ["goal-contribs"], ["goals"]];
+      const keys = [["goals-overview"], ["goal-detail"], ["goal-contribs"], ["goals"], ["calendar-events"], ["calendar-summary"], ["calendar-upcoming"]];
       if (realOn) keys.push(["accounts"], ["transactions"], ["summary"]);
       await Promise.all(keys.map((k) => qc.invalidateQueries({ queryKey: k })));
       router.back();

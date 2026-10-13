@@ -18,9 +18,11 @@ from fastapi import HTTPException
 from pymongo.errors import PyMongoError
 
 if __package__:
+    from .history_keys import strip_history_metadata
     from .financial_context import get_financial_context, validate_environment_id
     from .reference_integrity import coordinate, _same_optional_reference, check_bill_payment, check_record
 else:
+    from history_keys import strip_history_metadata
     from financial_context import get_financial_context, validate_environment_id
     from reference_integrity import coordinate, _same_optional_reference, check_bill_payment, check_record
 
@@ -225,13 +227,17 @@ def public_financial_document(value):
     Only internal storage fields are removed. Public IDs and links survive.
     Safe on both legacy responses and future shared receipt recoveries.
     """
+    return strip_history_metadata(_public_financial_document(value))
+
+
+def _public_financial_document(value):
     if isinstance(value, dict):
-        return {key: public_financial_document(item) for key, item in value.items()
+        return {key: _public_financial_document(item) for key, item in value.items()
                 if key not in {"_id", "request_fingerprint", "idempotency_key",
                                "_reference_revision", "_payment_revision", "_bill_generation_origin"}
                 and not key.startswith("_shared_")}
     if isinstance(value, (list, tuple)):
-        return [public_financial_document(item) for item in value]
+        return [_public_financial_document(item) for item in value]
     return deepcopy(value)
 
 

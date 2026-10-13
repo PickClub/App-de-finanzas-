@@ -4,6 +4,11 @@ from decimal import Decimal, InvalidOperation
 from bson.decimal128 import Decimal128
 from fastapi import HTTPException
 
+if __package__:
+    from .history_keys import strip_history_metadata
+else:
+    from history_keys import strip_history_metadata
+
 
 HIDDEN = {"_reference_revision"}
 
@@ -118,7 +123,7 @@ async def coordinate(db, user_id, payload, session, old=None):
 
 
 def public(doc):
-    return {k: v for k, v in doc.items() if k not in HIDDEN and k != "_id"}
+    return strip_history_metadata({k: v for k, v in doc.items() if k not in HIDDEN and k != "_id"})
 
 
 async def check_movement_references(db, user_id, tx, session, debt_payment_id=None):

@@ -12,12 +12,14 @@ from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
 
 if __package__:
+    from .history_keys import PUBLIC_PROJECTION as HISTORY_PUBLIC_PROJECTION
     from .transaction_history import read_page as read_transaction_page, read_detail as read_transaction_detail
     from .shared_obligations import public_financial_document as shared_public, read_shared_view, shared_bill_public, shared_recurring_public, shared_read_route, read_database, current_shared_view, current_shared_periods, shared_paid_events, dispatch_shared_payment, shared_parent_context, edit_shared_bill, edit_shared_recurring, guard_shared_state_change, dispatch_shared_change, shared_link_candidates, reconcile_payment_intent
     from .config import load_settings
     from .financial_context import get_financial_context, verify_payment_context
     from .reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, check_movement_references, check_goal_contribution, guard_legacy_bill, guard_legacy_recurring, guard_legacy_receipt, guard_legacy_movement
 else:
+    from history_keys import PUBLIC_PROJECTION as HISTORY_PUBLIC_PROJECTION
     from transaction_history import read_page as read_transaction_page, read_detail as read_transaction_detail
     from shared_obligations import public_financial_document as shared_public, read_shared_view, shared_bill_public, shared_recurring_public, shared_read_route, read_database, current_shared_view, current_shared_periods, shared_paid_events, dispatch_shared_payment, shared_parent_context, edit_shared_bill, edit_shared_recurring, guard_shared_state_change, dispatch_shared_change, shared_link_candidates, reconcile_payment_intent
     from config import load_settings
@@ -344,7 +346,8 @@ class UserUpdate(BaseModel):
     profile_photo: Optional[str] = None
 
 
-PROJ = {"_id": 0, "_reference_revision": 0}
+INTERNAL_PROJ = {"_id": 0, "_reference_revision": 0}
+PROJ = {**INTERNAL_PROJ, **HISTORY_PUBLIC_PROJECTION}
 
 
 # ---------- Utilities ----------
@@ -522,7 +525,7 @@ async def edit_payment_movement(tid, data):
         for aid in sorted({payment.get("account_id"), effective.account_id} - {None}):
             await recompute_account_balance(aid, session=session)
         return await db.transactions.find_one({"id": tid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
-    return await payment_transaction(operation)
+    return shared_public(await payment_transaction(operation))
 
 
 # ---------- Routes ----------
@@ -821,7 +824,7 @@ async def create_transaction(data: TransactionCreate):
         for aid in sorted({tx.get("account_id"), tx.get("to_account_id")} - {None}):
             await recompute_account_balance(aid, session=session)
         return tx
-    return await ordinary_transaction(operation)
+    return shared_public(await ordinary_transaction(operation))
 
 
 @api.put("/transactions/{tid}")
@@ -855,7 +858,7 @@ async def update_transaction(tid: str, data: TransactionCreate):
         for aid in sorted({current.get("account_id"), current.get("to_account_id"), payload.get("account_id"), payload.get("to_account_id")} - {None}):
             await recompute_account_balance(aid, session=session)
         return await db.transactions.find_one({"id": tid}, PROJ, session=session)
-    return await ordinary_transaction(operation)
+    return shared_public(await ordinary_transaction(operation))
 
 
 @api.delete("/transactions/{tid}")
@@ -1069,7 +1072,7 @@ def _public(row, with_tx=False):
             ({k: v for k, v in t.items() if k != "_dt"} for t in row["_matched"]),
             key=lambda t: t.get("date") or "", reverse=True,
         )
-    return out
+    return shared_public(out)
 
 
 def _overlaps(a_start, a_end, b_start, b_end):

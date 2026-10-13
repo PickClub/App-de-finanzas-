@@ -1540,7 +1540,10 @@ async def create_goal_contribution(
                 account_id=src, to_account_id=dst, notes=notes,
             ).model_dump()
             tx.update(goal_id=gid, goal_contribution_id=cid)
-            await db.transactions.insert_one(dict(tx, _id=tid), session=session)
+            stored_movement = dict(tx, _id=tid)
+            if getattr(settings, "history_keys_write_enabled", False):
+                stored_movement = with_history_keys(stored_movement, settings.history_keys_generation)
+            await db.transactions.insert_one(stored_movement, session=session)
             await recompute_account_balance(src, session=session)
             await recompute_account_balance(dst, session=session)
             tx_id = tid

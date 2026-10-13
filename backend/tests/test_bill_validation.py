@@ -19,13 +19,16 @@ from pymongo import ReadPreference, ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
-from backend.reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references
+from backend.shared_obligations import public_financial_document as shared_public
+from backend.shared_obligations import shared_read_route, read_database, current_shared_view, current_shared_periods, dispatch_shared_payment, shared_parent_context, edit_shared_bill, edit_shared_recurring, guard_shared_state_change, dispatch_shared_change, shared_bill_public, shared_recurring_public, shared_paid_events
+from backend.reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, guard_legacy_bill, guard_legacy_recurring, guard_legacy_receipt, guard_legacy_movement
+from backend.financial_context import verify_payment_context
 from backend.tests import test_payment_consistency as memory
 
 
 def bill_context(db, client):
     tree = ast.parse(Path(__file__).resolve().parents[1].joinpath('server.py').read_text())
-    names = {'now_iso', 'new_id', 'Transaction', 'BillIn', 'BillPayIn', '_positive_money',
+    names = {'_shared_reader', 'now_iso', 'new_id', 'Transaction', 'BillIn', 'BillPayIn', '_positive_money',
              '_parse_dt', '_local_tz', '_rp_day', '_rp_today', '_rp_dates', '_rp_paused',
              '_rp_occurrences', '_rp_state', '_rp_records', '_bill_rp_due', '_bill_add_period',
              '_bill_validate', '_bill_for_write', '_bill_paid_map', '_bill_public', '_bill_lookups',
@@ -55,9 +58,15 @@ def project(doc, projection):
 
 def matches(doc, query):
     for k, wanted in query.items():
+        if k == '$or':
+            if not any(matches(doc, part) for part in wanted):
+                return False
+            continue
         actual = doc.get(k)
         if isinstance(wanted, dict):
             for op, value in wanted.items():
+                if op == '$exists' and (k in doc) != value:
+                    return False
                 if op == '$ne' and actual == value:
                     return False
                 if op == '$in' and actual not in value or op == '$gte' and actual < value or op == '$lte' and actual > value:

@@ -1,3 +1,4 @@
+import { invalidateObligationPayments } from "@/src/obligation-payments/journal";
 import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Switch } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -106,7 +107,7 @@ export default function RecurringForm() {
     try {
       if (editing) await api.rpUpdate(id as string, payload);
       else await api.rpCreate(payload, idemKey);
-      await Promise.all([["rp-overview"], ["rp-detail"], ["rp-occ"]].map((k) => qc.invalidateQueries({ queryKey: k })));
+      await invalidateObligationPayments(qc);
       router.back();
     } catch (e: any) {
       setError(e instanceof ApiError ? e.detail : t("rp.errGeneric"));

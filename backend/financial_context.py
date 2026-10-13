@@ -41,7 +41,12 @@ async def get_financial_context(database, expected_id, user_id, session=None):
     environment_id = validate_metadata(document, expected_id)
     return {'version': 1, 'environment_id': environment_id, 'user_id': user_id, 'mode': 'single_user',
             'capabilities': {'expected_context_headers': True, 'debt_payment_reconciliation': True,
-                             'cross_device_recovery': False}}
+                             'cross_device_recovery': False, 'bill_payment_context_headers': True,
+                             'recurring_payment_context_headers': True,
+                             'bill_payment_delete_context_headers': True,
+                             'recurring_payment_delete_context_headers': True,
+                             'bill_payment_reconciliation': True,
+                             'recurring_payment_reconciliation': True}}
 
 
 async def verify_payment_context(database, expected_id, effective_user, environment_header, user_header, session):

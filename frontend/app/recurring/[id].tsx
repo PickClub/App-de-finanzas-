@@ -1,5 +1,6 @@
-import React, { useCallback, useState } from "react";
-import { View, ScrollView, ActivityIndicator } from "react-native";
+import { invalidateObligationPayments, verifiedDeletionContext, type Context } from "@/src/obligation-payments/journal";
+import React, { useCallback, useRef, useState } from "react";
+import { View, ScrollView, ActivityIndicator, Alert } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -7,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import { api } from "@/src/api";
+import { api, ApiError } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { formatCurrencyInt, formatDateTime } from "@/src/format";
@@ -31,7 +32,14 @@ export default function RecurringDetail() {
   const [confirm, setConfirm] = useState<null | "delete" | "end" | { undo: string }>(null);
   const [busy, setBusy] = useState(false);
 
-  const q = useQuery({ queryKey: ["rp-detail", id], queryFn: () => api.rpGet(id as string) });
+  const deletionContext = useRef<{ id: string; context: Context } | null>(null);
+  const q = useQuery({ queryKey: ["rp-detail", id], queryFn: async () => {
+    let context: Context | null = null;
+    try { context = verifiedDeletionContext(await api.getFinancialContext(), "recurring"); } catch {}
+    const recurring = await api.rpGet(id as string);
+    if (context && deletionContext.current?.id !== id) deletionContext.current = { id: id as string, context };
+    return recurring;
+  } });
   const occ = useInfiniteQuery({
     queryKey: ["rp-occ", id],
     initialPageParam: 0,
@@ -50,7 +58,7 @@ export default function RecurringDetail() {
   const oldestOverdue = [...items].reverse().find((o) => o.status === "overdue");
   const payTarget = oldestOverdue || r?.next_due;
 
-  const refreshAll = () => Promise.all([["rp-overview"], ["rp-detail"], ["rp-occ"], ["accounts"], ["transactions"], ["summary"]].map((k) => qc.invalidateQueries({ queryKey: k })));
+  const refreshAll = () => invalidateObligationPayments(qc);
 
   const openPay = (o: any) => router.push(`/recurring/pay?id=${id}&due=${o.due_date}&exp=${o.expected}&rem=${o.remaining}` as any);
 
@@ -67,14 +75,18 @@ export default function RecurringDetail() {
       if (confirm === "delete") {
         await api.rpDelete(id as string);
         qc.removeQueries({ queryKey: ["rp-detail", id] });
-        await qc.invalidateQueries({ queryKey: ["rp-overview"] });
+        await invalidateObligationPayments(qc);
         setConfirm(null);
         router.back();
         return;
       }
-      await api.rpDeletePayment(confirm.undo);
+      if (deletionContext.current?.id !== id) throw Error("No se ha verificado el contexto de esta pantalla. Vuelve a abrirla.");
+      verifiedDeletionContext(await api.getFinancialContext(), "recurring", deletionContext.current.context);
+      await api.rpDeletePayment(confirm.undo, deletionContext.current.context);
       await refreshAll();
       setConfirm(null);
+    } catch (error: any) {
+      Alert.alert("No se pudo completar la operación", error instanceof ApiError ? error.detail : error?.message || "Vuelve a verificar el contexto financiero.");
     } finally { setBusy(false); }
   };
 

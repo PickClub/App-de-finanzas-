@@ -20,7 +20,9 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field, ValidationError, field_validator
-from backend.reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, check_movement_references, check_goal_contribution
+from backend.shared_obligations import public_financial_document as shared_public, shared_link_candidates, reconcile_payment_intent
+from backend.shared_obligations import shared_read_route, read_database, current_shared_view, current_shared_periods, dispatch_shared_payment, shared_parent_context, edit_shared_bill, edit_shared_recurring, guard_shared_state_change, dispatch_shared_change, shared_bill_public, shared_recurring_public, shared_paid_events
+from backend.reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, check_movement_references, check_goal_contribution, guard_legacy_bill, guard_legacy_recurring, guard_legacy_receipt, guard_legacy_movement
 from backend.financial_context import get_financial_context, verify_payment_context
 from pymongo import ReadPreference
 from pymongo.errors import DuplicateKeyError, OperationFailure, PyMongoError
@@ -30,9 +32,15 @@ from pymongo.write_concern import WriteConcern
 
 def matches(doc, query):
     for key, wanted in query.items():
+        if key == "$or":
+            if not any(matches(doc, part) for part in wanted):
+                return False
+            continue
         actual = doc.get(key)
         if isinstance(wanted, dict):
             for op, value in wanted.items():
+                if op == "$exists" and (key in doc) != value:
+                    return False
                 if op == "$ne" and actual == value:
                     return False
                 if op == "$in" and actual not in value:
@@ -129,7 +137,7 @@ class Database:
         self.data = {name: [] for name in (
             "accounts", "debts", "debt_payments", "transactions", "users",
             "categories", "budgets", "saving_goals", "recurring_templates", "moneyflow_metadata",
-            "bills", "bill_payments", "recurring_payments", "recurring_payment_records", "goal_contributions",
+            "bills", "bill_payments", "recurring_payments", "recurring_payment_records", "goal_contributions", "shared_obligations",
         )}
         self.writes = 0
         self.fail_at = None
@@ -146,6 +154,7 @@ class Database:
 class Session:
     def __init__(self, database):
         self.database = database
+        self.in_transaction = False
 
     async def __aenter__(self):
         return self
@@ -158,15 +167,20 @@ class Session:
 
     async def with_transaction(self, callback, **options):
         async with self.database.lock:
-            self.data = copy.deepcopy(self.database.data)
-            result = await callback(self)
-            if self.database.fail_commit:
-                raise OperationFailure("Injected commit failure")
-            self.database.data = self.data
-            if self.database.commit_then_error:
-                self.database.commit_then_error = False
-                raise OperationFailure("Commit result unavailable")
-            return result
+            self.in_transaction = True
+            try:
+                self.data = copy.deepcopy(self.database.data)
+                result = await callback(self)
+                if self.database.fail_commit:
+                    raise OperationFailure("Injected commit failure")
+                self.database.data = self.data
+                if self.database.commit_then_error:
+                    self.database.commit_then_error = False
+                    raise OperationFailure("Commit result unavailable")
+                return result
+
+            finally:
+                self.in_transaction = False
 
 
 class TransactionContext:
@@ -177,6 +191,7 @@ class TransactionContext:
     async def __aenter__(self):
         await self.session.database.lock.acquire()
         self.session.data = copy.deepcopy(self.session.database.data)
+        self.session.in_transaction = True
         return self
 
     async def __aexit__(self, kind, error, traceback):
@@ -193,6 +208,7 @@ class TransactionContext:
                     "errorLabels": ["UnknownTransactionCommitResult"]
                 })
         finally:
+            self.session.in_transaction = False
             db.lock.release()
 
 

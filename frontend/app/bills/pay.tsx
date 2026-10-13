@@ -1,10 +1,10 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
@@ -12,8 +12,11 @@ import { useTranslation } from "@/src/i18n";
 import { formatCurrencyInt } from "@/src/format";
 import { AppSheet, ConfirmSheet } from "@/src/components/sheets";
 import { DateRangeSheet, type DateRangeSheetHandle, type DateRange } from "@/src/components/date-range-sheet";
-import { FOREST, useMontserrat, deepen, safeHex, longDate, toYmd, parseAmount, newKey, invalidateBills } from "@/src/bills/shared";
+import { FOREST, useMontserrat, deepen, safeHex, longDate, toYmd, parseAmount } from "@/src/bills/shared";
 import { us } from "@/src/ui-scale";
+
+import { useObligationPayment } from "@/src/obligation-payments/use-payment";
+import { invalidateObligationPayments, reconciliationMessage } from "@/src/obligation-payments/journal";
 
 export default function BillPay() {
   const { colors, scheme } = useTheme();
@@ -29,6 +32,7 @@ export default function BillPay() {
   const billQ = useQuery({ queryKey: ["bill", id], queryFn: () => api.billGet(id as string) });
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
   const b = billQ.data;
+  const payment = useObligationPayment({ kind: "bill", id: id || "", due: b?.due_date || "" });
   const accounts: any[] = accountsQ.data || [];
 
   const [amount, setAmount] = useState<string | null>(null);
@@ -40,20 +44,38 @@ export default function BillPay() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
-  const idemKey = useRef(newKey("billpay")).current;
+  const screenEpoch = useRef(0);
+  useFocusEffect(useCallback(() => {
+    screenEpoch.current++; savingRef.current = false; setSaving(false);
+    if (id && b?.due_date) void payment.recover().catch(() => {});
+    return () => { screenEpoch.current++; };
+  }, [id, b?.due_date]));
+  useEffect(() => {
+    screenEpoch.current++; savingRef.current = false; setSaving(false);
+    return () => { screenEpoch.current++; };
+  }, [id, b?.due_date]);
   const dateRef = useRef<DateRangeSheetHandle>(null);
+  useEffect(() => {
+    const p = payment.record?.payload;
+    if (!p) return;
+    setAmount(String(p.amount ?? "")); setDay(toYmd(Date.parse(p.date)));
+    setAccountId(p.account_id); setNotes(p.notes || "");
+    setSheet(false);
+  }, [payment.record?.key]);
+
 
   const remaining = b?.remaining || 0;
   const amountStr = amount ?? (remaining ? String(Math.round(remaining * 100) / 100) : "");
   const amt = parseAmount(amountStr);
   const accId = accountId === undefined ? b?.account_id || null : accountId;
   const acc = accounts.find((a) => a.id === accId);
-  const isOver = Number.isFinite(amt) && amt > remaining + 0.001;
-  const isPartial = Number.isFinite(amt) && amt > 0 && amt < remaining - 0.001;
+  const isOver = !payment.locked && Number.isFinite(amt) && amt > remaining + 0.001;
+  const isPartial = !payment.locked && Number.isFinite(amt) && amt > 0 && amt < remaining - 0.001;
   const base = safeHex(b?.color || b?.category_color);
 
   const ask = () => {
     if (!b) return;
+    if (payment.record || payment.problem) { void save(); return; }
     if (!Number.isFinite(amt) || amt <= 0) return setError(t("bills.errAmount"));
     if (isOver) return setError(t("bills.payOver"));
     if (!accId) return setError(t("bills.errAccount"));
@@ -64,18 +86,29 @@ export default function BillPay() {
   const save = async () => {
     if (savingRef.current || !b) return;
     savingRef.current = true; setSaving(true); setConfirm(false);
+    const epoch = screenEpoch.current;
+    let completed = false;
     const isToday = day === toYmd(Date.now());
     try {
-      await api.billPay(b.id, {
+      if (!payment.ready) { await payment.recover(); return; }
+      if (payment.record && payment.record.state !== "reconciled") {
+        await payment.reconcile();
+        await invalidateObligationPayments(qc);
+        return; // Verification never sends a payment or acknowledges automatically.
+      }
+      const result = payment.record ? await payment.retry() : await payment.submit({
         amount: Math.round(amt * 100) / 100, account_id: accId,
         date: isToday ? new Date().toISOString() : new Date(day + "T12:00:00").toISOString(),
         notes: notes.trim() || null,
-      }, idemKey);
-      await invalidateBills(qc, true);
-      router.back();
+      });
+      await invalidateObligationPayments(qc);
+      if (epoch !== screenEpoch.current) return;
+      await payment.acknowledge(result.key);
+      if (epoch === screenEpoch.current) { completed = true; router.back(); }
     } catch (e: any) {
-      setError(e instanceof ApiError ? e.detail : t("bills.errGeneric"));
-      savingRef.current = false; setSaving(false);
+      if (epoch === screenEpoch.current) setError(e instanceof ApiError ? e.detail : e?.message || t("bills.errGeneric"));
+    } finally {
+      if (!completed && epoch === screenEpoch.current) { savingRef.current = false; setSaving(false); }
     }
   };
 
@@ -84,7 +117,7 @@ export default function BillPay() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
-            <Pressable testID="bill-pay-back" onPress={() => router.back()} style={styles.backBtn}>
+            <Pressable testID="bill-pay-back" onPress={() => { screenEpoch.current++; router.back(); }} style={styles.backBtn}>
               <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
             </Pressable>
             <Text style={[styles.title, mont()]}>{t("bills.payTitle")}</Text>
@@ -103,10 +136,12 @@ export default function BillPay() {
                 </View>
               </View>
 
+              {payment.record || payment.problem ? <Text style={styles.hint} testID="payment-pending-status">{payment.problem || (payment.record ? reconciliationMessage(payment.record) : "")}</Text> : null}
+              <View pointerEvents={payment.locked ? "none" : "auto"}>
               <Text style={styles.label}>{t("bills.payAmount")}</Text>
               <View style={styles.input}>
                 <Text style={[styles.inputText, { color: colors.muted, marginRight: us(4) }]}>$</Text>
-                <TextInput testID="bill-pay-amount" value={amountStr} onChangeText={(v) => { setAmount(v.replace(/[^0-9.,]/g, "")); setError(null); }} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted} style={[styles.inputText, { flex: 1, padding: 0, fontSize: us(18) }, mont()]} />
+                <TextInput editable={!payment.locked} testID="bill-pay-amount" value={amountStr} onChangeText={(v) => { setAmount(v.replace(/[^0-9.,]/g, "")); setError(null); }} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted} style={[styles.inputText, { flex: 1, padding: 0, fontSize: us(18) }, mont()]} />
               </View>
               {isPartial ? <Text style={styles.hint} testID="bill-pay-partial">{t("bills.payPartial", { amount: formatCurrencyInt(remaining - amt) })}</Text> : null}
               {isOver ? <Text style={[styles.hint, { color: colors.expenseRed }]}>{t("bills.payOver")}</Text> : null}
@@ -127,10 +162,11 @@ export default function BillPay() {
 
               <Text style={styles.label}>{t("bills.description")} · {t("bills.optional")}</Text>
               <View style={styles.input}>
-                <TextInput testID="bill-pay-notes" value={notes} onChangeText={setNotes} maxLength={200} placeholder={t("bills.descPh")} placeholderTextColor={colors.muted} style={[styles.inputText, { flex: 1, padding: 0 }]} />
+                <TextInput editable={!payment.locked} testID="bill-pay-notes" value={notes} onChangeText={setNotes} maxLength={200} placeholder={t("bills.descPh")} placeholderTextColor={colors.muted} style={[styles.inputText, { flex: 1, padding: 0 }]} />
               </View>
               <Text style={styles.hint}>{t("bills.payRealNote")}</Text>
 
+              </View>
               {error ? (
                 <View style={styles.errorBox} testID="bill-pay-error">
                   <Ionicons name="alert-circle" size={us(16)} color={colors.expenseRed} />
@@ -138,8 +174,8 @@ export default function BillPay() {
                 </View>
               ) : null}
 
-              <Pressable testID="bill-pay-save" onPress={ask} disabled={saving} style={({ pressed }) => [styles.saveBtn, (pressed || saving) && { opacity: 0.75 }]}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{t("bills.registerPay")}</Text>}
+              <Pressable testID="bill-pay-save" onPress={ask} disabled={saving || (!payment.ready && !payment.problem)} style={({ pressed }) => [styles.saveBtn, (pressed || saving) && { opacity: 0.75 }]}>
+                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{payment.record?.state === "reconciled" ? "Cerrar verificación" : payment.problem || payment.record ? "Verificar registro" : t("bills.registerPay")}</Text>}
               </Pressable>
             </>
           )}

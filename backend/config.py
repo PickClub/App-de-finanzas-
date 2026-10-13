@@ -22,6 +22,7 @@ class Settings:
     cors_origins: tuple[str, ...]
     log_level: str
     expected_financial_environment_id: str | None = None
+    shared_obligations_enabled: bool = False
 
 
 def settings_from_mapping(values: Mapping[str, str]) -> Settings:
@@ -89,7 +90,10 @@ def settings_from_mapping(values: Mapping[str, str]) -> Settings:
     # Validate this optional pin only when the new protected API is used.
     # Legacy startup and payments remain compatible even without provisioning.
     expected = values.get("MONEYFLOW_EXPECTED_ENVIRONMENT_ID", "").strip() or None
-    return Settings(env, uri, name, origins, level, expected)
+    shared_flag = values.get("MONEYFLOW_SHARED_OBLIGATIONS_ENABLED", "0")
+    if shared_flag not in ("0", "1"):
+        raise ConfigurationError("MONEYFLOW_SHARED_OBLIGATIONS_ENABLED must be 0 or 1.")
+    return Settings(env, uri, name, origins, level, expected, shared_flag == "1")
 
 
 def load_settings(environ=None, *, dotenv_path=None, testing=None) -> Settings:

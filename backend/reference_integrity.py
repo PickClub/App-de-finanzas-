@@ -8,6 +8,39 @@ from fastapi import HTTPException
 HIDDEN = {"_reference_revision"}
 
 
+async def guard_legacy_bill(db, user_id, bill_id, session):
+    await _legacy_guard(db, user_id, session, bill_id=bill_id)
+
+
+async def guard_legacy_recurring(db, user_id, recurring_id, session, due_date=None):
+    await _legacy_guard(db, user_id, session, recurring_id=recurring_id,
+                        original_due_date=due_date, whole_recurring=due_date is None)
+
+
+async def guard_legacy_receipt(db, user_id, receipt, session):
+    if any(key.startswith("_shared_") for key in receipt):
+        raise HTTPException(409, "El registro conserva gestión R4; el flujo anterior está bloqueado.")
+    if receipt.get("bill_id"):
+        await guard_legacy_bill(db, user_id, receipt["bill_id"], session)
+    if receipt.get("recurring_id"):
+        await guard_legacy_recurring(db, user_id, receipt["recurring_id"], session, receipt.get("due_date"))
+    if receipt.get("transaction_id"):
+        await _legacy_guard(db, user_id, session, transaction_id=receipt["transaction_id"])
+
+
+async def guard_legacy_movement(db, user_id, tx, session):
+    await _legacy_guard(db, user_id, session, transaction_id=tx["id"])
+
+
+async def _legacy_guard(db, user_id, session, **lookup):
+    # Lazy import avoids the shared_obligations -> reference_integrity cycle.
+    if __package__:
+        from .shared_obligations import require_legacy_allowed
+    else:
+        from shared_obligations import require_legacy_allowed
+    await require_legacy_allowed(db, effective_user=user_id, session=session, **lookup)
+
+
 def preserve_references(fields, data, old, names, supplied=None):
     """Keep omitted / unchanged legacy values literally; don't fill absent keys.
 
@@ -98,6 +131,7 @@ async def check_movement_references(db, user_id, tx, session, debt_payment_id=No
     """
     if session is None:
         raise RuntimeError("Inverse reference checks require a transaction")
+    await _legacy_guard(db, user_id, session, transaction_id=tx["id"])
     query = {"transaction_id": tx["id"], "user_id": user_id, "deleted": {"$ne": True}}
     for collection in ("bill_payments", "recurring_payment_records", "goal_contributions", "debt_payments"):
         async for linked in getattr(db, collection).find(query, session=session):

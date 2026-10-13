@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { verifiedDeletionContext, type Context } from "@/src/obligation-payments/journal";
 import { View, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
@@ -28,7 +29,16 @@ export default function BillDetail() {
   const lang = i18n.language;
   const mont = useMontserrat();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const q = useQuery({ queryKey: ["bill", id], queryFn: () => api.billGet(id as string) });
+  const deletionContext = useRef<{ id: string; context: Context } | null>(null);
+  const q = useQuery({ queryKey: ["bill", id], queryFn: async () => {
+    // Pin the server context observed when loading this screen; never silently
+    // replace it after a refresh against another financial environment.
+    let context: Context | null = null;
+    try { context = verifiedDeletionContext(await api.getFinancialContext(), "bill"); } catch {}
+    const bill = await api.billGet(id as string);
+    if (context && deletionContext.current?.id !== id) deletionContext.current = { id: id as string, context };
+    return bill;
+  } });
   const b = q.data;
   const [confirm, setConfirm] = useState<null | "delete" | { pay: string }>(null);
   const [busy, setBusy] = useState(false);
@@ -45,11 +55,13 @@ export default function BillDetail() {
         router.back();
         return;
       }
-      await api.billDeletePayment(confirm.pay);
+      if (deletionContext.current?.id !== id) throw Error("No se ha verificado el contexto de esta pantalla. Vuelve a abrirla.");
+      verifiedDeletionContext(await api.getFinancialContext(), "bill", deletionContext.current.context);
+      await api.billDeletePayment(confirm.pay, deletionContext.current.context);
       setConfirm(null);
       await invalidateBills(qc, true);
     } catch (e: any) {
-      setErr(e instanceof ApiError ? e.detail : t("bills.errGeneric"));
+      setErr(e instanceof ApiError ? e.detail : e?.message || t("bills.errGeneric"));
       setConfirm(null);
     } finally {
       setBusy(false);

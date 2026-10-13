@@ -65,8 +65,8 @@ def context(db, client, source=None):
     router = APIRouter(prefix='/api')
     ns['api'] = router
     names = {
-        'RecurringTemplate', 'RecurringCreate', 'RecurringPaymentCreate', 'RecurringPayRecordCreate',
-        'BillIn', 'BillPayIn', 'Category', 'CategoryCreate', 'Debt',
+        '_shared_reader', 'RecurringTemplate', 'RecurringCreate', 'RecurringPaymentCreate', 'RecurringPayRecordCreate',
+        'BillIn', 'BillPayIn', 'PaymentReconciliation', '_reconcile_payment', 'reconcile_bill_payment', 'reconcile_recurring_payment', 'Category', 'CategoryCreate', 'Debt',
         '_parse_dt', '_local_tz', '_positive_money', '_rp_day', '_rp_today', '_rp_dates',
         '_rp_paused', '_rp_occurrences', '_rp_state', '_rp_state_name', '_rp_current',
         '_rp_public', '_rp_get', '_rp_validate', '_rp_records', '_rp_next_due',
@@ -75,16 +75,19 @@ def context(db, client, source=None):
         'pay_bill', 'delete_bill', 'delete_bill_payment', 'create_bill', 'update_bill',
         'create_recurring', 'delete_recurring', 'create_recurring_payment', 'update_recurring_payment',
         'create_recurring_record', 'delete_recurring_payment', 'delete_recurring_record',
-        'delete_category', 'create_category', 'update_category', 'create_debt',
+        '_rp_set_state', 'pause_recurring_payment', 'resume_recurring_payment', 'end_recurring_payment',
+        'delete_category', 'create_category', 'update_category', 'create_debt', 'recurring_link_candidates',
         'list_accounts', 'list_categories', 'list_transactions', 'list_debts',
         'SavingGoal', 'SavingGoalCreate', 'GoalContributionCreate', 'Budget', 'BudgetCreate', 'User',
         '_goal_clean', '_goal_public', '_goal_target_date', '_validate_goal', 'recompute_goal',
         'create_goal', 'update_goal', 'delete_goal', 'create_goal_contribution',
         '_validate_budget', '_overlaps', '_dec', 'create_budget', 'update_budget',
-        'ensure_user', 'init_default_categories',
+        'ensure_user', 'init_default_categories', 'list_recurring_payments', 'recurring_overview',
+        'recurring_occurrences', '_rp_month_states', 'bills_summary', '_cal_types', '_cal_dt',
+        '_cal_str_window', '_cal_events', '_cal_summary', 'calendar_events', 'calendar_summary', 'calendar_upcoming',
     }
     names.update(name for name, value in ns.items() if getattr(getattr(value, '__code__', None), 'co_filename', None) == '<isolated backend>')
-    constants = {'RP_FREQS', 'RP_REMINDERS', 'RP_LINK_FIELDS', 'BILL_REMINDERS', 'BUDGET_PERIODS', 'GOAL_HIDDEN',
+    constants = {'CAL_KINDS', 'CAL_MAX_DAYS', 'RP_FREQS', 'RP_REMINDERS', 'RP_LINK_FIELDS', 'BILL_REMINDERS', 'BUDGET_PERIODS', 'GOAL_HIDDEN',
                  'DEFAULT_EXPENSE_CATEGORIES', 'DEFAULT_INCOME_CATEGORIES', 'NEW_SUBCATEGORIES', 'EXPENSE_GROUPS', 'INCOME_GROUPS'}
     tree = ast.parse(source or Path(__file__).resolve().parents[1].joinpath('server.py').read_text())
     nodes = [n for n in tree.body if

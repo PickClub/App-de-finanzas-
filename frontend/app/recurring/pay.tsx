@@ -1,10 +1,10 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useCallback, useEffect, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Switch } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
@@ -13,9 +13,12 @@ import { formatCurrencyInt, formatDateTime } from "@/src/format";
 import { AppSheet } from "@/src/components/sheets";
 import { DateRangeSheet, type DateRangeSheetHandle, type DateRange } from "@/src/components/date-range-sheet";
 import { catLabel } from "@/src/category-labels";
-import { FOREST, useMontserrat, deepen, safeHex, longDate, toYmd, parseAmount, newKey } from "@/src/recurring/shared";
+import { FOREST, useMontserrat, deepen, safeHex, longDate, toYmd, parseAmount } from "@/src/recurring/shared";
 
 import { us } from "@/src/ui-scale";
+
+import { useObligationPayment } from "@/src/obligation-payments/use-payment";
+import { invalidateObligationPayments, reconciliationMessage } from "@/src/obligation-payments/journal";
 
 type Mode = "mark" | "expense" | "link";
 
@@ -38,6 +41,7 @@ export default function RecurringPay() {
   const catsQ = useQuery({ queryKey: ["categories"], queryFn: api.listCategories });
   const candQ = useQuery({ queryKey: ["rp-cand", id, due], queryFn: () => api.rpCandidates(id as string, due as string) });
   const r = rpQ.data;
+  const payment = useObligationPayment({ kind: "recurring", id: id || "", due: due || "" });
   const accounts: any[] = accountsQ.data || [];
   const cats: any[] = (catsQ.data || []).filter((c: any) => c.type === "expense" && !c.is_group);
   const candidates: any[] = candQ.data || [];
@@ -55,8 +59,25 @@ export default function RecurringPay() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
-  const idemKey = useRef(newKey("rpay")).current;
+  const screenEpoch = useRef(0);
+  useFocusEffect(useCallback(() => {
+    screenEpoch.current++; savingRef.current = false; setSaving(false);
+    if (id && due) void payment.recover().catch(() => {});
+    return () => { screenEpoch.current++; };
+  }, [id, due]));
+  useEffect(() => {
+    screenEpoch.current++; savingRef.current = false; setSaving(false);
+    return () => { screenEpoch.current++; };
+  }, [id, due]);
   const dateRef = useRef<DateRangeSheetHandle>(null);
+  useEffect(() => {
+    const p = payment.record?.payload;
+    if (!p) return;
+    setAmount(String(p.amount ?? "")); setDay(toYmd(Date.parse(p.date)));
+    setAccountId(p.account_id); setNotes(p.notes || "");
+    setMode(p.mode); setCategoryId(p.category_id); setTxId(p.transaction_id); setSettles(p.settles); setOverpay(p.allow_overpay); setSheet(null);
+  }, [payment.record?.key]);
+
 
   const accId = accountId === undefined ? r?.account_id || null : accountId;
   const catId = categoryId === undefined ? r?.category_id || null : categoryId;
@@ -65,32 +86,41 @@ export default function RecurringPay() {
   const base = safeHex(r?.color);
   const amt = parseAmount(amount);
   const variable = !!r?.variable;
-  const isOver = !variable && Number.isFinite(amt) && amt > remaining + 0.001;
-  const isPartial = !variable && Number.isFinite(amt) && amt > 0 && amt < remaining - 0.001;
+  const isOver = !payment.locked && !variable && Number.isFinite(amt) && amt > remaining + 0.001;
+  const isPartial = !payment.locked && !variable && Number.isFinite(amt) && amt > 0 && amt < remaining - 0.001;
   const sameAmount = useMemo(() => candidates.filter((c) => Number.isFinite(amt) && Math.abs(c.amount - amt) < 0.01), [candidates, amt]);
 
   const save = async () => {
     if (savingRef.current || !r) return;
-    if (mode === "link" && !txId) return setError(t("rp.errLink"));
-    if (mode !== "link" && (!Number.isFinite(amt) || amt <= 0)) return setError(t("rp.errAmount"));
-    if (mode === "expense" && !accId) return setError(t("rp.errAccount"));
-    if (mode !== "link" && isOver && !overpay) return setError(t("rp.overpayHint"));
+    if (!payment.locked && mode === "link" && !txId) return setError(t("rp.errLink"));
+    if (!payment.locked && mode !== "link" && (!Number.isFinite(amt) || amt <= 0)) return setError(t("rp.errAmount"));
+    if (!payment.locked && mode === "expense" && !accId) return setError(t("rp.errAccount"));
+    if (!payment.locked && mode !== "link" && isOver && !overpay) return setError(t("rp.overpayHint"));
+    const epoch = screenEpoch.current;
+    let completed = false;
     const isToday = day === toYmd(Date.now());
     savingRef.current = true; setSaving(true); setError(null);
     try {
-      await api.rpPay(id as string, {
+      if (!payment.ready) { await payment.recover(); return; }
+      if (payment.record && payment.record.state !== "reconciled") {
+        await payment.reconcile();
+        await invalidateObligationPayments(qc);
+        return; // Verification never sends a payment or acknowledges automatically.
+      }
+      const result = payment.record ? await payment.retry() : await payment.submit({
         due_date: due, mode, amount: mode === "link" ? null : Math.round(amt * 100) / 100,
         date: isToday ? new Date().toISOString() : new Date(day + "T12:00:00").toISOString(),
         account_id: accId, category_id: catId, notes: notes.trim() || null, transaction_id: mode === "link" ? txId : null,
         settles: settles === null ? null : settles, allow_overpay: overpay,
-      }, idemKey);
-      const keys = [["rp-overview"], ["rp-detail"], ["rp-occ"], ["rp-cand"]];
-      if (mode !== "mark") keys.push(["accounts"], ["transactions"], ["summary"]);
-      await Promise.all(keys.map((k) => qc.invalidateQueries({ queryKey: k })));
-      router.back();
+      });
+      await invalidateObligationPayments(qc);
+      if (epoch !== screenEpoch.current) return;
+      await payment.acknowledge(result.key);
+      if (epoch === screenEpoch.current) { completed = true; router.back(); }
     } catch (e: any) {
-      setError(e instanceof ApiError ? e.detail : t("rp.errGeneric"));
-      savingRef.current = false; setSaving(false);
+      if (epoch === screenEpoch.current) setError(e instanceof ApiError ? e.detail : e?.message || t("rp.errGeneric"));
+    } finally {
+      if (!completed && epoch === screenEpoch.current) { savingRef.current = false; setSaving(false); }
     }
   };
 
@@ -113,7 +143,7 @@ export default function RecurringPay() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
-            <Pressable testID="rp-pay-back" onPress={() => router.back()} style={styles.backBtn}>
+            <Pressable testID="rp-pay-back" onPress={() => { screenEpoch.current++; router.back(); }} style={styles.backBtn}>
               <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
             </Pressable>
             <Text style={styles.title}>{t("rp.payTitle")}</Text>
@@ -128,10 +158,12 @@ export default function RecurringPay() {
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.headName, mont()]} numberOfLines={1}>{r.name}</Text>
                   <Text style={styles.small}>{t("rp.dueOf")}: {longDate(due, i18n.language)} · {formatCurrencyInt(expected)}</Text>
-                  {!variable && remaining !== expected ? <Text style={styles.small}>{t("rp.partialHint", { amount: formatCurrencyInt(remaining) })}</Text> : null}
+                  {!payment.locked && !variable && remaining !== expected ? <Text style={styles.small}>{t("rp.partialHint", { amount: formatCurrencyInt(remaining) })}</Text> : null}
                 </View>
               </View>
 
+              {payment.record || payment.problem ? <Text style={styles.hint} testID="payment-pending-status">{payment.problem || (payment.record ? reconciliationMessage(payment.record) : "")}</Text> : null}
+              <View pointerEvents={payment.locked ? "none" : "auto"}>
               <Text style={styles.label}>{t("rp.modeLbl")}</Text>
               <View style={{ gap: us(8) }}>
                 <ModeCard m="mark" icon="bookmark-outline" title={t("rp.modeMark")} hint={t("rp.modeMarkHint")} />
@@ -171,19 +203,19 @@ export default function RecurringPay() {
                   <Text style={styles.label}>{t("rp.amountPaid")}</Text>
                   <View style={styles.input}>
                     <Text style={[styles.inputText, { color: colors.muted, marginRight: us(4) }]}>$</Text>
-                    <TextInput testID="rp-pay-amount" value={amount} onChangeText={(v) => { setAmount(v.replace(/[^0-9.,]/g, "")); setError(null); }} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted} style={[styles.inputText, { flex: 1, padding: 0, fontSize: us(18) }, mont()]} />
+                    <TextInput editable={!payment.locked} testID="rp-pay-amount" value={amount} onChangeText={(v) => { setAmount(v.replace(/[^0-9.,]/g, "")); setError(null); }} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted} style={[styles.inputText, { flex: 1, padding: 0, fontSize: us(18) }, mont()]} />
                   </View>
                   {isPartial && <Text style={styles.hint} testID="rp-partial-hint">{t("rp.partialHint", { amount: formatCurrencyInt(remaining - amt) })}</Text>}
                   {isOver && (
                     <View style={[styles.input, { marginTop: us(8) }]}>
                       <Text style={[styles.inputText, { flex: 1, fontSize: us(13.5) }]}>{t("rp.overpay")}</Text>
-                      <Switch testID="rp-overpay-switch" value={overpay} onValueChange={setOverpay} trackColor={{ true: colors.incomeGreen, false: colors.borderStrong }} thumbColor="#fff" />
+                      <Switch disabled={payment.locked} testID="rp-overpay-switch" value={overpay} onValueChange={setOverpay} trackColor={{ true: colors.incomeGreen, false: colors.borderStrong }} thumbColor="#fff" />
                     </View>
                   )}
                   {(variable || isPartial) && (
                     <View style={[styles.input, { marginTop: us(8) }]}>
                       <Text style={[styles.inputText, { flex: 1, fontSize: us(13.5) }]}>{t("rp.settles")}</Text>
-                      <Switch testID="rp-settles-switch" value={settles ?? variable} onValueChange={setSettles} trackColor={{ true: colors.incomeGreen, false: colors.borderStrong }} thumbColor="#fff" />
+                      <Switch disabled={payment.locked} testID="rp-settles-switch" value={settles ?? variable} onValueChange={setSettles} trackColor={{ true: colors.incomeGreen, false: colors.borderStrong }} thumbColor="#fff" />
                     </View>
                   )}
 
@@ -211,9 +243,10 @@ export default function RecurringPay() {
 
               <Text style={styles.label}>{t("rp.description")} · {t("rp.optional")}</Text>
               <View style={styles.input}>
-                <TextInput testID="rp-pay-notes" value={notes} onChangeText={setNotes} maxLength={200} placeholder={t("rp.descPh")} placeholderTextColor={colors.muted} style={[styles.inputText, { flex: 1, padding: 0 }]} />
+                <TextInput editable={!payment.locked} testID="rp-pay-notes" value={notes} onChangeText={setNotes} maxLength={200} placeholder={t("rp.descPh")} placeholderTextColor={colors.muted} style={[styles.inputText, { flex: 1, padding: 0 }]} />
               </View>
 
+              </View>
               {error ? (
                 <View style={styles.errorBox} testID="rp-pay-error">
                   <Ionicons name="alert-circle" size={us(16)} color={colors.expenseRed} />
@@ -221,8 +254,8 @@ export default function RecurringPay() {
                 </View>
               ) : null}
 
-              <Pressable testID="rp-pay-save" onPress={save} disabled={saving} style={({ pressed }) => [styles.saveBtn, (pressed || saving) && { opacity: 0.75 }]}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{t("rp.savePay")}</Text>}
+              <Pressable testID="rp-pay-save" onPress={save} disabled={saving || (!payment.ready && !payment.problem)} style={({ pressed }) => [styles.saveBtn, (pressed || saving) && { opacity: 0.75 }]}>
+                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{payment.record?.state === "reconciled" ? "Cerrar verificación" : payment.problem || payment.record ? "Verificar registro" : t("rp.savePay")}</Text>}
               </Pressable>
             </>
           )}

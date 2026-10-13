@@ -12,13 +12,15 @@ from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
 
 if __package__:
+    from .shared_obligations import public_financial_document as shared_public, read_shared_view, shared_bill_public, shared_recurring_public, shared_read_route, read_database, current_shared_view, current_shared_periods, shared_paid_events, dispatch_shared_payment, shared_parent_context, edit_shared_bill, edit_shared_recurring, guard_shared_state_change, dispatch_shared_change, shared_link_candidates, reconcile_payment_intent
     from .config import load_settings
     from .financial_context import get_financial_context, verify_payment_context
-    from .reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, check_movement_references, check_goal_contribution
+    from .reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, check_movement_references, check_goal_contribution, guard_legacy_bill, guard_legacy_recurring, guard_legacy_receipt, guard_legacy_movement
 else:
+    from shared_obligations import public_financial_document as shared_public, read_shared_view, shared_bill_public, shared_recurring_public, shared_read_route, read_database, current_shared_view, current_shared_periods, shared_paid_events, dispatch_shared_payment, shared_parent_context, edit_shared_bill, edit_shared_recurring, guard_shared_state_change, dispatch_shared_change, shared_link_candidates, reconcile_payment_intent
     from config import load_settings
     from financial_context import get_financial_context, verify_payment_context
-    from reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, check_movement_references, check_goal_contribution
+    from reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, check_movement_references, check_goal_contribution, guard_legacy_bill, guard_legacy_recurring, guard_legacy_receipt, guard_legacy_movement
 
 settings = load_settings()
 client = AsyncIOMotorClient(settings.mongo_url)
@@ -776,7 +778,7 @@ async def init_default_categories():
 # Transactions
 @api.get("/transactions")
 async def list_transactions(limit: int = 500):
-    return await db.transactions.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("date", -1).to_list(limit)
+    return shared_public(await db.transactions.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("date", -1).to_list(limit))
 
 
 @api.post("/transactions")
@@ -1887,6 +1889,11 @@ def _rp_occurrences(rp, a: date, b: date):
     return out
 
 
+def _shared_reader(endpoint):
+    return shared_read_route(lambda: db, lambda: client,
+        lambda: settings.expected_financial_environment_id, lambda: DEFAULT_USER_ID)(endpoint)
+
+
 def _rp_state(rp, due_iso, expected, recs, today):
     paid = sum((Decimal(str(r["amount"])) for r in recs), Decimal(0))
     if expected is None:
@@ -1896,11 +1903,12 @@ def _rp_state(rp, due_iso, expected, recs, today):
     is_paid = bool(recs) and (settled or paid >= exp)
     remaining = Decimal(0) if is_paid else max(Decimal(0), exp - paid)
     status = "paid" if is_paid else ("overdue" if due_iso < today.isoformat() else "pending")
-    return {
+    result = {
         "due_date": due_iso, "expected": float(exp), "paid": float(paid), "remaining": float(remaining),
         "status": status, "partial": (not is_paid and paid > 0), "overpaid": float(max(Decimal(0), paid - exp)) if is_paid else 0.0,
-        "records": [{k: v for k, v in r.items() if k not in ("_id", "request_fingerprint")} for r in sorted(recs, key=lambda r: r.get("created_at", ""))],
+        "records": [shared_public(r) for r in sorted(recs, key=lambda r: r.get("created_at", ""))],
     }
+    return shared_recurring_public(result, current_shared_view(recurring_id=rp.get("id"), due=due_iso), today)
 
 
 def _rp_state_name(rp, today):
@@ -1918,7 +1926,7 @@ def _rp_public(rp, today):
     out = {k: val for k, val in rp.items() if k not in ("_id", "request_fingerprint", "versions", "pauses", "_reference_revision")}
     out.update(amount=v.get("amount"), frequency=v.get("frequency"), start_date=v.get("start_date"),
                due_day=v.get("due_day"), state=_rp_state_name(rp, today))
-    return out
+    return shared_public(out)
 
 
 async def _rp_records(rid=None, a=None, b=None, session=None):
@@ -1932,7 +1940,7 @@ async def _rp_records(rid=None, a=None, b=None, session=None):
         if b:
             q["due_date"]["$lte"] = b.isoformat()
     grouped = {}
-    async for r in db.recurring_payment_records.find(q, {"_id": 0, "request_fingerprint": 0}, session=session):
+    async for r in read_database(db).recurring_payment_records.find(q, {"_id": 0, "request_fingerprint": 0}, session=session):
         grouped.setdefault((r["recurring_id"], r["due_date"]), []).append(r)
     return grouped
 
@@ -1942,11 +1950,19 @@ def _rp_month_states(rp, a, b, records, today):
     for (rid, due), _ in records.items():
         if rid == rp["id"] and due not in occ and a.isoformat() <= due <= b.isoformat():
             occ[due] = None  # paid occurrence that no longer matches the current schedule
+    for due in current_shared_periods(rp["id"]):
+        if a.isoformat() <= due <= b.isoformat():
+            occ.setdefault(due, None)
     return [_rp_state(rp, d, occ[d], records.get((rp["id"], d), []), today) for d in sorted(occ)]
 
 
 def _rp_next_due(rp, records, today, horizon_days=800):
-    for d, exp in sorted(_rp_occurrences(rp, today, today + timedelta(days=horizon_days)).items()):
+    hi = today + timedelta(days=horizon_days)
+    occurrences = _rp_occurrences(rp, today, hi)
+    for due in current_shared_periods(rp["id"]):
+        if today.isoformat() <= due <= hi.isoformat():
+            occurrences.setdefault(due, None)
+    for d, exp in sorted(occurrences.items()):
         st = _rp_state(rp, d, exp, records.get((rp["id"], d), []), today)
         if st["status"] != "paid":
             return st
@@ -1993,20 +2009,22 @@ async def _rp_validate(data: RecurringPaymentCreate, session=None, old=None, sup
 
 
 async def _rp_get(rid, session=None):
-    rp = await db.recurring_payments.find_one({"id": rid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
+    rp = await read_database(db).recurring_payments.find_one({"id": rid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
     if not rp:
         raise HTTPException(404, "Pago recurrente no encontrado.")
     return rp
 
 
 @api.get("/recurring-payments")
+@_shared_reader
 async def list_recurring_payments(tz_offset: int = 0):
     today = _rp_today(tz_offset)
-    rps = await db.recurring_payments.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("created_at", -1).to_list(500)
+    rps = await read_database(db).recurring_payments.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("created_at", -1).to_list(500)
     return [_rp_public(rp, today) for rp in rps]
 
 
 @api.get("/recurring-payments/overview")
+@_shared_reader
 async def recurring_overview(year: Optional[int] = None, month: Optional[int] = None, tz_offset: int = 0):
     today = _rp_today(tz_offset)
     year, month = year or today.year, month or today.month
@@ -2014,7 +2032,7 @@ async def recurring_overview(year: Optional[int] = None, month: Optional[int] = 
         raise HTTPException(422, "Mes no válido.")
     a = date(year, month, 1)
     b = date(year, month, calendar.monthrange(year, month)[1])
-    rps = await db.recurring_payments.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("created_at", -1).to_list(500)
+    rps = await read_database(db).recurring_payments.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("created_at", -1).to_list(500)
     rem_hi = today + timedelta(days=7)
     records = await _rp_records(a=min(a, today - timedelta(days=400)), b=max(b, rem_hi + timedelta(days=800)))
     tot = {"expected": Decimal(0), "paid": Decimal(0), "pending": Decimal(0)}
@@ -2053,7 +2071,11 @@ async def recurring_overview(year: Optional[int] = None, month: Optional[int] = 
         })
         # In-app reminders (independent from the selected month).
         if pub["state"] == "active" and rp.get("reminder_days") is not None:
-            for d, exp in sorted(_rp_occurrences(rp, today, rem_hi).items()):
+            reminder_dues = _rp_occurrences(rp, today, rem_hi)
+            for due in current_shared_periods(rp["id"]):
+                if today.isoformat() <= due <= rem_hi.isoformat():
+                    reminder_dues.setdefault(due, None)
+            for d, exp in sorted(reminder_dues.items()):
                 left = (date.fromisoformat(d) - today).days
                 st = _rp_state(rp, d, exp, records.get((rp["id"], d), []), today)
                 if st["status"] != "paid" and left <= rp["reminder_days"]:
@@ -2070,20 +2092,25 @@ async def recurring_overview(year: Optional[int] = None, month: Optional[int] = 
 
 
 @api.get("/recurring-payments/{rid}")
+@_shared_reader
 async def get_recurring_payment(rid: str, tz_offset: int = 0):
     today = _rp_today(tz_offset)
     rp = await _rp_get(rid)
     records = await _rp_records(rid=rid)
     out = _rp_public(rp, today)
     out["next_due"] = _rp_next_due(rp, records, today) if out["state"] == "active" else None
-    out["paid_total"] = float(sum((Decimal(str(r["amount"])) for rs in records.values() for r in rs), Decimal(0)))
-    out["payments_count"] = sum(len(rs) for rs in records.values())
-    out["account"] = await db.accounts.find_one({"id": rp.get("account_id"), "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1, "color": 1}) if rp.get("account_id") else None
-    out["category"] = await db.categories.find_one({"id": rp.get("category_id"), "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1, "icon": 1, "color": 1}) if rp.get("category_id") else None
-    return out
+    views = current_shared_periods(rid)
+    ordinary = [r for (_, due), rs in records.items() if due not in views for r in rs]
+    out["paid_total"] = float(sum((Decimal(str(r["amount"])) for r in ordinary), Decimal(0))
+                              + sum((v.summary.paid for v in views.values()), Decimal(0)))
+    out["payments_count"] = len(ordinary) + len(shared_paid_events(views.values()))
+    out["account"] = await read_database(db).accounts.find_one({"id": rp.get("account_id"), "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1, "color": 1}) if rp.get("account_id") else None
+    out["category"] = await read_database(db).categories.find_one({"id": rp.get("category_id"), "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1, "icon": 1, "color": 1}) if rp.get("category_id") else None
+    return shared_public(out)
 
 
 @api.get("/recurring-payments/{rid}/occurrences")
+@_shared_reader
 async def recurring_occurrences(rid: str, offset: int = 0, limit: int = 20, tz_offset: int = 0):
     today = _rp_today(tz_offset)
     rp = await _rp_get(rid)
@@ -2096,6 +2123,8 @@ async def recurring_occurrences(rid: str, offset: int = 0, limit: int = 20, tz_o
     occ = _rp_occurrences(rp, first, hi)
     for (_, due) in records:
         occ.setdefault(due, None)
+    for due in current_shared_periods(rid):
+        occ.setdefault(due, None)
     dues = sorted(occ, reverse=True)
     page = dues[offset:offset + limit]
     items = [_rp_state(rp, d, occ[d], records.get((rid, d), []), today) for d in page]
@@ -2103,18 +2132,23 @@ async def recurring_occurrences(rid: str, offset: int = 0, limit: int = 20, tz_o
 
 
 @api.get("/recurring-payments/{rid}/link-candidates")
+@_shared_reader
 async def recurring_link_candidates(rid: str, due_date: str):
     rp = await _rp_get(rid)
     d = _rp_day(due_date, "Fecha no válida.")
+    view = current_shared_view(recurring_id=rid, due=d.isoformat())
+    if view is not None:
+        return await shared_link_candidates(view)
     lo = datetime.combine(d - timedelta(days=15), datetime.min.time(), timezone.utc).isoformat()
     hi = datetime.combine(d + timedelta(days=16), datetime.min.time(), timezone.utc).isoformat()
     q = {"user_id": DEFAULT_USER_ID, "type": "expense", "date": {"$gte": lo, "$lt": hi}}
     for f in RP_LINK_FIELDS:
         q[f] = None
-    txs = await db.transactions.find(q, PROJ).sort("date", -1).to_list(200)
+    txs = await read_database(db).transactions.find(q, PROJ).sort("date", -1).to_list(200)
+    txs = [tx for tx in txs if not any(key.startswith("_shared_") for key in tx)]
     target = _rp_current(rp).get("amount") or 0
     txs.sort(key=lambda t: (abs(t["amount"] - target), 0 if t.get("category_id") == rp.get("category_id") else 1))
-    return txs[:10]
+    return shared_public(txs[:10])
 
 
 @api.post("/recurring-payments")
@@ -2126,6 +2160,7 @@ async def create_recurring_payment(
     fingerprint = hashlib.sha256(json.dumps(data.model_dump(), sort_keys=True, allow_nan=False).encode()).hexdigest()
     today = _rp_today()
     async def operation(session):
+        await guard_legacy_recurring(db, DEFAULT_USER_ID, rid, session)
         prev = await db.recurring_payments.find_one({"_id": rid, "user_id": DEFAULT_USER_ID}, session=session)
         if prev:
             if prev.get("request_fingerprint") != fingerprint:
@@ -2144,7 +2179,7 @@ async def create_recurring_payment(
             stored["request_fingerprint"] = fingerprint
         await db.recurring_payments.insert_one(stored, session=session)
         return _rp_public(rp, today)
-    return await payment_transaction(operation)
+    return shared_public(await payment_transaction(operation))
 
 
 @api.put("/recurring-payments/{rid}")
@@ -2152,6 +2187,18 @@ async def update_recurring_payment(rid: str, data: RecurringPaymentCreate):
     today = _rp_today()
 
     async def operation(session):
+        context = await shared_parent_context(db, globals().get("settings"), origin="recurring", parent_id=rid,
+            effective_user=DEFAULT_USER_ID, session=session)
+        if context is not None:
+            rp = context[1][0][3]
+            effective = data.model_copy(update={f: rp.get(f) for f in ("account_id", "category_id", "end_date", "variable") if f not in data.model_fields_set})
+            fields, version = await _rp_validate(effective, session, old=rp, supplied=data.model_fields_set)
+            if "end_date" not in data.model_fields_set:
+                fields["end_date"] = rp.get("end_date")
+            result = await edit_shared_recurring(db, context, fields, version, session=session, today=today,
+                occurrences=_rp_occurrences, add_period=_bill_add_period)
+            return _rp_public(result, today)
+        await guard_legacy_recurring(db, DEFAULT_USER_ID, rid, session)
         rp = await _rp_get(rid, session)
         effective = data.model_copy(update={f: rp.get(f) for f in ("account_id", "category_id") if f not in data.model_fields_set})
         fields, version = await _rp_validate(effective, session, old=rp, supplied=data.model_fields_set)
@@ -2169,32 +2216,42 @@ async def update_recurring_payment(rid: str, data: RecurringPaymentCreate):
         await db.recurring_payments.update_one({"id": rid, "user_id": DEFAULT_USER_ID}, {"$set": fields}, session=session)
         return _rp_public(await _rp_get(rid, session), today)
 
-    return await payment_transaction(operation)
+    return shared_public(await payment_transaction(operation))
 
 
 async def _rp_set_state(rid, action):
     today = _rp_today()
-    rp = await _rp_get(rid)
-    state = _rp_state_name(rp, today)
-    pauses = rp.get("pauses") or []
-    upd = {"updated_at": now_iso()}
-    if action == "pause":
-        if state != "active":
-            raise HTTPException(409, "Solo se puede pausar un pago activo.")
-        upd.update(state="paused", pauses=pauses + [{"start": today.isoformat(), "end": None}])
-    elif action == "resume":
-        if state != "paused":
-            raise HTTPException(409, "Solo se puede reactivar un pago pausado.")
-        upd.update(state="active", pauses=[dict(p, end=p.get("end") or today.isoformat()) for p in pauses])
-    else:
-        if state == "ended":
-            raise HTTPException(409, "La recurrencia ya está finalizada.")
-        end = today.isoformat()
-        if rp.get("end_date") and rp["end_date"] < end:
-            end = rp["end_date"]
-        upd.update(state="ended", end_date=end, pauses=[dict(p, end=p.get("end") or today.isoformat()) for p in pauses])
-    await db.recurring_payments.update_one({"id": rid, "user_id": DEFAULT_USER_ID}, {"$set": upd})
-    return _rp_public(await _rp_get(rid), today)
+    async def operation(session):
+        context = await shared_parent_context(db, globals().get("settings"), origin="recurring", parent_id=rid,
+            effective_user=DEFAULT_USER_ID, session=session)
+        if context is None:
+            await guard_legacy_recurring(db, DEFAULT_USER_ID, rid, session)
+        rp = await _rp_get(rid, session)
+        state = _rp_state_name(rp, today)
+        pauses = rp.get("pauses") or []
+        upd = {"updated_at": now_iso()}
+        if action == "pause":
+            if state != "active":
+                raise HTTPException(409, "Solo se puede pausar un pago activo.")
+            upd.update(state="paused", pauses=pauses + [{"start": today.isoformat(), "end": None}])
+        elif action == "resume":
+            if state != "paused":
+                raise HTTPException(409, "Solo se puede reactivar un pago pausado.")
+            upd.update(state="active", pauses=[dict(p, end=p.get("end") or today.isoformat()) for p in pauses])
+        else:
+            if state == "ended":
+                raise HTTPException(409, "La recurrencia ya está finalizada.")
+            end = today.isoformat()
+            if rp.get("end_date") and rp["end_date"] < end:
+                end = rp["end_date"]
+            upd.update(state="ended", end_date=end, pauses=[dict(p, end=p.get("end") or today.isoformat()) for p in pauses])
+        if context is not None:
+            await guard_shared_state_change(db, context, upd, session=session, today=today,
+                occurrences=_rp_occurrences, add_period=_bill_add_period)
+        await db.recurring_payments.update_one({"id": rid, "user_id": DEFAULT_USER_ID}, {"$set": upd}, session=session)
+        return _rp_public(await _rp_get(rid, session), today)
+
+    return shared_public(await payment_transaction(operation))
 
 
 @api.post("/recurring-payments/{rid}/pause")
@@ -2215,6 +2272,7 @@ async def end_recurring_payment(rid: str):
 @api.delete("/recurring-payments/{rid}")
 async def delete_recurring_payment(rid: str):
     async def operation(session):
+        await guard_legacy_recurring(db, DEFAULT_USER_ID, rid, session)
         if not await db.recurring_payments.find_one({"id": rid, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
             return {"ok": True}
         await coordinate(db, DEFAULT_USER_ID, {"recurring_id": rid}, session)
@@ -2235,7 +2293,7 @@ async def delete_recurring_payment(rid: str):
         await db.transactions.update_many({"recurring_payment_id": rid, "user_id": DEFAULT_USER_ID}, {"$unset": {"recurring_payment_id": "", "recurring_record_id": ""}}, session=session)
         await db.recurring_payments.delete_one({"id": rid, "user_id": DEFAULT_USER_ID}, session=session)
         return {"ok": True}
-    return await payment_transaction(operation)
+    return shared_public(await payment_transaction(operation))
 
 
 @api.post("/recurring-payments/{rid}/payments")
@@ -2243,7 +2301,11 @@ async def create_recurring_record(
     rid: str,
     data: RecurringPayRecordCreate,
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=128),
+    expected_environment: Optional[str] = Header(default=None, alias="MoneyFlow-Environment-ID", min_length=1, max_length=36),
+    expected_user: Optional[str] = Header(default=None, alias="MoneyFlow-User-ID", min_length=1, max_length=128),
 ):
+    if (expected_environment is None) != (expected_user is None):
+        raise HTTPException(422, "Envía ambas cabeceras de contexto o ninguna.")
     pid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:recurring-record:{rid}:{idempotency_key}")) if idempotency_key else new_id()
     tid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"recurring-record-movement:{pid}"))
     fingerprint = hashlib.sha256(json.dumps({"rid": rid, **data.model_dump()}, sort_keys=True, allow_nan=False).encode()).hexdigest()
@@ -2255,6 +2317,17 @@ async def create_recurring_record(
     today = _rp_today()
 
     async def operation(session):
+        if expected_environment is not None:
+            await verify_payment_context(db, settings.expected_financial_environment_id, DEFAULT_USER_ID,
+                expected_environment, expected_user, session)
+        shared = await dispatch_shared_payment(db, globals().get("settings"), origin="recurring",
+            parent_id=rid, receipt_id=pid, transaction_id=tid, payload=data.model_dump(),
+            effective_user=DEFAULT_USER_ID, session=session, occurrences=_rp_occurrences,
+            add_period=_bill_add_period, recompute_account_balance=recompute_account_balance,
+            effective_date=when.isoformat(), normalized_due=due)
+        if shared is not None:
+            return shared
+        await guard_legacy_recurring(db, DEFAULT_USER_ID, rid, session, due)
         prev = await db.recurring_payment_records.find_one({"_id": pid, "user_id": DEFAULT_USER_ID}, session=session)
         if prev:
             if prev.get("request_fingerprint") != fingerprint:
@@ -2281,6 +2354,7 @@ async def create_recurring_record(
                 raise HTTPException(422, "El movimiento a vincular debe ser un gasto existente.")
             if any(tx.get(f) for f in RP_LINK_FIELDS):
                 raise HTTPException(409, "Ese movimiento ya está vinculado a otro registro.")
+            await guard_legacy_movement(db, DEFAULT_USER_ID, tx, session)
             amount = float(tx["amount"])
         else:
             amount = _positive_money(data.amount, "El monto pagado debe ser mayor que cero.")
@@ -2328,13 +2402,29 @@ async def create_recurring_record(
         await db.recurring_payment_records.insert_one(stored, session=session)
         return record
 
-    return await payment_transaction(operation)
+    return shared_public(await payment_transaction(operation))
 
 
 @api.delete("/recurring-payments/payments/{pid}")
-async def delete_recurring_record(pid: str):
+async def delete_recurring_record(
+    pid: str,
+    expected_environment: Optional[str] = Header(default=None, alias="MoneyFlow-Environment-ID", min_length=1, max_length=36),
+    expected_user: Optional[str] = Header(default=None, alias="MoneyFlow-User-ID", min_length=1, max_length=128),
+):
+    if (expected_environment is None) != (expected_user is None):
+        raise HTTPException(422, "Envía ambas cabeceras de contexto o ninguna.")
     async def operation(session):
+        if expected_environment is not None:
+            await verify_payment_context(db, settings.expected_financial_environment_id, DEFAULT_USER_ID,
+                expected_environment, expected_user, session)
         rec = await db.recurring_payment_records.find_one({"id": pid, "user_id": DEFAULT_USER_ID}, session=session)
+        shared = await dispatch_shared_change(db, globals().get("settings"), origin="recurring",
+            receipt=rec, effective_user=DEFAULT_USER_ID, session=session,
+            recompute_account_balance=recompute_account_balance)
+        if shared is not None:
+            return shared
+        if rec:
+            await guard_legacy_receipt(db, DEFAULT_USER_ID, rec, session)
         if not rec or rec.get("deleted"):
             return {"ok": True}
         await coordinate(db, DEFAULT_USER_ID, {"recurring_id": rec["recurring_id"]}, session)
@@ -2353,7 +2443,7 @@ async def delete_recurring_record(pid: str):
             await db.transactions.update_one({"id": tx["id"], "user_id": DEFAULT_USER_ID}, {"$unset": {"recurring_payment_id": "", "recurring_record_id": ""}}, session=session)
         await retire(db, "recurring_payment_records", rec, DEFAULT_USER_ID, session)
         return {"ok": True}
-    return await payment_transaction(operation)
+    return shared_public(await payment_transaction(operation))
 
 
 # ---------- Bills (Facturas) ----------
@@ -2388,6 +2478,54 @@ class BillPayIn(BaseModel):
     notes: Optional[str] = None
 
 
+class PaymentReconciliation(BaseModel):
+    version: Literal[1] = 1
+    status: Literal["matched", "cancelled", "tracking_removed", "not_found", "discrepancy", "unverifiable"]
+    financial_state: Literal["active", "annulled", "none", "unknown"]
+    original_request_matches: Optional[bool]
+    environment_id: str
+    user_id: str
+    origin: Literal["bill", "recurring"]
+    parent_id: str
+    original_due_date: Optional[str]
+    receipt: Optional[dict]
+
+
+async def _reconcile_payment(origin, parent_id, payload, key, expected_environment, expected_user):
+    # This is a read-only snapshot, not the financial transaction runner. No
+    # activation, coordination increments, provisioning or nested transaction.
+    try:
+        async with await client.start_session() as session:
+            async with session.start_transaction(read_concern=ReadConcern("snapshot"), read_preference=ReadPreference.PRIMARY):
+                await verify_payment_context(db, settings.expected_financial_environment_id, DEFAULT_USER_ID,
+                                             expected_environment, expected_user, session)
+                return await reconcile_payment_intent(db, origin=origin, parent_id=parent_id, key=key,
+                    payload=payload, expected_environment_id=settings.expected_financial_environment_id,
+                    effective_user=DEFAULT_USER_ID, session=session)
+    except PyMongoError:
+        raise HTTPException(503, "No se pudo verificar la intención. Conserva su clave y payload originales.") from None
+
+
+@api.post("/bills/{bid}/payments/reconcile", response_model=PaymentReconciliation)
+async def reconcile_bill_payment(
+    bid: str, data: BillPayIn,
+    idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=128),
+    expected_environment: str = Header(alias="MoneyFlow-Environment-ID", min_length=1, max_length=36),
+    expected_user: str = Header(alias="MoneyFlow-User-ID", min_length=1, max_length=128),
+):
+    return await _reconcile_payment("bill", bid, data.model_dump(), idempotency_key, expected_environment, expected_user)
+
+
+@api.post("/recurring-payments/{rid}/payments/reconcile", response_model=PaymentReconciliation)
+async def reconcile_recurring_payment(
+    rid: str, data: RecurringPayRecordCreate,
+    idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=128),
+    expected_environment: str = Header(alias="MoneyFlow-Environment-ID", min_length=1, max_length=36),
+    expected_user: str = Header(alias="MoneyFlow-User-ID", min_length=1, max_length=128),
+):
+    return await _reconcile_payment("recurring", rid, data.model_dump(), idempotency_key, expected_environment, expected_user)
+
+
 def _bill_add_period(d: date, freq: str, anchor_day: int) -> date:
     if freq == "weekly":
         return d + timedelta(days=7)
@@ -2406,7 +2544,7 @@ def _bill_rp_due(rp, bill_due: str):
     return min(occ.keys(), key=lambda k: (abs((date.fromisoformat(k) - d).days), k))
 
 
-async def _bill_validate(data: BillIn, session=None, old=None, supplied=None):
+async def _bill_validate(data: BillIn, session=None, old=None, supplied=None, shared=False):
     name = (data.name or "").strip()
     if not name:
         raise HTTPException(422, "El nombre de la factura es obligatorio.")
@@ -2431,6 +2569,8 @@ async def _bill_validate(data: BillIn, session=None, old=None, supplied=None):
         "recurring_payment_id": data.recurring_payment_id or None,
         "icon": (data.icon or None), "color": (data.color or None),
     }
+    if fields.get("recurring_payment_id") and not shared:
+        await guard_legacy_recurring(db, DEFAULT_USER_ID, fields["recurring_payment_id"], session, due)
     preserve_references(fields, data, old, ("account_id", "category_id", "recurring_payment_id"), supplied)
     await coordinate(db, DEFAULT_USER_ID, fields, session, old)
     return fields
@@ -2441,12 +2581,13 @@ async def _bill_paid_map(bill_ids=None, session=None):
     if bill_ids is not None:
         q["bill_id"] = {"$in": list(bill_ids)}
     out = {}
-    async for p in db.bill_payments.find(q, {"_id": 0, "bill_id": 1, "amount": 1}, session=session):
+    async for p in read_database(db).bill_payments.find(q, {"_id": 0, "bill_id": 1, "amount": 1}, session=session):
         out[p["bill_id"]] = out.get(p["bill_id"], Decimal(0)) + Decimal(str(p["amount"]))
     return out
 
 
 async def _bill_for_write(bid, session):
+    await guard_legacy_bill(db, DEFAULT_USER_ID, bid, session)
     # Every payment/amount edit must write this shared document before reading
     # the paid total. A real increment (not a no-op) forces concurrent snapshots
     # to conflict and revalidate through the existing transaction runner.
@@ -2477,21 +2618,39 @@ def _bill_public(b, paid: Decimal, today: date, cats=None, accounts=None):
         category_name=cat.get("name"), category_icon=cat.get("icon"), category_color=cat.get("color"),
         account_name=acc.get("name"),
     )
-    return out
+    return shared_bill_public(out, current_shared_view(bill_id=b["id"]), today)
+
+
+async def _shared_bill_read(bill, paid, today, *, session, cats=None, accounts=None):
+    """Prepared 2D.1 reader; no endpoint dispatches here while R4 is inactive."""
+    view = await read_shared_view(db, bill_id=bill["id"], effective_user=DEFAULT_USER_ID,
+                                  expected_environment_id=settings.expected_financial_environment_id,
+                                  session=session)
+    return shared_bill_public(_bill_public(bill, paid, today, cats, accounts), view, today)
+
+
+async def _shared_recurring_read(rp, due, expected, records, today, *, session):
+    """Prepared per-period projection for detail, overview and calendar readers."""
+    view = await read_shared_view(db, recurring_id=rp["id"], original_due_date=due,
+                                  effective_user=DEFAULT_USER_ID,
+                                  expected_environment_id=settings.expected_financial_environment_id,
+                                  session=session)
+    return shared_recurring_public(_rp_state(rp, due, expected, records, today), view, today)
 
 
 async def _bill_lookups():
-    cats = {c["id"]: c for c in await db.categories.find({"user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1, "icon": 1, "color": 1}).to_list(5000)}
-    accs = {a["id"]: a for a in await db.accounts.find({"user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1}).to_list(2000)}
+    cats = {c["id"]: c for c in await read_database(db).categories.find({"user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1, "icon": 1, "color": 1}).to_list(5000)}
+    accs = {a["id"]: a for a in await read_database(db).accounts.find({"user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1}).to_list(2000)}
     return cats, accs
 
 
 @api.get("/bills")
+@_shared_reader
 async def list_bills(status: str = "all", tz_offset: int = 0):
     if status not in ("all", "pending", "paid", "overdue"):
         raise HTTPException(422, "Filtro no válido.")
     today = _rp_today(tz_offset)
-    bills = await db.bills.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("due_date", 1).to_list(5000)
+    bills = await read_database(db).bills.find({"user_id": DEFAULT_USER_ID}, PROJ).sort("due_date", 1).to_list(5000)
     paid = await _bill_paid_map([b["id"] for b in bills])
     cats, accs = await _bill_lookups()
     items = [_bill_public(b, paid.get(b["id"], Decimal(0)), today, cats, accs) for b in bills]
@@ -2505,13 +2664,14 @@ async def list_bills(status: str = "all", tz_offset: int = 0):
 
 
 @api.get("/bills/summary")
+@_shared_reader
 async def bills_summary(tz_offset: int = 0, year: Optional[int] = None, month: Optional[int] = None):
     today = _rp_today(tz_offset)
     year, month = year or today.year, month or today.month
     if not 1 <= month <= 12 or not 1900 <= year <= 3000:
         raise HTTPException(422, "Mes no válido.")
     tz = _local_tz(tz_offset)
-    bills = await db.bills.find({"user_id": DEFAULT_USER_ID}, PROJ).to_list(5000)
+    bills = await read_database(db).bills.find({"user_id": DEFAULT_USER_ID}, PROJ).to_list(5000)
     paid = await _bill_paid_map([b["id"] for b in bills])
     pend, pend_n, over, over_n, nxt = Decimal(0), 0, Decimal(0), 0, None
     for b in bills:
@@ -2529,10 +2689,18 @@ async def bills_summary(tz_offset: int = 0, year: Optional[int] = None, month: O
     a, z = date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1])
     lo, hi = _cal_str_window(a, z)
     pm, pm_n = Decimal(0), 0
-    async for p in db.bill_payments.find({"user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}, "date": {"$gte": lo, "$lte": hi}}, {"_id": 0, "amount": 1, "date": 1}):
+    async for p in read_database(db).bill_payments.find({"user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}, "date": {"$gte": lo, "$lte": hi}}, {"_id": 0, "bill_id": 1, "amount": 1, "date": 1}):
+        if current_shared_view(bill_id=p.get("bill_id")) is not None:
+            continue
         d, _ = _cal_dt(p.get("date"), tz)
         if d and a <= d <= z:
             pm += Decimal(str(p["amount"]))
+            pm_n += 1
+    views = [current_shared_view(bill_id=b["id"]) for b in bills]
+    for tx in shared_paid_events(views):
+        d, _ = _cal_dt(tx.get("date"), tz)
+        if d and a <= d <= z:
+            pm += Decimal(str(tx["amount"]))
             pm_n += 1
     return {
         "today": today.isoformat(), "year": year, "month": month,
@@ -2544,27 +2712,29 @@ async def bills_summary(tz_offset: int = 0, year: Optional[int] = None, month: O
 
 
 @api.get("/bills/{bid}")
+@_shared_reader
 async def get_bill(bid: str, tz_offset: int = 0):
-    b = await db.bills.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ)
+    b = await read_database(db).bills.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ)
     if not b:
         raise HTTPException(404, "Factura no encontrada.")
     today = _rp_today(tz_offset)
-    pays = await db.bill_payments.find({"bill_id": bid, "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, {"_id": 0, "request_fingerprint": 0}).sort("date", -1).to_list(500)
+    pays = await read_database(db).bill_payments.find({"bill_id": bid, "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, {"_id": 0, "request_fingerprint": 0}).sort("date", -1).to_list(500)
     paid = sum((Decimal(str(p["amount"])) for p in pays), Decimal(0))
     cats, accs = await _bill_lookups()
     out = _bill_public(b, paid, today, cats, accs)
     for p in pays:
         p["account_name"] = (accs.get(p.get("account_id")) or {}).get("name")
     out["payments"] = pays
-    rp = await db.recurring_payments.find_one({"id": b.get("recurring_payment_id"), "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1}) if b.get("recurring_payment_id") else None
+    rp = await read_database(db).recurring_payments.find_one({"id": b.get("recurring_payment_id"), "user_id": DEFAULT_USER_ID}, {"_id": 0, "id": 1, "name": 1}) if b.get("recurring_payment_id") else None
     out["recurring_payment_name"] = (rp or {}).get("name")
-    return out
+    return shared_public(out)
 
 
 @api.post("/bills")
 async def create_bill(data: BillIn, idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=128)):
     bid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:bill:{idempotency_key}")) if idempotency_key else new_id()
     async def operation(session):
+        await guard_legacy_bill(db, DEFAULT_USER_ID, bid, session)
         fields = await _bill_validate(data, session=session)
         prev = await db.bills.find_one({"_id": bid}, session=session)
         if prev:
@@ -2574,12 +2744,21 @@ async def create_bill(data: BillIn, idempotency_key: Optional[str] = Header(defa
                "anchor_day": int(fields["due_date"][8:10]), "next_bill_id": None, "created_at": now, "updated_at": now}
         await db.bills.insert_one(dict(doc, _id=bid), session=session)
         return doc
-    return await payment_transaction(operation)
+    return shared_public(await payment_transaction(operation))
 
 
 @api.put("/bills/{bid}")
 async def update_bill(bid: str, data: BillIn):
     async def operation(session):
+        context = await shared_parent_context(db, globals().get("settings"), origin="bill", parent_id=bid,
+            effective_user=DEFAULT_USER_ID, session=session)
+        if context is not None:
+            b = context[1][0][2]
+            if "recurring_payment_id" in data.model_fields_set and data.recurring_payment_id != b.get("recurring_payment_id"):
+                raise HTTPException(409, "La factura reservada no permite reasignar su recurrencia.")
+            effective = data.model_copy(update={f: b.get(f) for f in ("account_id", "category_id", "recurring_payment_id", "frequency") if f not in data.model_fields_set})
+            fields = await _bill_validate(effective, session, old=b, supplied=data.model_fields_set, shared=True)
+            return await edit_shared_bill(db, context, fields, session=session, occurrences=_rp_occurrences, add_period=_bill_add_period)
         b = await _bill_for_write(bid, session)
         effective = data.model_copy(update={f: b.get(f) for f in ("account_id", "category_id", "recurring_payment_id") if f not in data.model_fields_set})
         fields = await _bill_validate(effective, session, old=b, supplied=data.model_fields_set)
@@ -2592,12 +2771,13 @@ async def update_bill(bid: str, data: BillIn):
         await db.bills.update_one({"id": bid, "user_id": DEFAULT_USER_ID}, {"$set": upd}, session=session)
         return await db.bills.find_one({"id": bid}, {"_id": 0, "_payment_revision": 0, "_reference_revision": 0}, session=session)
 
-    return await payment_transaction(operation)
+    return shared_public(await payment_transaction(operation))
 
 
 @api.delete("/bills/{bid}")
 async def delete_bill(bid: str):
     async def operation(session):
+        await guard_legacy_bill(db, DEFAULT_USER_ID, bid, session)
         if not await db.bills.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ, session=session):
             return {"ok": True}
         await _bill_for_write(bid, session)
@@ -2617,11 +2797,17 @@ async def delete_bill(bid: str):
         await db.bills.update_many({"next_bill_id": bid, "user_id": DEFAULT_USER_ID}, {"$set": {"next_bill_id": None}}, session=session)
         await db.bills.delete_one({"id": bid, "user_id": DEFAULT_USER_ID}, session=session)
         return {"ok": True}
-    return await payment_transaction(operation)
+    return shared_public(await payment_transaction(operation))
 
 
 @api.post("/bills/{bid}/payments")
-async def pay_bill(bid: str, data: BillPayIn, idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=128)):
+async def pay_bill(bid: str, data: BillPayIn,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=128),
+    expected_environment: Optional[str] = Header(default=None, alias="MoneyFlow-Environment-ID", min_length=1, max_length=36),
+    expected_user: Optional[str] = Header(default=None, alias="MoneyFlow-User-ID", min_length=1, max_length=128),
+):
+    if (expected_environment is None) != (expected_user is None):
+        raise HTTPException(422, "Envía ambas cabeceras de contexto o ninguna.")
     pid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:bill-payment:{bid}:{idempotency_key}")) if idempotency_key else new_id()
     tid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"bill-payment-movement:{pid}"))
     fingerprint = hashlib.sha256(json.dumps({"bid": bid, **data.model_dump()}, sort_keys=True, allow_nan=False).encode()).hexdigest()
@@ -2633,6 +2819,17 @@ async def pay_bill(bid: str, data: BillPayIn, idempotency_key: Optional[str] = H
     today = _rp_today()
 
     async def operation(session):
+        if expected_environment is not None:
+            await verify_payment_context(db, settings.expected_financial_environment_id, DEFAULT_USER_ID,
+                expected_environment, expected_user, session)
+        shared = await dispatch_shared_payment(db, globals().get("settings"), origin="bill",
+            parent_id=bid, receipt_id=pid, transaction_id=tid, payload=data.model_dump(),
+            effective_user=DEFAULT_USER_ID, session=session, occurrences=_rp_occurrences,
+            add_period=_bill_add_period, recompute_account_balance=recompute_account_balance,
+            effective_date=when.isoformat())
+        if shared is not None:
+            return shared
+        await guard_legacy_bill(db, DEFAULT_USER_ID, bid, session)
         prev = await db.bill_payments.find_one({"_id": pid, "user_id": DEFAULT_USER_ID}, session=session)
         if prev:
             if prev.get("request_fingerprint") != fingerprint:
@@ -2663,6 +2860,8 @@ async def pay_bill(bid: str, data: BillPayIn, idempotency_key: Optional[str] = H
         if rp:
             await coordinate(db, DEFAULT_USER_ID, {"recurring_payment_id": rp["id"]}, session)
         rp_due = _bill_rp_due(rp, b["due_date"]) if rp else None
+        if rp_due:
+            await guard_legacy_recurring(db, DEFAULT_USER_ID, rp["id"], session, rp_due)
         if rp and rp_due:
             d = date.fromisoformat(rp_due)
             recs = (await _rp_records(rid=rp["id"], a=d, b=d, session=session)).get((rp["id"], rp_due), [])
@@ -2707,13 +2906,29 @@ async def pay_bill(bid: str, data: BillPayIn, idempotency_key: Optional[str] = H
             await db.bills.update_one({"id": bid, "user_id": DEFAULT_USER_ID}, {"$set": {"next_bill_id": next_id}}, session=session)
         return dict(payment, next_bill_id=next_id)
 
-    return await payment_transaction(operation)
+    return shared_public(await payment_transaction(operation))
 
 
 @api.delete("/bills/payments/{pid}")
-async def delete_bill_payment(pid: str):
+async def delete_bill_payment(
+    pid: str,
+    expected_environment: Optional[str] = Header(default=None, alias="MoneyFlow-Environment-ID", min_length=1, max_length=36),
+    expected_user: Optional[str] = Header(default=None, alias="MoneyFlow-User-ID", min_length=1, max_length=128),
+):
+    if (expected_environment is None) != (expected_user is None):
+        raise HTTPException(422, "Envía ambas cabeceras de contexto o ninguna.")
     async def operation(session):
+        if expected_environment is not None:
+            await verify_payment_context(db, settings.expected_financial_environment_id, DEFAULT_USER_ID,
+                expected_environment, expected_user, session)
         p = await db.bill_payments.find_one({"id": pid, "user_id": DEFAULT_USER_ID}, session=session)
+        shared = await dispatch_shared_change(db, globals().get("settings"), origin="bill",
+            receipt=p, effective_user=DEFAULT_USER_ID, session=session,
+            recompute_account_balance=recompute_account_balance)
+        if shared is not None:
+            return shared
+        if p:
+            await guard_legacy_receipt(db, DEFAULT_USER_ID, p, session)
         if not p or p.get("deleted"):
             return {"ok": True}
         await _bill_for_write(p["bill_id"], session)
@@ -2730,7 +2945,7 @@ async def delete_bill_payment(pid: str):
         await retire(db, "bill_payments", p, DEFAULT_USER_ID, session)
         # Keep a generated future period; series_id is a grouping key, not a FK.
         return {"ok": True}
-    return await payment_transaction(operation)
+    return shared_public(await payment_transaction(operation))
 
 
 # ---------- Financial calendar (READ-ONLY aggregation layer) ----------
@@ -2781,12 +2996,12 @@ def _cal_str_window(a: date, b: date):
 
 async def _cal_events(a: date, b: date, tz, today: date):
     U = DEFAULT_USER_ID
-    accounts = {x["id"]: x for x in await db.accounts.find({"user_id": U}, {"_id": 0, "id": 1, "name": 1}).to_list(2000)}
-    cats = {x["id"]: x for x in await db.categories.find({"user_id": U}, {"_id": 0, "id": 1, "name": 1, "icon": 1, "color": 1}).to_list(5000)}
-    goals = {x["id"]: x for x in await db.saving_goals.find({"user_id": U}, PROJ).to_list(1000)}
-    debts = await db.debts.find({"user_id": U}, PROJ).to_list(2000)
+    accounts = {x["id"]: x for x in await read_database(db).accounts.find({"user_id": U}, {"_id": 0, "id": 1, "name": 1}).to_list(2000)}
+    cats = {x["id"]: x for x in await read_database(db).categories.find({"user_id": U}, {"_id": 0, "id": 1, "name": 1, "icon": 1, "color": 1}).to_list(5000)}
+    goals = {x["id"]: x for x in await read_database(db).saving_goals.find({"user_id": U}, PROJ).to_list(1000)}
+    debts = await read_database(db).debts.find({"user_id": U}, PROJ).to_list(2000)
     debt_by_id = {d["id"]: d for d in debts}
-    rps = await db.recurring_payments.find({"user_id": U}, PROJ).to_list(1000)
+    rps = await read_database(db).recurring_payments.find({"user_id": U}, PROJ).to_list(1000)
     rp_by_id = {r["id"]: r for r in rps}
     lo, hi = _cal_str_window(a, b)
     events = []
@@ -2795,7 +3010,7 @@ async def _cal_events(a: date, b: date, tz, today: date):
         return (accounts.get(aid) or {}).get("name") if aid else None
 
     # 1) Registered movements (real money).
-    async for t in db.transactions.find({"user_id": U, "date": {"$gte": lo, "$lte": hi}}, PROJ):
+    async for t in read_database(db).transactions.find({"user_id": U, "date": {"$gte": lo, "$lte": hi}}, PROJ):
         d, hm = _cal_dt(t.get("date"), tz)
         if not d or not (a <= d <= b):
             continue
@@ -2847,7 +3062,7 @@ async def _cal_events(a: date, b: date, tz, today: date):
         })
 
     # 2) Goal contributions (tracking only -> never income/expense).
-    async for c in db.goal_contributions.find({"user_id": U, "deleted": {"$ne": True}, "date": {"$gte": lo, "$lte": hi}}, {"_id": 0, "request_fingerprint": 0}):
+    async for c in read_database(db).goal_contributions.find({"user_id": U, "deleted": {"$ne": True}, "date": {"$gte": lo, "$lte": hi}}, {"_id": 0, "request_fingerprint": 0}):
         d, hm = _cal_dt(c.get("date"), tz)
         if not d or not (a <= d <= b):
             continue
@@ -2884,7 +3099,7 @@ async def _cal_events(a: date, b: date, tz, today: date):
     # 3b) Bill dues (planned). Paid bills are represented by their payment movements.
     #     Unpaid bills linked to a recurring payment hide that recurring due (single event).
     hide_rp = set()
-    bills_in = await db.bills.find({"user_id": U, "due_date": {"$gte": a.isoformat(), "$lte": b.isoformat()}}, PROJ).to_list(5000)
+    bills_in = await read_database(db).bills.find({"user_id": U, "due_date": {"$gte": a.isoformat(), "$lte": b.isoformat()}}, PROJ).to_list(5000)
     if bills_in:
         bpaid = await _bill_paid_map([x["id"] for x in bills_in])
         for bl in bills_in:
@@ -2893,7 +3108,8 @@ async def _cal_events(a: date, b: date, tz, today: date):
                 continue
             rp = rp_by_id.get(bl.get("recurring_payment_id")) if bl.get("recurring_payment_id") else None
             if rp:
-                rd = _bill_rp_due(rp, bl["due_date"])
+                view = current_shared_view(bill_id=bl["id"])
+                rd = view.obligation["original_due_date"] if view else _bill_rp_due(rp, bl["due_date"])
                 if rd:
                     hide_rp.add((rp["id"], rd))
             cat = cats.get(bl.get("category_id")) or {}
@@ -2907,7 +3123,7 @@ async def _cal_events(a: date, b: date, tz, today: date):
                 "links": {"bill_id": bl["id"]},
             })
     # Unpaid bills linked to a recurring payment whose due falls just outside the window.
-    for bl in await db.bills.find({"user_id": U, "recurring_payment_id": {"$ne": None},
+    for bl in await read_database(db).bills.find({"user_id": U, "recurring_payment_id": {"$ne": None},
                                    "due_date": {"$gte": (a - timedelta(days=16)).isoformat(), "$lte": (b + timedelta(days=16)).isoformat()}}, PROJ).to_list(2000):
         rp = rp_by_id.get(bl.get("recurring_payment_id"))
         if not rp:
@@ -2915,7 +3131,8 @@ async def _cal_events(a: date, b: date, tz, today: date):
         paid_b = (await _bill_paid_map([bl["id"]])).get(bl["id"], Decimal(0))
         if paid_b >= Decimal(str(bl["amount"])) - Decimal("0.001"):
             continue
-        rd = _bill_rp_due(rp, bl["due_date"])
+        view = current_shared_view(bill_id=bl["id"])
+        rd = view.obligation["original_due_date"] if view else _bill_rp_due(rp, bl["due_date"])
         if rd:
             hide_rp.add((rp["id"], rd))
 
@@ -2934,6 +3151,8 @@ async def _cal_events(a: date, b: date, tz, today: date):
                     "icon": rp.get("icon"), "color": rp.get("color"), "links": {"recurring_id": rp["id"]},
                 }
                 if st["status"] == "paid":
+                    if current_shared_view(recurring_id=rp["id"], due=st["due_date"]) is not None:
+                        continue  # real shared money is already represented by its movement
                     marks = [r for r in recs if not r.get("transaction_id")]
                     if not marks:
                         continue  # fully represented by the linked movement(s)
@@ -2997,6 +3216,7 @@ def _cal_summary(events, a: date, b: date):
 
 
 @api.get("/calendar/events")
+@_shared_reader
 async def calendar_events(start: str, end: str, tz_offset: int = 0, types: Optional[str] = None):
     a = _rp_day(start, "La fecha inicial no es válida.")
     b = _rp_day(end, "La fecha final no es válida.")
@@ -3011,6 +3231,7 @@ async def calendar_events(start: str, end: str, tz_offset: int = 0, types: Optio
 
 
 @api.get("/calendar/summary")
+@_shared_reader
 async def calendar_summary(year: Optional[int] = None, month: Optional[int] = None, tz_offset: int = 0, types: Optional[str] = None):
     today = _rp_today(tz_offset)
     year, month = year or today.year, month or today.month
@@ -3024,7 +3245,7 @@ async def calendar_summary(year: Optional[int] = None, month: Optional[int] = No
     # "payments": never added to real spending totals.
     if "bill" in sel:
         s, n = Decimal(0), 0
-        async for bl in db.bills.find({"user_id": DEFAULT_USER_ID, "due_date": {"$gte": a.isoformat(), "$lte": b.isoformat()}}, {"_id": 0, "amount": 1}):
+        async for bl in read_database(db).bills.find({"user_id": DEFAULT_USER_ID, "due_date": {"$gte": a.isoformat(), "$lte": b.isoformat()}}, {"_id": 0, "amount": 1}):
             s += Decimal(str(bl["amount"]))
             n += 1
         out["bills"] = {"amount": float(s), "count": n, "available": True}
@@ -3032,6 +3253,7 @@ async def calendar_summary(year: Optional[int] = None, month: Optional[int] = No
 
 
 @api.get("/calendar/upcoming")
+@_shared_reader
 async def calendar_upcoming(tz_offset: int = 0, limit: int = 5, offset: int = 0, days: int = 120, types: Optional[str] = None):
     today = _rp_today(tz_offset)
     limit, offset, days = max(1, min(int(limit), 50)), max(0, int(offset)), max(1, min(int(days), 365))

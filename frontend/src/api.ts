@@ -31,7 +31,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  // Additive context API; deliberately not used by the production payment screen yet.
+  // Read-only context: default-user/single_user is an effective identity, not authentication.
   getFinancialContext: () => request<FinancialContext>("/financial-context"),
   createContextProtectedDebtPayment: (d: any, key: string, context: FinancialContext) => request<any>("/debt-payments", {
     method: "POST", body: JSON.stringify(d), headers: {
@@ -56,6 +56,22 @@ export const api = {
       ...(context ? { "MoneyFlow-Environment-ID": context.environment_id, "MoneyFlow-User-ID": context.user_id } : {}),
     },
   }),
+  contextBillPay: (id: string, d: any, key: string, context: { environment_id: string; user_id: string }) =>
+    request<any>(`/bills/${id}/payments`, { method: "POST", body: JSON.stringify(d), headers: {
+      "Idempotency-Key": key, "MoneyFlow-Environment-ID": context.environment_id, "MoneyFlow-User-ID": context.user_id,
+    } }),
+  reconcileBillPayment: (id: string, d: any, key: string, context: { environment_id: string; user_id: string }) =>
+    request<any>(`/bills/${id}/payments/reconcile`, { method: "POST", body: JSON.stringify(d), headers: {
+      "Idempotency-Key": key, "MoneyFlow-Environment-ID": context.environment_id, "MoneyFlow-User-ID": context.user_id,
+    } }),
+  reconcileRecurringPayment: (id: string, d: any, key: string, context: { environment_id: string; user_id: string }) =>
+    request<any>(`/recurring-payments/${id}/payments/reconcile`, { method: "POST", body: JSON.stringify(d), headers: {
+      "Idempotency-Key": key, "MoneyFlow-Environment-ID": context.environment_id, "MoneyFlow-User-ID": context.user_id,
+    } }),
+  contextRecurringPay: (id: string, d: any, key: string, context: { environment_id: string; user_id: string }) =>
+    request<any>(`/recurring-payments/${id}/payments`, { method: "POST", body: JSON.stringify(d), headers: {
+      "Idempotency-Key": key, "MoneyFlow-Environment-ID": context.environment_id, "MoneyFlow-User-ID": context.user_id,
+    } }),
   // User
   getUser: () => request<any>("/user"),
   updateUser: (data: any) => request<any>("/user", { method: "PUT", body: JSON.stringify(data) }),
@@ -138,7 +154,9 @@ export const api = {
   rpDelete: (id: string) => request<any>(`/recurring-payments/${id}`, { method: "DELETE" }),
   rpPay: (id: string, d: any, key?: string) =>
     request<any>(`/recurring-payments/${id}/payments`, { method: "POST", body: JSON.stringify(d), headers: key ? { "Idempotency-Key": key } : {} }),
-  rpDeletePayment: (pid: string) => request<any>(`/recurring-payments/payments/${pid}`, { method: "DELETE" }),
+  rpDeletePayment: (pid: string, context?: { environment_id: string; user_id: string }) => request<any>(`/recurring-payments/payments/${pid}`, {
+    method: "DELETE", headers: context ? { "MoneyFlow-Environment-ID": context.environment_id, "MoneyFlow-User-ID": context.user_id } : {},
+  }),
   // Bills (Facturas)
   rpList: () => request<any[]>(`/recurring-payments?tz_offset=${new Date().getTimezoneOffset()}`),
   billsList: (status = "all") => request<any>(`/bills?status=${status}&tz_offset=${new Date().getTimezoneOffset()}`),
@@ -150,7 +168,9 @@ export const api = {
   billDelete: (id: string) => request<any>(`/bills/${id}`, { method: "DELETE" }),
   billPay: (id: string, d: any, key?: string) =>
     request<any>(`/bills/${id}/payments`, { method: "POST", body: JSON.stringify(d), headers: key ? { "Idempotency-Key": key } : {} }),
-  billDeletePayment: (pid: string) => request<any>(`/bills/payments/${pid}`, { method: "DELETE" }),
+  billDeletePayment: (pid: string, context?: { environment_id: string; user_id: string }) => request<any>(`/bills/payments/${pid}`, {
+    method: "DELETE", headers: context ? { "MoneyFlow-Environment-ID": context.environment_id, "MoneyFlow-User-ID": context.user_id } : {},
+  }),
   // Financial calendar (read-only aggregation)
   calendarEvents: (start: string, end: string) =>
     request<any>(`/calendar/events?start=${start}&end=${end}&tz_offset=${new Date().getTimezoneOffset()}`),

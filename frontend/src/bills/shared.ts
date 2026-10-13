@@ -1,4 +1,5 @@
 // Shared helpers for the Bills (Facturas) feature (screen-scoped; global theme untouched).
+import { invalidateObligationPayments } from "../obligation-payments/journal";
 import type { QueryClient } from "@tanstack/react-query";
 export { FOREST, useMontserrat } from "@/src/budgets/shared";
 export { deepen, safeHex, longDate, toYmd, parseAmount, newGoalKey as newKey } from "@/src/goals/shared";
@@ -24,8 +25,6 @@ export function shortDate(ymd: string | null | undefined, lang: string) {
 }
 
 /** Refresh every view that depends on bills (lists, balances, movements, calendar, recurring). */
-export function invalidateBills(qc: QueryClient, money = false) {
-  const keys: string[][] = [["bills"], ["bills-summary"], ["bill"], ["calendar-events"], ["calendar-summary"], ["calendar-upcoming"]];
-  if (money) keys.push(["accounts"], ["transactions"], ["summary"], ["rp-overview"], ["rp-detail"], ["rp-occ"]);
-  return Promise.all(keys.map((k) => qc.invalidateQueries({ queryKey: k })));
+export function invalidateBills(qc: QueryClient, _money = false) {
+  return invalidateObligationPayments(qc);
 }

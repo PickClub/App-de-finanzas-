@@ -12,14 +12,14 @@ from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
 
 if __package__:
-    from .history_keys import PUBLIC_PROJECTION as HISTORY_PUBLIC_PROJECTION
+    from .history_keys import PUBLIC_PROJECTION as HISTORY_PUBLIC_PROJECTION, with_history_keys, history_update_fields
     from .transaction_history import read_page as read_transaction_page, read_detail as read_transaction_detail
     from .shared_obligations import public_financial_document as shared_public, read_shared_view, shared_bill_public, shared_recurring_public, shared_read_route, read_database, current_shared_view, current_shared_periods, shared_paid_events, dispatch_shared_payment, shared_parent_context, edit_shared_bill, edit_shared_recurring, guard_shared_state_change, dispatch_shared_change, shared_link_candidates, reconcile_payment_intent
     from .config import load_settings
     from .financial_context import get_financial_context, verify_payment_context
     from .reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, check_movement_references, check_goal_contribution, guard_legacy_bill, guard_legacy_recurring, guard_legacy_receipt, guard_legacy_movement
 else:
-    from history_keys import PUBLIC_PROJECTION as HISTORY_PUBLIC_PROJECTION
+    from history_keys import PUBLIC_PROJECTION as HISTORY_PUBLIC_PROJECTION, with_history_keys, history_update_fields
     from transaction_history import read_page as read_transaction_page, read_detail as read_transaction_detail
     from shared_obligations import public_financial_document as shared_public, read_shared_view, shared_bill_public, shared_recurring_public, shared_read_route, read_database, current_shared_view, current_shared_periods, shared_paid_events, dispatch_shared_payment, shared_parent_context, edit_shared_bill, edit_shared_recurring, guard_shared_state_change, dispatch_shared_change, shared_link_candidates, reconcile_payment_intent
     from config import load_settings
@@ -820,7 +820,10 @@ async def create_transaction(data: TransactionCreate):
     async def operation(session):
         await validate_transaction(payload, session=session)
         tx = Transaction(id=tid, user_id=DEFAULT_USER_ID, **payload).model_dump()
-        await db.transactions.insert_one(dict(tx, _id=tid), session=session)
+        stored = dict(tx, _id=tid)
+        if getattr(settings, "history_keys_write_enabled", False) and tx["type"] in ("expense", "income", "transfer"):
+            stored = with_history_keys(stored, settings.history_keys_generation)
+        await db.transactions.insert_one(stored, session=session)
         for aid in sorted({tx.get("account_id"), tx.get("to_account_id")} - {None}):
             await recompute_account_balance(aid, session=session)
         return tx
@@ -843,7 +846,7 @@ async def update_transaction(tid: str, data: TransactionCreate):
     if old.get("debt_id") or data.debt_id or data.type == "debt_payment":
         raise HTTPException(409, "El movimiento requiere un vínculo individual con su pago antes de editarlo.")
     async def operation(session):
-        current = await db.transactions.find_one({"id": tid}, PROJ, session=session)
+        current = await db.transactions.find_one({"id": tid}, INTERNAL_PROJ, session=session)
         if not current:
             raise HTTPException(404, "Not found")
         # The initial read only selects the existing payment route. Recheck
@@ -854,7 +857,11 @@ async def update_transaction(tid: str, data: TransactionCreate):
         await check_movement_references(db, DEFAULT_USER_ID, current, session)
         payload = transaction_edit_payload(data, current)
         await validate_transaction(payload, current, session=session)
-        await db.transactions.update_one({"id": tid}, {"$set": payload}, session=session)
+        changes = dict(payload)
+        if getattr(settings, "history_keys_write_enabled", False) and payload["type"] in ("expense", "income", "transfer"):
+            final = {**current, **payload}
+            changes.update(history_update_fields(current, final, settings.history_keys_generation))
+        await db.transactions.update_one({"id": tid}, {"$set": changes}, session=session)
         for aid in sorted({current.get("account_id"), current.get("to_account_id"), payload.get("account_id"), payload.get("to_account_id")} - {None}):
             await recompute_account_balance(aid, session=session)
         return await db.transactions.find_one({"id": tid}, PROJ, session=session)

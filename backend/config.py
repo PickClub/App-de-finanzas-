@@ -23,6 +23,8 @@ class Settings:
     log_level: str
     expected_financial_environment_id: str | None = None
     shared_obligations_enabled: bool = False
+    history_keys_write_enabled: bool = False
+    history_keys_generation: int | None = None
 
 
 def settings_from_mapping(values: Mapping[str, str]) -> Settings:
@@ -93,7 +95,18 @@ def settings_from_mapping(values: Mapping[str, str]) -> Settings:
     shared_flag = values.get("MONEYFLOW_SHARED_OBLIGATIONS_ENABLED", "0")
     if shared_flag not in ("0", "1"):
         raise ConfigurationError("MONEYFLOW_SHARED_OBLIGATIONS_ENABLED must be 0 or 1.")
-    return Settings(env, uri, name, origins, level, expected, shared_flag == "1")
+    history_flag = values.get("MONEYFLOW_HISTORY_KEYS_WRITE_ENABLED", "0")
+    if history_flag not in ("0", "1"):
+        raise ConfigurationError("MONEYFLOW_HISTORY_KEYS_WRITE_ENABLED must be 0 or 1.")
+    generation_text = values.get("MONEYFLOW_HISTORY_KEYS_GENERATION", "")
+    generation = None
+    if generation_text:
+        if not re.fullmatch(r"[1-9][0-9]{0,9}", generation_text) or int(generation_text) > 2147483647:
+            raise ConfigurationError("MONEYFLOW_HISTORY_KEYS_GENERATION must be a positive BSON int32.")
+        generation = int(generation_text)
+    if history_flag == "1" and generation is None:
+        raise ConfigurationError("History key writes require an explicit generation.")
+    return Settings(env, uri, name, origins, level, expected, shared_flag == "1", history_flag == "1", generation)
 
 
 def load_settings(environ=None, *, dotenv_path=None, testing=None) -> Settings:

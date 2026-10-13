@@ -28,6 +28,10 @@ from pymongo import ReadPreference
 from pymongo.errors import DuplicateKeyError, OperationFailure, PyMongoError
 from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
+from backend.history_keys import with_history_keys, history_update_fields
+
+settings = SimpleNamespace(history_keys_write_enabled=False, history_keys_generation=None)
+INTERNAL_PROJ = {"_id": 0, "_reference_revision": 0}
 
 
 def matches(doc, query):
@@ -280,8 +284,9 @@ class PaymentTests(unittest.IsolatedAsyncioTestCase):
         return response.json()
 
     def test_harness_excludes_startup_and_unrelated_routes(self):
-        for name in ("settings", "app", "goal_indexes", "shutdown", "seed", "pay_bill"):
+        for name in ("app", "goal_indexes", "shutdown", "seed", "pay_bill", "load_settings"):
             self.assertNotIn(name, self.ns)
+        self.assertEqual(vars(self.ns["settings"]), {"history_keys_write_enabled": False, "history_keys_generation": None})
         self.assertEqual({route.path for route in self.app.routes if route.path.startswith("/api")}, {
             "/api/accounts/{account_id}", "/api/transactions", "/api/transactions/{tid}",
             "/api/debts/{did}", "/api/debts/{did}/payments", "/api/debt-payments",

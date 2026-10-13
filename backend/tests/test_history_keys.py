@@ -113,9 +113,13 @@ class HelperTests(unittest.TestCase):
                 for call in (n for n in ast.walk(function) if isinstance(n, ast.Call)):
                     name = call.func.id if isinstance(call.func, ast.Name) else call.func.attr if isinstance(call.func, ast.Attribute) else None
                     if name in helpers:
-                        self.assertEqual(path.name, "server.py")
-                        self.assertIn(function.name, {"create_transaction", "update_transaction", "create_debt_payment", "edit_payment_movement", "pay_bill", "create_goal_contribution", "create_recurring_record"})
-                        self.assertIn(name, {"with_history_keys", "history_update_fields"})
+                        if path.name == "shared_obligations.py":
+                            self.assertEqual(function.name, "register_shared_payment")
+                            self.assertEqual(name, "with_history_keys")
+                        else:
+                            self.assertEqual(path.name, "server.py")
+                            self.assertIn(function.name, {"create_transaction", "update_transaction", "create_debt_payment", "edit_payment_movement", "pay_bill", "create_goal_contribution", "create_recurring_record"})
+                            self.assertIn(name, {"with_history_keys", "history_update_fields"})
 
     def test_import_does_not_connect_load_environment_or_import_experiments(self):
         script = '''

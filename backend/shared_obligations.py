@@ -18,11 +18,11 @@ from fastapi import HTTPException
 from pymongo.errors import PyMongoError
 
 if __package__:
-    from .history_keys import strip_history_metadata
+    from .history_keys import strip_history_metadata, with_history_keys
     from .financial_context import get_financial_context, validate_environment_id
     from .reference_integrity import coordinate, _same_optional_reference, check_bill_payment, check_record
 else:
-    from history_keys import strip_history_metadata
+    from history_keys import strip_history_metadata, with_history_keys
     from financial_context import get_financial_context, validate_environment_id
     from reference_integrity import coordinate, _same_optional_reference, check_bill_payment, check_record
 
@@ -913,7 +913,7 @@ async def _payment_parents(database, ob, scope, session, account_id, category_id
 
 async def register_shared_payment(database, obligation_id, *, origin, receipt_id, transaction_id, payload,
                                   expected_environment_id, effective_user, session, recompute_account_balance,
-                                  effective_date=None, public_request=False):
+                                  effective_date=None, public_request=False, history_settings=None):
     """Internal kernel, no session/commit creation; 2D.3 dispatch is exclusive.
 
     Caller preserves the origin route's original IDs and model_dump payload.
@@ -980,6 +980,8 @@ async def register_shared_payment(database, obligation_id, *, origin, receipt_id
               type="expense", category_id=category, to_account_id=None, debt_id=None, debt_payment_id=None,
               bill_id=ob["bill_id"], bill_payment_id=pid, recurring_payment_id=ob["recurring_id"], recurring_record_id=rid)
     tx.pop("transaction_id")
+    if getattr(history_settings, "history_keys_write_enabled", False):
+        tx = with_history_keys(tx, history_settings.history_keys_generation)
     await database.transactions.insert_one(tx, session=session)
     await database.bill_payments.insert_one(p, session=session)
     await database.recurring_payment_records.insert_one(r, session=session)
@@ -1596,7 +1598,7 @@ async def dispatch_shared_payment(database, settings, *, origin, parent_id, rece
     result = await register_shared_payment(database, ob["_id"], origin=origin, receipt_id=receipt_id,
         transaction_id=transaction_id, payload=payload, expected_environment_id=settings.expected_financial_environment_id,
         effective_user=effective_user, session=session, recompute_account_balance=recompute_account_balance,
-        effective_date=effective_date, public_request=True)
+        effective_date=effective_date, public_request=True, history_settings=settings)
     next_id = await generate_next_shared_bill(database, ob, result, effective_user=effective_user,
                                              session=session, add_period=add_period, occurrences=occurrences)
     if origin == "bill":

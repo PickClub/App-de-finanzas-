@@ -6,7 +6,7 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/src/api";
+import { api, ApiError } from "@/src/api";
 import { useResourceDeletion, useMissingResource } from "@/src/use-resource-deletion";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
@@ -73,11 +73,16 @@ export default function TransactionDetail() {
   const qc = useQueryClient();
   const deletion = useResourceDeletion("/(tabs)", [["transactions"], ["accounts"], ["debts"], ["debt"], ["debt-payments"], ["summary"]]);
 
-  const txQ = useQuery({ queryKey: ["transactions"], queryFn: api.listTransactions });
+  const txQ = useQuery({
+    queryKey: ["transactions", "detail", params.id],
+    queryFn: () => api.getTransaction(params.id!),
+    enabled: !!params.id,
+    retry: false,
+  });
   const catQ = useQuery({ queryKey: ["categories"], queryFn: api.listCategories });
   const accQ = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
 
-  const tx = useMemo(() => (txQ.data || []).find((t: any) => t.id === params.id), [txQ.data, params.id]);
+  const tx = txQ.data?.id === params.id ? txQ.data : undefined;
   const cat = useMemo(() => (catQ.data || []).find((c: any) => c.id === tx?.category_id), [catQ.data, tx]);
   const account = useMemo(() => (accQ.data || []).find((a: any) => a.id === tx?.account_id), [accQ.data, tx]);
 
@@ -112,9 +117,10 @@ export default function TransactionDetail() {
     return q ? all.filter((c: any) => c.name.toLowerCase().includes(q)) : all;
   }, [catQ.data, tx, catSearch]);
 
-  useMissingResource(txQ.isSuccess && !tx, deletion.unavailable);
+  const missing = txQ.error instanceof ApiError && txQ.error.status === 404;
+  useMissingResource(missing, deletion.unavailable);
 
-  if (!tx || deletion.deleted.current) {
+  if (!tx || txQ.isError || deletion.deleted.current) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top + us(8) }]}>
         <View style={styles.header}>
@@ -125,8 +131,15 @@ export default function TransactionDetail() {
           <View style={styles.circleBtn} />
         </View>
         <Text style={{ color: colors.muted, textAlign: "center", marginTop: us(40) }}>
-          {txQ.isLoading ? "Cargando…" : "Movimiento no encontrado"}
+          {txQ.isLoading ? "Cargando…" : missing || !params.id || deletion.deleted.current
+            ? "Movimiento no encontrado"
+            : txQ.error instanceof ApiError ? txQ.error.detail : "No se pudo cargar el movimiento. Inténtalo de nuevo."}
         </Text>
+        {params.id && txQ.isError && !missing && !deletion.deleted.current && (
+          <Pressable testID="transaction-detail-retry" disabled={txQ.isFetching} onPress={() => void txQ.refetch()} style={styles.saveBtn}>
+            <Text style={{ color: colors.onSurface, textAlign: "center" }}>Reintentar</Text>
+          </Pressable>
+        )}
       </View>
     );
   }

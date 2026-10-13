@@ -88,6 +88,7 @@ export const api = {
   deleteCategory: (id: string) => request<any>(`/categories/${id}`, { method: "DELETE" }),
   // Transactions
   listTransactions: () => request<any[]>("/transactions"),
+  getTransaction: (id: string) => request<any>(`/transactions/${encodeURIComponent(id)}`),
   createTransaction: (d: any) => request<any>("/transactions", { method: "POST", body: JSON.stringify(d) }),
   updateTransaction: (id: string, d: any) => request<any>(`/transactions/${id}`, { method: "PUT", body: JSON.stringify(d) }),
   deleteTransaction: (id: string) => request<any>(`/transactions/${id}`, { method: "DELETE" }),

@@ -6,7 +6,7 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/src/api";
+import { api, ApiError } from "@/src/api";
 import { useResourceDeletion } from "@/src/use-resource-deletion";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
@@ -91,7 +91,16 @@ export default function NewTransaction() {
   const qc = useQueryClient();
   const deletion = useResourceDeletion("/(tabs)", [["accounts"], ["transactions"], ["categories"], ["debts"], ["debt-payments"], ["debt"], ["summary"]]);
   const [loadedId, setResourceLoaded] = useState<string>();
-  const resourceLoaded = loadedId === params.id;
+  const sourceId = params.id || params.dupFrom;
+  const sourceScope = sourceId ? `${params.id ? "edit" : "duplicate"}:${sourceId}` : undefined;
+  const resourceLoaded = !sourceId || loadedId === sourceScope;
+  const hydratedSource = useRef<string | undefined>(undefined);
+  const sourceQ = useQuery({
+    queryKey: ["transactions", "detail", sourceId],
+    queryFn: () => api.getTransaction(sourceId!),
+    enabled: !!sourceId,
+    retry: false,
+  });
 
   const [type, setType] = useState<string>(params.type || "expense");
   const [amount, setAmount] = useState("");
@@ -118,43 +127,22 @@ export default function NewTransaction() {
   // Catalog provisioning is explicit in Categories, never a side effect of
   // opening this financial form or querying its category choices.
   useEffect(() => {
-    if (params.id) {
-      api.listTransactions().then((all) => {
-        const t = all.find((x: any) => x.id === params.id);
-        if (!t) { deletion.unavailable(); return; }
-        if (t) {
-          setResourceLoaded(params.id);
-          setType(t.type);
-          setAmount(String(t.amount));
-          setName(t.name);
-          setCategoryId(t.category_id);
-          setAccountId(t.account_id);
-          setToAccountId(t.to_account_id);
-          setNotes(t.notes || "");
-        }
-      }).catch((error) => Alert.alert("No se pudo cargar", error instanceof Error ? error.message : "Inténtalo de nuevo."));
-    }
-  }, [params.id]);
-
-  // Duplicate: prefill from the source transaction but WITHOUT an id, so this
-  // opens as a NEW unsaved movement. Nothing is created until the user taps
-  // "Guardar" (which runs createTransaction because params.id is undefined).
-  useEffect(() => {
-    if (params.dupFrom && !params.id) {
-      api.listTransactions().then((all) => {
-        const t = all.find((x: any) => x.id === params.dupFrom);
-        if (t) {
-          setType(t.type);
-          setAmount(String(t.amount));
-          setName(t.name);
-          setCategoryId(t.category_id);
-          setAccountId(t.account_id);
-          setToAccountId(t.to_account_id);
-          setNotes(t.notes || "");
-        }
-      });
-    }
-  }, [params.dupFrom, params.id]);
+    const t = sourceQ.data;
+    if (!sourceScope || sourceQ.isError || t?.id !== sourceId || hydratedSource.current === sourceScope) return;
+    setType(t.type);
+    setAmount(String(t.amount));
+    setName(t.name);
+    setCategoryId(t.category_id);
+    setAccountId(t.account_id);
+    setToAccountId(t.to_account_id);
+    setNotes(t.notes || "");
+    setAcc(null);
+    setOp(null);
+    setFresh(false);
+    setCalcError(null);
+    hydratedSource.current = sourceScope;
+    setResourceLoaded(sourceScope);
+  }, [sourceId, sourceScope, sourceQ.data, sourceQ.isError]);
 
   // Final monetary value (evaluates a pending operation); null = invalid/empty.
   const finalAmount = useMemo<number | null>(() => {
@@ -296,7 +284,29 @@ export default function NewTransaction() {
     await deletion.remove(() => api.deleteTransaction(params.id as string));
   };
 
-  if (params.id && (!resourceLoaded || deletion.deleted.current)) return <View />;
+  if (!resourceLoaded || sourceQ.isError || deletion.deleted.current) {
+    const missing = sourceQ.error instanceof ApiError && sourceQ.error.status === 404;
+    return (
+      <View style={{ flex: 1, backgroundColor: pal.bg }}>
+        <View style={[styles.header, { paddingTop: insets.top + us(8) }]}>
+          <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={us(24)} color={pal.onSurface} />
+          </Pressable>
+          <Text style={styles.title}>{params.id ? "Editar" : "Nuevo"} movimiento</Text>
+        </View>
+        <Text testID="transaction-source-state" style={{ color: colors.muted, textAlign: "center", marginTop: us(40) }}>
+          {missing || deletion.deleted.current ? "Movimiento no encontrado" : sourceQ.isError
+            ? sourceQ.error instanceof ApiError ? sourceQ.error.detail : "No se pudo cargar el movimiento. Inténtalo de nuevo."
+            : "Cargando…"}
+        </Text>
+        {sourceQ.isError && !missing && !deletion.deleted.current && (
+          <Pressable testID="transaction-source-retry" disabled={sourceQ.isFetching} onPress={() => void sourceQ.refetch()} style={styles.saveBtn}>
+            <Text style={{ color: colors.onSurface, textAlign: "center" }}>Reintentar</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
 
   const accounts = accQ.data || [];
   const selAcc = accounts.find((a: any) => a.id === accountId);

@@ -24,6 +24,8 @@ from backend.shared_obligations import shared_read_route, read_database, current
 from backend.reference_integrity import coordinate, public as reference_public, check_record, check_bill_payment, retire, preserve_references, guard_legacy_bill, guard_legacy_recurring, guard_legacy_receipt, guard_legacy_movement
 from backend.financial_context import verify_payment_context
 from backend.tests import test_payment_consistency as memory
+from backend.history_keys import with_history_keys
+settings = memory.settings
 
 
 def bill_context(db, client):
@@ -32,7 +34,7 @@ def bill_context(db, client):
              '_parse_dt', '_local_tz', '_rp_day', '_rp_today', '_rp_dates', '_rp_paused',
              '_rp_occurrences', '_rp_state', '_rp_records', '_bill_rp_due', '_bill_add_period',
              '_bill_validate', '_bill_for_write', '_bill_paid_map', '_bill_public', '_bill_lookups',
-             'create_bill', 'update_bill', 'get_bill', 'list_bills', 'bills_summary', 'pay_bill',
+             'create_bill', 'update_bill', 'delete_bill_payment', 'get_bill', 'list_bills', 'bills_summary', 'pay_bill',
              'recompute_account_balance', 'payment_transaction', '_cal_str_window', '_cal_dt'}
     constants = {'CENT', 'BILL_REMINDERS', 'RP_FREQS'}
     nodes = [n for n in tree.body if

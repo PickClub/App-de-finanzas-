@@ -2935,7 +2935,10 @@ async def pay_bill(bid: str, data: BillPayIn,
                     "transaction_id": tid, "settles": False, "created_at": now_iso(), "bill_payment_id": pid,
                 }, session=session)
                 tx.update(recurring_payment_id=rp["id"], recurring_record_id=rec_id)
-        await db.transactions.insert_one(dict(tx, _id=tid), session=session)
+        stored_movement = dict(tx, _id=tid)
+        if getattr(settings, "history_keys_write_enabled", False):
+            stored_movement = with_history_keys(stored_movement, settings.history_keys_generation)
+        await db.transactions.insert_one(stored_movement, session=session)
         await recompute_account_balance(data.account_id, session=session)
         payment = {
             "id": pid, "user_id": DEFAULT_USER_ID, "bill_id": bid, "series_id": b.get("series_id") or bid,

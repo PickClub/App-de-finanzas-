@@ -1001,7 +1001,7 @@ async def _compute_budgets(year: int, month: int, tz_offset: int, only_id: Optio
     q = {"user_id": DEFAULT_USER_ID}
     if only_id:
         q["id"] = only_id
-    budgets = await db.budgets.find(q, {"_id": 0, "idempotency_key": 0}).to_list(1000)
+    budgets = await db.budgets.find(q, {"_id": 0, "idempotency_key": 0, "request_fingerprint": 0}).to_list(1000)
     cats = await db.categories.find({"user_id": DEFAULT_USER_ID}, PROJ).to_list(2000)
     cats_by_id = {c["id"]: c for c in cats}
     txs = await db.transactions.find({"user_id": DEFAULT_USER_ID, "type": "expense"}, PROJ).to_list(20000)
@@ -1105,7 +1105,7 @@ async def _validate_budget(data: BudgetCreate, replacing: Optional[str] = None, 
 
 @api.get("/budgets")
 async def list_budgets():
-    return await db.budgets.find({"user_id": DEFAULT_USER_ID}, {"_id": 0, "idempotency_key": 0}).sort("created_at", -1).to_list(500)
+    return await db.budgets.find({"user_id": DEFAULT_USER_ID}, {"_id": 0, "idempotency_key": 0, "request_fingerprint": 0}).sort("created_at", -1).to_list(500)
 
 
 @api.get("/budgets/overview")
@@ -1164,15 +1164,26 @@ async def budget_detail(bid: str, year: Optional[int] = None, month: Optional[in
 
 @api.post("/budgets")
 async def create_budget(data: BudgetCreate, idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
-    bid = new_id()
+    bid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:budget:{idempotency_key}")) if idempotency_key else new_id()
+    try:
+        fingerprint = hashlib.sha256(json.dumps(data.model_dump(), sort_keys=True, allow_nan=False).encode()).hexdigest() if idempotency_key else None
+    except (ValueError, TypeError):
+        raise HTTPException(422, "La solicitud original no es válida.") from None
     async def operation(session):
         if idempotency_key:
-            existing = await db.budgets.find_one({"user_id": DEFAULT_USER_ID, "idempotency_key": idempotency_key}, PROJ, session=session)
-            if existing:
-                return {k: v for k, v in existing.items() if k != "idempotency_key"}
+            # Include legacy random IDs; never adopt their current fields as an
+            # original request. The native _id index serializes new keyed creates.
+            matches = await db.budgets.find({"user_id": DEFAULT_USER_ID, "idempotency_key": idempotency_key}, session=session).to_list(2)
+            if len(matches) > 1:
+                raise HTTPException(409, "La clave tiene registros históricos ambiguos; requiere verificación.")
+            if matches:
+                existing = matches[0]
+                if existing.get("request_fingerprint") != fingerprint:
+                    raise HTTPException(409, "La clave tiene otra solicitud o no conserva una huella original verificable.")
+                return shared_public(existing)
         payload = await _validate_budget(data, session=session)
         b = Budget(id=bid, user_id=DEFAULT_USER_ID, **payload).model_dump()
-        doc = {**b, **({"idempotency_key": idempotency_key} if idempotency_key else {})}
+        doc = {**b, "_id": bid, **({"idempotency_key": idempotency_key, "request_fingerprint": fingerprint} if idempotency_key else {})}
         await db.budgets.insert_one(doc, session=session)
         return reference_public(b)
     return await payment_transaction(operation)
@@ -1189,7 +1200,7 @@ async def update_budget(bid: str, data: BudgetCreate):
         payload["updated_at"] = now_iso()
         await db.budgets.update_one({"id": bid, "user_id": DEFAULT_USER_ID}, {"$set": payload}, session=session)
         doc = await db.budgets.find_one({"id": bid, "user_id": DEFAULT_USER_ID}, PROJ, session=session)
-        return {k: v for k, v in doc.items() if k != "idempotency_key"}
+        return shared_public(doc)
     return await payment_transaction(operation)
 
 
@@ -2733,15 +2744,23 @@ async def get_bill(bid: str, tz_offset: int = 0):
 @api.post("/bills")
 async def create_bill(data: BillIn, idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=128)):
     bid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{DEFAULT_USER_ID}:bill:{idempotency_key}")) if idempotency_key else new_id()
+    try:
+        fingerprint = hashlib.sha256(json.dumps(data.model_dump(), sort_keys=True, allow_nan=False).encode()).hexdigest() if idempotency_key else None
+    except (ValueError, TypeError):
+        raise HTTPException(422, "La solicitud original no es válida.") from None
     async def operation(session):
         await guard_legacy_bill(db, DEFAULT_USER_ID, bid, session)
-        fields = await _bill_validate(data, session=session)
         prev = await db.bills.find_one({"_id": bid}, session=session)
         if prev:
-            return {k: v for k, v in prev.items() if k not in ("_id", "_payment_revision", "_reference_revision")}
+            if prev.get("user_id") != DEFAULT_USER_ID or prev.get("request_fingerprint") != fingerprint:
+                raise HTTPException(409, "La clave tiene otra solicitud o no conserva una huella original verificable.")
+            return shared_public(prev)
+        fields = await _bill_validate(data, session=session)
         now = now_iso()
         doc = {"id": bid, "user_id": DEFAULT_USER_ID, **fields, "series_id": bid,
                "anchor_day": int(fields["due_date"][8:10]), "next_bill_id": None, "created_at": now, "updated_at": now}
+        if idempotency_key:
+            doc["request_fingerprint"] = fingerprint
         await db.bills.insert_one(dict(doc, _id=bid), session=session)
         return doc
     return shared_public(await payment_transaction(operation))

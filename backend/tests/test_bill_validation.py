@@ -163,6 +163,9 @@ class BillValidationTests(unittest.IsolatedAsyncioTestCase):
                      await self.request('PUT', '/bills/bill', dict(name='Synthetic bill', amount=100, due_date='2026-10-20'))]
         # Simulate create_bill's deterministic existing-record response after payments.
         self.db.data['bills'][0]['_id'] = str(uuid.uuid5(uuid.NAMESPACE_URL, 'default-user:bill:create-key'))
+        self.db.data['bills'][0]['request_fingerprint'] = hashlib.sha256(json.dumps(
+            self.ns['BillIn'](name='Synthetic bill', amount=100, due_date='2026-10-20').model_dump(),
+            sort_keys=True, allow_nan=False).encode()).hexdigest()
         responses.append(await self.request('POST', '/bills', dict(name='Synthetic bill', amount=100, due_date='2026-10-20'), 'create-key'))
         for response in responses:
             self.assertEqual(response.status_code, 200, response.text)

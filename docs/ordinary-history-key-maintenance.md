@@ -1,10 +1,13 @@
 # C3 — Mantenimiento de claves en movimientos ordinarios
 
 Alcance integrado: POST /api/transactions y la rama ordinaria de PUT
-/api/transactions/{tid}, exclusivamente expense, income y transfer. No se
-instrumentaron loan_given/loan_received, pagos de deudas, facturas, metas,
-recurrencias, anulaciones ni rutas R4. Los rechazos existentes para movimientos
-vinculados siguen vigentes. R4 permanece desactivado y no hay lectura indexada.
+/api/transactions/{tid}. El mantenimiento se aplica después de las validaciones
+existentes, sin restringirlo por tipo: incluye expense, income, transfer,
+loan_given/loan_received y los tipos heredados que C4 permite conservar en PUT.
+No se amplían los tipos financieros aceptados. Los rechazos de movimientos
+vinculados y el despacho a pagos de deudas siguen vigentes. Los escritores
+vinculados y R4 se instrumentaron en bloques separados; no cambian aquí.
+R4 permanece desactivado y no hay lectura indexada.
 
 ## Control explícito, desactivado por defecto
 
@@ -44,13 +47,14 @@ el bloque correspondiente al nuevo estado legítimamente editado.
 Con el control apagado no se llama al generador ni se actualizan claves anteriores.
 Si se edita una fuente de un movimiento que ya tenía claves, pueden quedar obsoletas:
 ese riesgo exige mantener desactivada la lectura indexada hasta auditar cobertura
-y todos los escritores. Cambiar a un tipo fuera del alcance puede igualmente dejar
-claves antiguas sin mantenimiento; no se altera la regla financiera para evitarlo.
+y todos los escritores. Con el control activo, los tipos permitidos ya no quedan
+fuera del mantenimiento. El tipo no es una fuente de claves: un cambio exclusivo
+de tipo conserva claves válidas o missing, sin provisionamiento administrativo.
 
 Las claves permanecen ocultas mediante los saneadores ya integrados. No se cambiaron
 payment_transaction, ordinary_transaction, reglas de saldo, IDs, fingerprints,
 recibos ni journals R4/R6. La edición de movimientos de pagos de deuda continúa
-por edit_payment_movement sin generación de claves.
+por edit_payment_movement, instrumentado en su bloque independiente.
 
 ## Idempotencia y confirmación incierta
 
@@ -84,8 +88,9 @@ MongoDB real: versión final 15/15 escenarios aprobados en
 `test_c3_ordinary_keys_b993633efa054d0692e47ffe0e54c04d`.
 La ejecución anterior de 14 escenarios utilizó
 `test_c3_ordinary_keys_fd69fac7cc3340269d29a99fcd2f4449` y aprobó 14/14.
-Se conservan AMBAS bases: la segunda se creó para validar el alcance final que
-excluye expresamente loan_given/loan_received. No se reutilizó ni consultó la primera.
+Se conservan AMBAS bases: la segunda se creó para validar el alcance de aquella etapa, que
+entonces excluía loan_given/loan_received. Es evidencia histórica, no una ejecución
+de la ampliación actual a préstamos y tipos heredados. No se reutilizó ni consultó la primera.
 
 Destino exclusivo de pruebas:
 `mongodb://127.0.0.1:27018/?replicaSet=app_finanzas_dev_rs&directConnection=true`.
@@ -99,7 +104,7 @@ Escenarios incluyen gastos/ingresos/transferencias y ambos saldos, edición de
 fecha/importe/cuenta, omitted/null, ready/unverifiable, control activo/inactivo,
 historial sin claves, PUT repetido, dos POST legítimos, rollback completo después
 de escribir, reintento transitorio conservando ID/fecha, pagos de deuda excluidos,
-tipos loan excluidos y confirmación incierta después de commit real.
+tipos loan entonces excluidos y confirmación incierta después de commit real.
 
 Concurrencia real: dos ediciones leen el documento original del movimiento en sendas
 sesiones, se fuerza la intercalación y MongoDB provoca conflictos. En la ejecución
@@ -123,3 +128,43 @@ ni reutiliza bases anteriores.
 - No hay garantía nueva de idempotencia para POST ordinario; queda fuera del alcance.
 - Medir coste de mantenimiento y validar físicamente solo con un entorno sintético.
 - No integrar ni activar R4 como consecuencia de esta etapa.
+
+## Ampliación de cobertura: préstamos y tipos heredados
+
+La auditoría demostró claves missing en préstamos y claves stale_or_corrupt al
+editar fuentes de préstamos/tipos heredados o convertir un gasto en préstamo.
+La corrección elimina únicamente los filtros de tipo de la generación en POST
+y PUT. Mantiene las escrituras y sesiones existentes, el documento final,
+validaciones, cálculos, IDs, idempotencia y saneamiento. Un cambio efectivo de
+fecha/importe recalcula; cambiar solo tipo/nombre/cuenta/notas no altera fuentes.
+No se normalizan ni reparan datos históricos.
+
+Las pruebas focalizadas ejecutadas antes del cambio registraron 6 fallos en
+27 casos; después aprobaron 27/27. Se añadieron 9 pruebas específicas de cobertura
+y se actualizó la expectativa anterior de préstamos sin claves. Cubren ambos
+préstamos, fuentes y saldos, cambios de tipo con/sin cambios de fuentes, tipos
+heredados, fechas no verificables, omitted/null, rechazos de tipos nuevos, control
+inactivo, missing/stale_or_corrupt, ausencia de backfill y rollback.
+La validación de esta ampliación es en memoria/offline; no se accedió a MongoDB.
+Las pruebas históricas con MongoDB anteriores no demuestran todavía estos casos
+nuevos en el servidor real.
+
+## Política de desactivación y futura lectura indexada
+
+**Está prohibido habilitar lecturas indexadas si la cobertura es desconocida,
+incompleta o inconsistente.** El interruptor de escritura no es una certificación
+de cobertura ni activa lecturas.
+
+Desactivar escritura conserva su comportamiento anterior: nuevos documentos
+pueden quedar missing y cambios de fuentes dejan claves existentes obsoletas.
+Reactivarla y hacer ediciones administrativas no corrige esos estados. Tampoco
+los reintentos idempotentes rellenan el historial.
+
+Después de cualquier período con escritores que no mantengan claves (incluidos
+escritores externos), se exige una nueva verificación de todos los documentos,
+fuentes, versión y generación antes de autorizar lecturas indexadas. Estados
+missing, stale_or_corrupt, incompatible o unverifiable no autorizan a omitir
+movimientos o presentar el historial como completo.
+Cualquier reparación/provisionamiento histórico requiere un procedimiento y
+una autorización separados. Esta etapa no implementa migración, reparación ni
+activación automática.

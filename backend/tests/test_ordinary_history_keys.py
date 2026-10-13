@@ -151,12 +151,12 @@ class OrdinaryKeyCases:
         for tx in (first, second):
             self.assertEqual(inspect_history_keys(await self.stored(tx["id"]), 1), "ready")
 
-    async def test_loan_types_are_not_instrumented_in_this_stage(self):
+    async def test_loan_types_receive_keys_without_financial_changes(self):
         for kind in ("loan_given", "loan_received"):
             tx = await self.add(type=kind)
-            self.assertNotIn("_history_keys", await self.stored(tx["id"]))
+            self.assertEqual(inspect_history_keys(await self.stored(tx["id"]), 1), "ready")
             await self.edit(tx["id"], type=kind, amount=80)
-            self.assertNotIn("_history_keys", await self.stored(tx["id"]))
+            self.assertEqual(inspect_history_keys(await self.stored(tx["id"]), 1), "ready")
         self.assertEqual(await self.balance(), 1000)
 
     async def test_repeated_put_does_not_duplicate_or_double_discount(self):

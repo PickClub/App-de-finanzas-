@@ -825,7 +825,7 @@ async def create_transaction(data: TransactionCreate):
         await validate_transaction(payload, session=session)
         tx = Transaction(id=tid, user_id=DEFAULT_USER_ID, **payload).model_dump()
         stored = dict(tx, _id=tid)
-        if getattr(settings, "history_keys_write_enabled", False) and tx["type"] in ("expense", "income", "transfer"):
+        if getattr(settings, "history_keys_write_enabled", False):
             stored = with_history_keys(stored, settings.history_keys_generation)
         await db.transactions.insert_one(stored, session=session)
         for aid in sorted({tx.get("account_id"), tx.get("to_account_id")} - {None}):
@@ -862,7 +862,7 @@ async def update_transaction(tid: str, data: TransactionCreate):
         payload = transaction_edit_payload(data, current)
         await validate_transaction(payload, current, session=session)
         changes = dict(payload)
-        if getattr(settings, "history_keys_write_enabled", False) and payload["type"] in ("expense", "income", "transfer"):
+        if getattr(settings, "history_keys_write_enabled", False):
             final = {**current, **payload}
             changes.update(history_update_fields(current, final, settings.history_keys_generation))
         await db.transactions.update_one({"id": tid}, {"$set": changes}, session=session)

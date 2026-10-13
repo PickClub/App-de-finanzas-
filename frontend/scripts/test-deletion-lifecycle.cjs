@@ -120,7 +120,7 @@ async function main() {
   for (const success of [true, false]) {
     const states = {}, alerts = [], noteDeleting = { current: false };
     let finish, writes = 0;
-    const context = { noteDeleting, deletedNotes: { current: new Set() }, notes: [{ id: 'n' }], STORAGE_KEY: 'synthetic',
+    const context = { noteDeleting, confirmedNotes: { current: [{ id: 'n' }] }, deletedNotes: { current: new Set() }, notes: [{ id: 'n' }], STORAGE_KEY: 'synthetic',
       storage: { setItem: () => { writes++; return new Promise(r => finish = r); } },
       Alert: { alert: (...args) => alerts.push(args) } };
     for (const key of ['DeleteBusy', 'Notes', 'EditorOpen', 'Editing', 'MenuNote', 'ConfirmDelete']) context['set' + key] = v => states[key] = v;

@@ -213,6 +213,10 @@ export default function Notes() {
   const [draftPalette, setDraftPalette] = useState<PaletteKey | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const noteDeleting = React.useRef(false);
+  // One gate for save/pin/delete; the ref survives stale event closures.
+  const confirmedNotes = React.useRef<Note[]>([]);
+  const notesReady = React.useRef(false);
+  const saveComplete = React.useRef(false);
   const deletedNotes = React.useRef(new Set<string>());
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -224,7 +228,9 @@ export default function Notes() {
         try {
           const parsed = JSON.parse(raw) as Note[];
           if (Array.isArray(parsed)) {
+            confirmedNotes.current = parsed;
             setNotes(parsed);
+            notesReady.current = true;
             return;
           }
         } catch {
@@ -232,22 +238,30 @@ export default function Notes() {
         }
       }
       const seed = makeSeed();
-      setNotes(seed);
-      storage.setItem(STORAGE_KEY, JSON.stringify(seed));
+      try {
+        if (await storage.setItem(STORAGE_KEY, JSON.stringify(seed)) !== true) throw new Error("No se pudieron guardar las notas iniciales.");
+        confirmedNotes.current = seed;
+        setNotes(seed);
+      } catch {
+        Alert.alert("No se pudieron guardar las notas", "El almacenamiento no está disponible. Inténtalo de nuevo.");
+      } finally {
+        notesReady.current = true;
+      }
     })();
   }, []);
 
-  const persist = useCallback((next: Note[]) => {
-    if (noteDeleting.current) return;
+  const persist = useCallback(async (next: Note[]) => {
     const available = next.filter((note) => !deletedNotes.current.has(note.id));
+    if (await storage.setItem(STORAGE_KEY, JSON.stringify(available)) !== true) throw new Error("No se pudo guardar la nota. Tu borrador se conserva; vuelve a pulsar Guardar.");
+    confirmedNotes.current = available;
     setNotes(available);
-    storage.setItem(STORAGE_KEY, JSON.stringify(available));
   }, []);
 
   const tintOf = useCallback((c: string) => c + (isDark ? "22" : "14"), [isDark]);
 
   const openEditor = (note: Note | null) => {
-    if (noteDeleting.current || (note && deletedNotes.current.has(note.id))) return;
+    if (!notesReady.current || noteDeleting.current || (note && deletedNotes.current.has(note.id))) return;
+    saveComplete.current = false;
     setEditing(note);
     setDraftTitle(note?.title || "");
     const mode: ListMode = note?.listMode || "plain";
@@ -291,43 +305,64 @@ export default function Notes() {
   const removeItem = (id: string) =>
     setDraftItems((items) => (items.length > 1 ? items.filter((i) => i.id !== id) : items));
 
-  const saveNote = () => {
-    if (noteDeleting.current || (editing && deletedNotes.current.has(editing.id))) return;
+  const saveNote = async () => {
+    if (!notesReady.current || saveComplete.current || noteDeleting.current || (editing && deletedNotes.current.has(editing.id))) return;
     const title = draftTitle.trim();
     const content = draftListMode === "plain" ? draftContent.trim() : serializeItems(draftItems, draftListMode);
     if (!title && !content) {
       setEditorOpen(false);
       return;
     }
-    const nowIso = new Date().toISOString();
-    const listMode: ListMode | undefined = draftListMode === "plain" ? undefined : draftListMode;
-    if (editing) {
-      const palette = draftPalette ?? editing.palette;
-      persist(
-        notes.map((n) =>
-          n.id === editing.id ? { ...n, title: title || n.title, content, listMode, palette, updatedAt: nowIso } : n,
-        ),
-      );
-    } else {
-      const color = NOTE_COLORS[notes.length % NOTE_COLORS.length];
-      const newNote: Note = {
-        id: genId(),
-        title: title || "Sin título",
-        content,
-        pinned: false,
-        color,
-        listMode,
-        palette: draftPalette ?? "green",
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      };
-      persist([newNote, ...notes]);
+    noteDeleting.current = true;
+    setDeleteBusy(true);
+    try {
+      const current = confirmedNotes.current;
+      const nowIso = new Date().toISOString();
+      const listMode: ListMode | undefined = draftListMode === "plain" ? undefined : draftListMode;
+      if (editing) {
+        const palette = draftPalette ?? editing.palette;
+        await persist(
+          current.map((n) =>
+            n.id === editing.id ? { ...n, title: title || n.title, content, listMode, palette, updatedAt: nowIso } : n,
+          ),
+        );
+      } else {
+        const color = NOTE_COLORS[current.length % NOTE_COLORS.length];
+        const newNote: Note = {
+          id: genId(),
+          title: title || "Sin título",
+          content,
+          pinned: false,
+          color,
+          listMode,
+          palette: draftPalette ?? "green",
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        await persist([newNote, ...current]);
+      }
+      saveComplete.current = true;
+      setEditorOpen(false);
+    } catch {
+      Alert.alert("No se pudo guardar", "Tu borrador se conserva. Comprueba el almacenamiento y vuelve a pulsar Guardar.");
+    } finally {
+      noteDeleting.current = false;
+      setDeleteBusy(false);
     }
-    setEditorOpen(false);
   };
 
-  const togglePin = (id: string) => {
-    persist(notes.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
+  const togglePin = async (id: string) => {
+    if (!notesReady.current || noteDeleting.current || deletedNotes.current.has(id)) return;
+    noteDeleting.current = true;
+    setDeleteBusy(true);
+    try {
+      await persist(confirmedNotes.current.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
+    } catch {
+      Alert.alert("No se pudo fijar la nota", "No se guardó el cambio. Inténtalo de nuevo.");
+    } finally {
+      noteDeleting.current = false;
+      setDeleteBusy(false);
+    }
   };
 
   const deleteNote = async (id: string) => {
@@ -335,9 +370,10 @@ export default function Notes() {
     noteDeleting.current = true;
     setDeleteBusy(true);
     try {
-      const next = notes.filter((n) => n.id !== id);
-      if (!await storage.setItem(STORAGE_KEY, JSON.stringify(next))) throw new Error("No se pudo guardar la eliminación de la nota.");
+      const next = confirmedNotes.current.filter((n) => n.id !== id);
+      if (await storage.setItem(STORAGE_KEY, JSON.stringify(next)) !== true) throw new Error("No se pudo guardar la eliminación de la nota.");
       deletedNotes.current.add(id);
+      confirmedNotes.current = next;
       setNotes(next);
       setEditorOpen(false);
       setEditing(null);
@@ -601,13 +637,13 @@ export default function Notes() {
       </Modal>
 
       {/* Editor (create / edit) */}
-      <Modal visible={editorOpen} transparent animationType="slide" onRequestClose={() => setEditorOpen(false)}>
+      <Modal visible={editorOpen} transparent animationType="slide" onRequestClose={() => { if (!noteDeleting.current) setEditorOpen(false); }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={{ flex: 1, justifyContent: "flex-end" }}
         >
-          <Pressable style={styles.backdrop} onPress={() => setEditorOpen(false)} />
-          <View style={styles.sheet}>
+          <Pressable style={styles.backdrop} onPress={() => { if (!noteDeleting.current) setEditorOpen(false); }} />
+          <View style={styles.sheet} pointerEvents={deleteBusy ? "none" : "auto"}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHead}>
               <Text style={styles.sheetTitle}>{editing ? "Editar nota" : "Nueva nota"}</Text>
@@ -625,6 +661,7 @@ export default function Notes() {
               <Text style={styles.fieldLabel}>Título</Text>
               <TextInput
                 testID="notes-title-input"
+                editable={!deleteBusy}
                 value={draftTitle}
                 onChangeText={setDraftTitle}
                 placeholder="Título"
@@ -636,6 +673,7 @@ export default function Notes() {
               {draftListMode === "plain" ? (
                 <TextInput
                   testID="notes-content-input"
+                  editable={!deleteBusy}
                   value={draftContent}
                   onChangeText={setDraftContent}
                   placeholder="Escribe tu nota..."
@@ -664,6 +702,7 @@ export default function Notes() {
                       )}
                       <TextInput
                         testID={`notes-item-input-${idx}`}
+                        editable={!deleteBusy}
                         value={it.text}
                         onChangeText={(t) => it.id && updateItemText(it.id, t)}
                         placeholder="Elemento"

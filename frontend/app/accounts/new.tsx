@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import { tr, useTranslation } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useEffect, useState } from "react";
 import { View, ScrollView, Alert, KeyboardAvoidingView, Platform } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -10,7 +14,7 @@ import { api } from "@/src/api";
 import { useAccountDeletionExit } from "@/src/account-deletion-navigation";
 import { useResourceDeletion } from "@/src/use-resource-deletion";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
-import { useTranslation } from "@/src/i18n";
+
 
 import { us } from "@/src/ui-scale";
 import { COLOR_PALETTE } from "@/src/color-palette";
@@ -57,10 +61,9 @@ const DEFAULT_COLOR = "#4C83EA";
 
 export default function AccountForm() {
   const { colors, scheme } = useTheme();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const styles = useStyles();
   const pal = formPalette(colors, scheme);
-  const isEn = (i18n?.language || "es").startsWith("en");
   const [saving, setSaving] = useState(false);
   const savingRef = React.useRef(false);
   const params = useLocalSearchParams<{ id?: string }>();
@@ -91,7 +94,7 @@ export default function AccountForm() {
           setColor(a.color);
           setIcon(a.icon);
         }
-      }).catch((error) => Alert.alert("No se pudo cargar", error instanceof Error ? error.message : "Inténtalo de nuevo."));
+      }).catch((error) => Alert.alert(tr("ui.could_not_load"), localizedError(error instanceof Error ? error.message : tr("ui.please_try_again"))));
     }
   }, [params.id]);
 
@@ -119,7 +122,7 @@ export default function AccountForm() {
       router.back();
     } catch (error) {
       // Keep the entered data; just report the error.
-      Alert.alert(isEn ? "Could not save" : "No se pudo guardar", error instanceof Error ? error.message : (isEn ? "Please try again." : "Inténtalo de nuevo."));
+      Alert.alert(tr("ui.could_not_save"), localizedError(error instanceof Error ? error.message : (tr("ui.please_try_again"))));
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -138,7 +141,7 @@ export default function AccountForm() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: pal.bg }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-    <ScrollView pointerEvents={deletion.busy ? "none" : "auto"} keyboardShouldPersistTaps="handled" style={{ flex: 1, backgroundColor: pal.bg }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(32), paddingHorizontal: us(spacing.lg) }}>
+    <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} pointerEvents={deletion.busy ? "none" : "auto"} keyboardShouldPersistTaps="handled" style={{ flex: 1, backgroundColor: pal.bg }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(32), paddingHorizontal: us(spacing.lg) }}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
           <Ionicons name="chevron-back" size={us(24)} color={pal.forest} />
@@ -157,8 +160,8 @@ export default function AccountForm() {
           <Ionicons name="document-text-outline" size={us(24)} color={pal.forest} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.label, { color: pal.muted }]}>{isEn ? "Account name" : "Nombre de la cuenta"}</Text>
-          <TextInput testID="acc-name" value={name} onChangeText={setName} placeholder={isEn ? "e.g. My Chase account" : "Ej. Mi cuenta Chase"} placeholderTextColor={pal.muted} style={[styles.input, { backgroundColor: pal.field, borderColor: pal.border, color: pal.onSurface }]} />
+          <Text style={[styles.label, { color: pal.muted }]}>{tr("ui.account_name")}</Text>
+          <TextInput testID="acc-name" value={name} onChangeText={setName} placeholder={tr("ui.e_g_my_chase_account")} placeholderTextColor={pal.muted} style={[styles.input, { backgroundColor: pal.field, borderColor: pal.border, color: pal.onSurface }]} />
         </View>
       </View>
 
@@ -178,7 +181,7 @@ export default function AccountForm() {
 
       {/* Tipo de cuenta */}
       <View style={cardStyle}>
-        <Text style={[styles.label, styles.sectionLabel, { color: pal.muted }]}>{isEn ? "Account type" : "Tipo de cuenta"}</Text>
+        <Text style={[styles.label, styles.sectionLabel, { color: pal.muted }]}>{tr("ui.account_type")}</Text>
         <View style={styles.grid}>
           {TYPE_IDS.map((ty) => {
             const sel = type === ty.id;
@@ -195,7 +198,7 @@ export default function AccountForm() {
                 <View style={[styles.typeIcon, { backgroundColor: acc + (pal.dark ? "29" : "1F") }]}>
                   <Ionicons name={ty.icon as any} size={us(22)} color={acc} />
                 </View>
-                <Text style={[styles.typeText, { color: pal.onSurface }]} numberOfLines={1}>{t(`accounts.types.${ty.id}`)}</Text>
+                <Text style={[styles.typeText, { color: pal.onSurface }]} numberOfLines={1}>{t(`accounts.types.${ty.id}`, { defaultValue: t("common.unknown") })}</Text>
                 {sel && (
                   <View style={[styles.check, { backgroundColor: pal.forest }]}>
                     <Ionicons name="checkmark" size={us(16)} color="#fff" />
@@ -209,7 +212,7 @@ export default function AccountForm() {
 
       {/* Color de la cuenta */}
       <View style={cardStyle}>
-        <Text style={[styles.label, styles.sectionLabel, { color: pal.muted }]}>{isEn ? "Account color" : "Color de la cuenta"}</Text>
+        <Text style={[styles.label, styles.sectionLabel, { color: pal.muted }]}>{tr("ui.account_color")}</Text>
         <View style={styles.swatches}>
           {COLORS.map((c) => {
             const sel = color === c;
@@ -225,9 +228,9 @@ export default function AccountForm() {
       </View>
 
       <Pressable testID="save-account" onPress={save} disabled={saving} style={[styles.saveBtn, { backgroundColor: pal.forest, opacity: saving ? 0.7 : 1 }, shadow]}>
-        <Text style={[styles.saveText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{isEn ? "Save account" : "Guardar cuenta"}</Text>
+        <Text style={[styles.saveText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{tr("ui.save_account")}</Text>
       </Pressable>
-    </ScrollView>
+    </ElasticScrollView>
     </KeyboardAvoidingView>
   );
 }

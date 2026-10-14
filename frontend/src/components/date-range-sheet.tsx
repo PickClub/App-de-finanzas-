@@ -1,3 +1,5 @@
+import i18n, { localeTag, tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
+
 import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { BackHandler, View, StyleSheet } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -21,13 +23,17 @@ export type DateRangeSheetHandle = {
   close: () => void;
 };
 
-const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
 const OPEN_EASING = Easing.out(Easing.cubic);
 const CLOSE_EASING = Easing.in(Easing.cubic);
-const MONTHS = [
-  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-];
+function monthNames() {
+  return Array.from({ length: 12 }, (_, month) => {
+    const value = new Date(2024, month, 1).toLocaleDateString(localeTag(i18n.language), { month: "long" });
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  });
+}
+function weekdayNames() {
+  return Array.from({ length: 7 }, (_, day) => new Date(2024, 0, day + 1).toLocaleDateString(localeTag(i18n.language), { weekday: "narrow" }));
+}
 
 // midnight of a given date
 function startOfDay(d: Date) {
@@ -48,7 +54,7 @@ function sameDay(a: Date, b: Date) {
   );
 }
 function longEs(d: Date) {
-  return `${d.getDate()} de ${MONTHS[d.getMonth()].toLowerCase()} de ${d.getFullYear()}`;
+  return d.toLocaleDateString(localeTag(i18n.language), { day: "numeric", month: "long", year: "numeric" });
 }
 
 /**
@@ -61,7 +67,9 @@ function longEs(d: Date) {
 // Opening is local to this component: Home and its charts do not re-render.
 export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
   onApply: (range: DateRange | null) => void;
-}>(function DateRangeSheet({ onApply }, ref) {
+  allowClear?: boolean;
+}>(function DateRangeSheet({ onApply, allowClear = false }, ref) {
+  useInterfaceLanguage();
   const { colors, scheme } = useTheme();
   const insets = useSafeAreaInsets();
   const isDark = scheme === "dark";
@@ -239,9 +247,9 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
       {/* Header */}
       <View style={st.headRow}>
         <View style={{ flex: 1, paddingRight: us(12) }}>
-          <Text style={[st.title, { color: colors.onSurface }]}>Selecciona un período</Text>
+          <Text style={[st.title, { color: colors.onSurface }]}>{tr("ui.choose_a_period")}</Text>
           <Text style={[st.subtitle, { color: colors.muted }]}>
-            Elige un rango de fechas para filtrar tus movimientos.
+            {tr("ui.choose_dates_to_filter_transactions")}
           </Text>
         </View>
         <Pressable
@@ -265,7 +273,7 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
           <Ionicons name="chevron-back" size={us(18)} color={colors.onSurface} />
         </Pressable>
         <Text style={[st.monthLabel, { color: colors.onSurface }]}>
-          {MONTHS[viewMonth.getMonth()]} {viewMonth.getFullYear()}
+          {monthNames()[viewMonth.getMonth()]} {viewMonth.getFullYear()}
         </Text>
         <Pressable
           testID="date-next-month"
@@ -279,7 +287,7 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
 
       {/* Weekday header */}
       <View style={st.weekRow}>
-        {WEEKDAYS.map((w, i) => (
+        {weekdayNames().map((w, i) => (
           <View key={i} style={st.cell}>
             <Text style={[st.weekLabel, { color: colors.muted }]}>{w}</Text>
           </View>
@@ -326,7 +334,7 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
 
       {/* Selected-period summary */}
       <View style={[st.divider, { backgroundColor: gridLine }]} />
-      <Text style={[st.selLabel, { color: colors.muted }]}>Período seleccionado</Text>
+      <Text style={[st.selLabel, { color: colors.muted }]}>{tr("ui.selected_period")}</Text>
       <View style={[st.summaryRow, { backgroundColor: colors.surfaceTertiary, borderColor: gridLine }]}>
         <View style={[st.summaryIcon, { backgroundColor: mint }]}>
           <Ionicons name="calendar-outline" size={us(16)} color={green} />
@@ -334,6 +342,10 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
         <Text style={[st.summaryText, { color: colors.onSurface }]}>
           {summaryText}
         </Text>
+        {allowClear && selStart && <Pressable testID="date-clear" accessibilityLabel={tr("ui.clear_date_filter")} hitSlop={8}
+          onPress={() => { setSelStart(null); setSelEnd(null); onApply(null); close(); }}>
+          <Ionicons name="close" size={us(18)} color={colors.muted} />
+        </Pressable>}
         <View style={[st.kindPill, { backgroundColor: mint }]}>
           <Text style={[st.kindText, { color: green }]}>{kindLabel}</Text>
         </View>
@@ -346,7 +358,7 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
         disabled={applyDisabled}
         style={[st.applyBtn, { backgroundColor: green, opacity: applyDisabled ? 0.5 : 1 }]}
       >
-        <Text style={st.applyText}>Aplicar</Text>
+        <Text style={st.applyText}>{tr("ui.apply")}</Text>
       </Pressable>
     </BottomSheetView>
     </BottomSheetModal>

@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import i18n, { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, StyleSheet, Alert } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -7,7 +11,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/src/api";
-import i18n from "@/src/i18n";
+
 import { catLabel } from "@/src/category-labels";
 import { useResourceDeletion } from "@/src/use-resource-deletion";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
@@ -27,6 +31,7 @@ const COLORS = COLOR_PALETTE;
 const DEFAULT_COLOR = "#FF8A3D";
 
 export default function CategoryForm() {
+  useInterfaceLanguage();
   const { colors } = useTheme();
   const styles = useStyles();
   const params = useLocalSearchParams<{ id?: string; parent?: string; type?: string }>();
@@ -45,8 +50,6 @@ export default function CategoryForm() {
     return () => { mounted.current = false; };
   }, []);
 
-  const isEs = i18n.language.startsWith("es");
-  const l10n = (es: string, en: string) => (isEs ? es : en);
   const allCatsQ = useQuery({ queryKey: ["categories"], queryFn: api.listCategories });
 
   const [name, setName] = useState("");
@@ -67,13 +70,13 @@ export default function CategoryForm() {
           setName(c.name); setType(c.type); setIcon(c.icon); setColor(c.color);
           setIsGroup(!!c.is_group); setParentId(c.parent_id ?? null);
         }
-      }).catch((error) => Alert.alert("No se pudo cargar", error instanceof Error ? error.message : "Inténtalo de nuevo."));
+      }).catch((error) => Alert.alert(tr("ui.could_not_load"), localizedError(error instanceof Error ? error.message : tr("ui.please_try_again"))));
     }
   }, [params.id]);
 
   const save = async () => {
     if (savingRef.current || saveComplete.current || deletion.locked.current || (params.id && !resourceLoaded)) return;
-    if (!name.trim()) return Alert.alert("Falta nombre");
+    if (!name.trim()) return Alert.alert(tr("ui.name_required"));
     const payload = { name, type, icon, color, is_group: isGroup, parent_id: isGroup ? null : parentId };
     savingRef.current = true;
     setSaving(true);
@@ -83,14 +86,14 @@ export default function CategoryForm() {
         throw new Error("No se pudo confirmar el guardado. Revisa la lista antes de reintentar; tus datos se conservan.");
       }
       saveComplete.current = true;
-      const refreshError = () => { if (mounted.current) Alert.alert("Actualizar categorías", "La categoría se guardó, pero no se pudo refrescar la lista. No es necesario volver a guardarla."); };
+      const refreshError = () => { if (mounted.current) Alert.alert(tr("ui.refresh_categories"), tr("ui.the_category_was_saved_but_the_list_could_not_refresh_do_not_save_it_again")); };
       try { void qc.invalidateQueries().catch(refreshError); } catch { refreshError(); }
       if (mounted.current) router.back();
     } catch (error) {
       if (mounted.current) {
-        if (saveComplete.current) Alert.alert("Categoría guardada", "No se pudo regresar a la lista. El guardado está confirmado; no es necesario repetirlo.");
-        else if (error instanceof ApiError && error.status < 500) Alert.alert("No se pudo guardar", error.detail);
-        else Alert.alert("No se pudo confirmar el guardado", "Tu formulario se conserva. Comprueba la conexión y revisa la lista antes de reintentar para evitar duplicados.");
+        if (saveComplete.current) Alert.alert(tr("ui.category_saved"), tr("ui.could_not_return_to_the_list_your_changes_were_saved_do_not_save_again"));
+        else if (error instanceof ApiError && error.status < 500) Alert.alert(tr("ui.could_not_save"), localizedError(error.detail));
+        else Alert.alert(tr("ui.save_could_not_be_confirmed"), tr("ui.your_form_is_safe_check_your_connection_and_the_list_before_retrying_to_avoid_duplicates"));
       }
     } finally {
       savingRef.current = false;
@@ -106,40 +109,40 @@ export default function CategoryForm() {
   if (params.id && (!resourceLoaded || deletion.deleted.current)) return <View />;
 
   return (
-    <ScrollView pointerEvents={deletion.busy || saving ? "none" : "auto"} style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+    <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} pointerEvents={deletion.busy || saving ? "none" : "auto"} style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
         </Pressable>
-        <Text style={styles.title}>{params.id ? "Editar" : "Nueva"} categoría</Text>
+        <Text style={styles.title}>{tr(params.id ? "ui.edit_category" : "ui.new_category")}</Text>
         {params.id && <Pressable onPress={remove} disabled={deletion.busy || saving} style={styles.backBtn}><Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} /></Pressable>}
       </View>
 
-      <Text style={styles.label}>Nombre</Text>
-      <TextInput editable={!saving && !deletion.busy} value={name} onChangeText={setName} placeholder="Ej. Comida" placeholderTextColor={colors.muted} style={styles.input} />
+      <Text style={styles.label}>{tr("ui.name")}</Text>
+      <TextInput editable={!saving && !deletion.busy} value={name} onChangeText={setName} placeholder={tr("ui.e_g_food")} placeholderTextColor={colors.muted} style={styles.input} />
 
-      <Text style={styles.label}>Tipo</Text>
+      <Text style={styles.label}>{tr("ui.type")}</Text>
       <View style={{ flexDirection: "row", gap: us(10) }}>
         {(["expense", "income"] as const).map((t) => (
           <Pressable key={t} onPress={() => { setType(t); setParentId(null); }} style={[styles.typeBtn, type === t && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
-            <Text style={{ color: type === t ? "#fff" : colors.onSurface, fontWeight: "700" }}>{t === "expense" ? "Gasto" : "Ingreso"}</Text>
+            <Text style={{ color: type === t ? "#fff" : colors.onSurface, fontWeight: "700" }}>{t === "expense" ? tr("ui.expense") : tr("ui.income")}</Text>
           </Pressable>
         ))}
       </View>
 
-      <Text style={styles.label}>{l10n("Clase", "Kind")}</Text>
+      <Text style={styles.label}>{tr("ui.kind")}</Text>
       <View style={{ flexDirection: "row", gap: us(10) }}>
         <Pressable testID="kind-group" onPress={() => { setIsGroup(true); setParentId(null); }} style={[styles.typeBtn, isGroup && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
-          <Text style={{ color: isGroup ? "#fff" : colors.onSurface, fontWeight: "700" }}>{l10n("Principal", "Main")}</Text>
+          <Text style={{ color: isGroup ? "#fff" : colors.onSurface, fontWeight: "700" }}>{tr("ui.main")}</Text>
         </Pressable>
         <Pressable testID="kind-sub" onPress={() => setIsGroup(false)} style={[styles.typeBtn, !isGroup && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
-          <Text style={{ color: !isGroup ? "#fff" : colors.onSurface, fontWeight: "700" }}>{l10n("Subcategoría", "Subcategory")}</Text>
+          <Text style={{ color: !isGroup ? "#fff" : colors.onSurface, fontWeight: "700" }}>{tr("ui.subcategory")}</Text>
         </Pressable>
       </View>
 
       {!isGroup && (
         <>
-          <Text style={styles.label}>{l10n("Categoría principal", "Main category")}</Text>
+          <Text style={styles.label}>{tr("ui.main_category")}</Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(8) }}>
             {(allCatsQ.data || []).filter((c: any) => c.is_group && c.type === type).map((g: any) => (
               <Pressable key={g.id} testID={`parent-${g.id}`} onPress={() => setParentId(g.id)} style={[styles.chip, parentId === g.id && { backgroundColor: g.color + "1A", borderColor: g.color }]}>
@@ -151,7 +154,7 @@ export default function CategoryForm() {
         </>
       )}
 
-      <Text style={styles.label}>Icono</Text>
+      <Text style={styles.label}>{tr("ui.icon")}</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(10) }}>
         {ICONS.map((ic) => (
           <Pressable key={ic} onPress={() => setIcon(ic)} style={[styles.iconOpt, icon === ic && { borderColor: color, borderWidth: 2 }]}>
@@ -160,7 +163,7 @@ export default function CategoryForm() {
         ))}
       </View>
 
-      <Text style={styles.label}>Color</Text>
+      <Text style={styles.label}>{tr("ui.color")}</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(10) }}>
         {COLORS.map((c) => (
           <Pressable key={c} onPress={() => setColor(c)} style={{ width: us(40), height: us(40), borderRadius: us(20), backgroundColor: c, borderWidth: color === c ? us(3) : 0, borderColor: colors.onSurface }} />
@@ -168,9 +171,9 @@ export default function CategoryForm() {
       </View>
 
       <Pressable testID="save-category" onPress={save} disabled={saving || deletion.busy || saveComplete.current} style={styles.saveBtn}>
-        <Text style={styles.saveText}>{saving ? "Guardando…" : "Guardar"}</Text>
+        <Text style={styles.saveText}>{saving ? tr("ui.saving") : tr("ui.save")}</Text>
       </Pressable>
-    </ScrollView>
+    </ElasticScrollView>
   );
 }
 

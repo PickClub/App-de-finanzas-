@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import { tr, useTranslation } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import { invalidateObligationPayments, verifiedDeletionContext, type Context } from "@/src/obligation-payments/journal";
 import React, { useCallback, useRef, useState } from "react";
 import { View, ScrollView, ActivityIndicator, Alert } from "react-native";
@@ -10,7 +14,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { LinearGradient } from "expo-linear-gradient";
 import { api, ApiError } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
-import { useTranslation } from "@/src/i18n";
+
 import { formatCurrencyInt, formatDateTime } from "@/src/format";
 import { ConfirmSheet } from "@/src/components/sheets";
 import { catLabel } from "@/src/category-labels";
@@ -86,7 +90,7 @@ export default function RecurringDetail() {
       await refreshAll();
       setConfirm(null);
     } catch (error: any) {
-      Alert.alert("No se pudo completar la operación", error instanceof ApiError ? error.detail : error?.message || "Vuelve a verificar el contexto financiero.");
+      Alert.alert(tr("ui.could_not_complete_the_operation"), localizedError(error instanceof ApiError ? error.detail : error?.message || "Vuelve a verificar el contexto financiero."));
     } finally { setBusy(false); }
   };
 
@@ -104,7 +108,7 @@ export default function RecurringDetail() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(60), paddingHorizontal: us(spacing.lg) }}>
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(60), paddingHorizontal: us(spacing.lg) }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
           <Pressable testID="rp-detail-back" onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
@@ -125,12 +129,12 @@ export default function RecurringDetail() {
                 <View style={{ flex: 1, marginLeft: us(12) }}>
                   <Text style={[styles.heroTitle, mont()]} numberOfLines={1}>{r.name}</Text>
                   <View style={[styles.pill, { backgroundColor: stateTint + "24" }]}>
-                    <Text style={[styles.pillText, { color: deepen(stateTint, isDark, 0.15) }]} testID="rp-detail-state">{t(`rp.st_${r.state}`)}</Text>
+                    <Text style={[styles.pillText, { color: deepen(stateTint, isDark, 0.15) }]} testID="rp-detail-state">{t(`rp.st_${r.state}`, { defaultValue: t("common.unknown") })}</Text>
                   </View>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
                   <Text style={[styles.heroAmount, mont(true), { color: strong }]} testID="rp-detail-amount">{formatCurrencyInt(r.amount)}</Text>
-                  <Text style={styles.small}>{t(`rp.f_${r.frequency}`)}{r.variable ? ` · ${t("rp.variable")}` : ""}</Text>
+                  <Text style={styles.small}>{t(`rp.f_${r.frequency}`, { defaultValue: t("common.unknown") })}{r.variable ? ` · ${t("rp.variable")}` : ""}</Text>
                 </View>
               </View>
             </View>
@@ -148,7 +152,7 @@ export default function RecurringDetail() {
               <Info icon="wallet-outline" label={t("rp.account")} value={r.account?.name || t("rp.none")} />
               <Info icon="pricetag-outline" label={t("rp.category")} value={r.category ? catLabel(r.category.name, i18n.language) : t("rp.none")} />
               <Info icon="checkmark-done-outline" label={t("rp.paidTotal")} value={formatCurrencyInt(r.paid_total)} color={forest} testID="rp-detail-paid-total" />
-              <Info icon="notifications-outline" label={t("rp.reminder")} value={t(`rp.r_${r.reminder_days ?? "none"}`)} />
+              <Info icon="notifications-outline" label={t("rp.reminder")} value={t(`rp.r_${r.reminder_days ?? "none"}`, { defaultValue: t("common.unknown") })} />
               {r.end_date ? <Info icon="flag-outline" label={t("rp.endDate")} value={longDate(r.end_date, i18n.language)} /> : null}
               {r.notes ? <Info icon="document-text-outline" label={t("rp.description")} value={r.notes} /> : null}
             </View>
@@ -171,7 +175,7 @@ export default function RecurringDetail() {
                         </Text>
                       </View>
                       <View style={[styles.pill, { backgroundColor: tint + "22", marginTop: 0 }]}>
-                        <Text style={[styles.pillText, { color: deepen(tint, isDark, 0.15) }]}>{t(`rp.st_${st}`)}</Text>
+                        <Text style={[styles.pillText, { color: deepen(tint, isDark, 0.15) }]}>{t(`rp.st_${st}`, { defaultValue: t("common.unknown") })}</Text>
                       </View>
                       {o.status !== "paid" && r.state !== "ended" ? (
                         <Pressable testID={`rp-occ-pay-${o.due_date}`} onPress={() => openPay(o)} hitSlop={8} style={styles.occPay}>
@@ -232,7 +236,7 @@ export default function RecurringDetail() {
             </View>
           </>
         )}
-      </ScrollView>
+      </ElasticScrollView>
 
       <ConfirmSheet
         visible={confirm !== null}

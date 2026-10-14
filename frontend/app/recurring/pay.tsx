@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import { tr, useTranslation } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useMemo, useCallback, useEffect, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Switch } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -8,7 +12,7 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
-import { useTranslation } from "@/src/i18n";
+
 import { formatCurrencyInt, formatDateTime } from "@/src/format";
 import { AppSheet } from "@/src/components/sheets";
 import { DateRangeSheet, type DateRangeSheetHandle, type DateRange } from "@/src/components/date-range-sheet";
@@ -141,7 +145,7 @@ export default function RecurringPay() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
+        <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
             <Pressable testID="rp-pay-back" onPress={() => { screenEpoch.current++; router.back(); }} style={styles.backBtn}>
               <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
@@ -162,7 +166,7 @@ export default function RecurringPay() {
                 </View>
               </View>
 
-              {payment.record || payment.problem ? <Text style={styles.hint} testID="payment-pending-status">{payment.problem || (payment.record ? reconciliationMessage(payment.record) : "")}</Text> : null}
+              {payment.record || payment.problem ? <Text style={styles.hint} testID="payment-pending-status">{localizedError(payment.problem || (payment.record ? reconciliationMessage(payment.record) : ""))}</Text> : null}
               <View pointerEvents={payment.locked ? "none" : "auto"}>
               <Text style={styles.label}>{t("rp.modeLbl")}</Text>
               <View style={{ gap: us(8) }}>
@@ -203,7 +207,7 @@ export default function RecurringPay() {
                   <Text style={styles.label}>{t("rp.amountPaid")}</Text>
                   <View style={styles.input}>
                     <Text style={[styles.inputText, { color: colors.muted, marginRight: us(4) }]}>$</Text>
-                    <TextInput editable={!payment.locked} testID="rp-pay-amount" value={amount} onChangeText={(v) => { setAmount(v.replace(/[^0-9.,]/g, "")); setError(null); }} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted} style={[styles.inputText, { flex: 1, padding: 0, fontSize: us(18) }, mont()]} />
+                    <TextInput editable={!payment.locked} testID="rp-pay-amount" value={amount} onChangeText={(v) => { setAmount(v.replace(/[^0-9.,]/g, "")); setError(null); }} keyboardType="decimal-pad" placeholder={tr("ui.0")} placeholderTextColor={colors.muted} style={[styles.inputText, { flex: 1, padding: 0, fontSize: us(18) }, mont()]} />
                   </View>
                   {isPartial && <Text style={styles.hint} testID="rp-partial-hint">{t("rp.partialHint", { amount: formatCurrencyInt(remaining - amt) })}</Text>}
                   {isOver && (
@@ -250,16 +254,16 @@ export default function RecurringPay() {
               {error ? (
                 <View style={styles.errorBox} testID="rp-pay-error">
                   <Ionicons name="alert-circle" size={us(16)} color={colors.expenseRed} />
-                  <Text style={styles.errorText}>{error}</Text>
+                  <Text style={styles.errorText}>{localizedError(error)}</Text>
                 </View>
               ) : null}
 
               <Pressable testID="rp-pay-save" onPress={save} disabled={saving || (!payment.ready && !payment.problem)} style={({ pressed }) => [styles.saveBtn, (pressed || saving) && { opacity: 0.75 }]}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{payment.record?.state === "reconciled" ? "Cerrar verificación" : payment.problem || payment.record ? "Verificar registro" : t("rp.savePay")}</Text>}
+                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{payment.record?.state === "reconciled" ? tr("ui.close_verification") : payment.problem || payment.record ? tr("ui.verify_record") : t("rp.savePay")}</Text>}
               </Pressable>
             </>
           )}
-        </ScrollView>
+        </ElasticScrollView>
       </KeyboardAvoidingView>
 
       <AppSheet visible={sheet !== null} onClose={() => setSheet(null)} testID="rp-pay-sheet">

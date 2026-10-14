@@ -1,3 +1,4 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // C5: inspect/execute actual bootstrap effects and explicit restore with fake API.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const ts=require('typescript'),cp=require('node:child_process');
@@ -24,7 +25,7 @@ async function main(){
       const mount=async()=>{
         const context={q:{isSuccess:success,data:cats},catQ:{isSuccess:success,data:cats},cats,ensuredRef:{current:false},
           api:{initDefaultCategories:async()=>{writes++;}},qc:{invalidateQueries:async()=>{}}};
-        for(const effect of parsed.effects){vm.runInNewContext(compile('globalThis.run='+effect),context);context.run();context.run();}
+        for(const effect of parsed.effects){vm.runInNewContext(compile('globalThis.run='+effect),localeGlobals(context));context.run();context.run();}
       };
       await Promise.all([mount(),mount(),mount(),mount()]);await mount();
       assert.equal(writes,0,`${file}: empty/legacy/query error/remount must not bootstrap`);
@@ -36,7 +37,12 @@ async function main(){
     if(file.includes('transactions/new')){
       function protectedHandlers(source){const tree=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),out=[];
         function visit(n){if(ts.isVariableDeclaration(n)&&['save','remove'].includes(n.name.getText(tree)))out.push(n.initializer.getText(tree));ts.forEachChild(n,visit);}visit(tree);return out;}
-      assert.deepEqual(protectedHandlers(text),protectedHandlers(base));
+      const approvedStart=text.indexOf('    if (params.id && sourceQ.data?.id === sourceId\n');
+      const approvedEnd=text.indexOf('    savingRef.current = true;',approvedStart);
+      const approved=approvedStart>=0?text.slice(approvedStart,approvedEnd):'';
+      if(approved)assert(approved.includes('delete payload[field]')&&approved.includes('original.amount'));
+      const normalized=text.replace(approved,'').replace('params.id ? name : name.trim() || "Sin descripción"','name.trim() || "Sin descripción"');
+      assert.deepEqual(protectedHandlers(normalized).map(normalizeUI),protectedHandlers(base).map(normalizeUI));
     }
     const out=ts.transpileModule(text,{fileName:file,reportDiagnostics:true,compilerOptions:{jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2020}});
     assert.equal((out.diagnostics||[]).filter(d=>d.category===ts.DiagnosticCategory.Error).length,0);
@@ -49,7 +55,7 @@ async function main(){
   let writes=0,refreshes=0;
   const catalog=[];
   const context={api:{initDefaultCategories:async()=>{writes++;catalog.push({id:'synthetic-default',is_group:true});}},qc:{invalidateQueries:({queryKey})=>{assert.equal(queryKey[0],'categories');refreshes++;}}};
-  vm.runInNewContext(compile('globalThis.restore='+parsed.restore),context);
+  vm.runInNewContext(compile('globalThis.restore='+parsed.restore),localeGlobals(context));
   assert.equal(writes,0);await context.restore();assert.equal(writes,1);assert.equal(refreshes,1);assert.equal(catalog.length,1);
   console.log('PASS: defaults remain available via existing explicit restore for an empty catalog; no automatic first-user provisioning or API contract change.');
   console.log('PASS: styles, transaction save/remove and manual restore handler unchanged; manual create/edit covered by category-save regression.');

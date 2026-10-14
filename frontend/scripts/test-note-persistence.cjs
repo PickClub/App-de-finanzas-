@@ -1,3 +1,4 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // C9: execute the real TSX handlers with synthetic storage; no device/API writes.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -44,7 +45,7 @@ function fixture(initial = [], editing = null) {
     const property = k[0].toLowerCase()+k.slice(1);
     ctx['set'+k] = value => { ctx[property] = value; };
   }
-  vm.createContext(ctx);
+  vm.createContext(localeGlobals(ctx));
   const code = names.map(n => `const ${n} = ${handlers[n]};`).join('\n') +
     `\nglobalThis.run = {${names.join(',')}, load:${load}};`;
   vm.runInContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText, ctx);

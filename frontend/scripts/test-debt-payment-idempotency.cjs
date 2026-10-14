@@ -1,3 +1,4 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // Actual R6 coordinator/API/save handler; storage and server are synthetic only.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -11,11 +12,11 @@ const compile = file => ts.transpileModule(fs.readFileSync(path.join(root, file)
 class ApiError extends Error { constructor(status) { super(`HTTP ${status}`); this.status = status; } }
 const mod = { exports: {} };
 const journal = {};
-vm.runInNewContext(compile('src/debt-payments/journal-v2.ts'), { exports: journal });
-vm.runInNewContext(compile('src/debt-payments/pending.ts'), { exports: mod.exports, module: mod,
+vm.runInNewContext(compile('src/debt-payments/journal-v2.ts'), localeGlobals({ exports: journal }));
+vm.runInNewContext(compile('src/debt-payments/pending.ts'), localeGlobals({ exports: mod.exports, module: mod,
   require: name => name === './journal-v2' ? journal : name.includes('async-storage') ? {} : { ApiError, api: {}, debtPaymentBackend: () => '' },
   Map, Error, JSON, Date, Math, Array, Promise,
-});
+}));
 const create = mod.exports.createPaymentCoordinator;
 const data = (changes = {}) => ({ debt_id: 'd', amount: 100, account_id: 'a', notes: '', date: null, ...changes });
 const plain = obj => JSON.parse(JSON.stringify(obj));
@@ -130,8 +131,8 @@ async function main() {
 
   // Actual API wrapper, using mocked fetch only.
   const apiExports = {}, wire = [];
-  vm.runInNewContext(compile('src/api.ts'), { exports: apiExports, process: { env: { EXPO_PUBLIC_BACKEND_URL: 'http://synthetic.invalid' } },
-    fetch: async (url, options) => { wire.push({ url, options }); return { ok: true, json: async () => ({}) }; } });
+  vm.runInNewContext(compile('src/api.ts'), localeGlobals({ exports: apiExports, process: { env: { EXPO_PUBLIC_BACKEND_URL: 'http://synthetic.invalid' } },
+    fetch: async (url, options) => { wire.push({ url, options }); return { ok: true, json: async () => ({}) }; } }));
   await apiExports.api.createDebtPayment(data(), 'stable-key');
   assert.equal(wire[0].options.headers['Idempotency-Key'], 'stable-key');
   assert.deepEqual(JSON.parse(wire[0].options.body), data());
@@ -153,7 +154,7 @@ async function main() {
     router: { back: () => navigation++ }, pendingDebtPayments: c,
     setOperation: record => { operation = record; ctx.operation = record; }, setAmount: value => ctx.amt = parseFloat(value) || 0,
     setAccountId: value => ctx.accountId = value, setNotes: value => ctx.notes = value };
-  vm.createContext(ctx); vm.runInContext(ts.transpileModule('globalThis.save = '+handler, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, ctx);
+  vm.createContext(localeGlobals(ctx)); vm.runInContext(ts.transpileModule('globalThis.save = '+handler, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, ctx);
   vm.runInContext('globalThis.effect = '+effect, ctx);
   await ctx.save(); assert.equal(f.calls.length, 0);
   ctx.effect(); await new Promise(r => setImmediate(r)); assert.equal(ctx.recoveryReady.current, true);
@@ -191,7 +192,7 @@ async function main() {
   console.log('PASS: discrepant payments stay blocked; unmounted/failed recovery cannot enable sending');
 
   const viewExports = {};
-  vm.runInNewContext(compile('src/debt-payments/view.ts'), { exports: viewExports });
+  vm.runInNewContext(compile('src/debt-payments/view.ts'), localeGlobals({ exports: viewExports }));
   const view = viewExports.paymentView;
   assert.equal(view(null, 'd', true).preview, true);
   for (const state of ['pending', 'conflict', 'confirmed']) {

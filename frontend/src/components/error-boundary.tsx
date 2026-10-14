@@ -1,3 +1,4 @@
+import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
 // App level error boundary, mounted once in app/_layout.tsx. A render crash
 // shows a reload screen instead of a blank app; the error is also logged so
 // it shows up in the Metro output. Do not mount additional boundaries.
@@ -36,6 +37,7 @@ export class ErrorBoundary extends Component<PropsWithChildren, ErrorBoundarySta
 }
 
 function ErrorFallback({ error, resetError }: { error: Error; resetError: () => void }) {
+  useInterfaceLanguage();
   const styles = useStyles();
   const [showDetails, setShowDetails] = useState(false);
 
@@ -51,8 +53,8 @@ function ErrorFallback({ error, resetError }: { error: Error; resetError: () => 
   return (
     <View style={styles.container} testID="error-fallback">
       <View style={styles.content}>
-        <Text style={styles.title}>Something went wrong</Text>
-        <Text style={styles.message}>Please reload the app to continue.</Text>
+        <Text style={styles.title}>{tr("ui.something_went_wrong")}</Text>
+        <Text style={styles.message}>{tr("ui.please_reload_the_app_to_continue")}</Text>
         {__DEV__ ? <Text style={styles.devMessage}>{error.message}</Text> : null}
         <Pressable
           onPress={handleReload}
@@ -60,11 +62,11 @@ function ErrorFallback({ error, resetError }: { error: Error; resetError: () => 
           accessibilityRole="button"
           style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
         >
-          <Text style={styles.buttonText}>Reload app</Text>
+          <Text style={styles.buttonText}>{tr("ui.reload_app")}</Text>
         </Pressable>
         {__DEV__ ? (
           <Pressable onPress={() => setShowDetails((v) => !v)} accessibilityRole="button" hitSlop={8}>
-            <Text style={styles.detailsToggle}>{showDetails ? "Hide details" : "Show details"}</Text>
+            <Text style={styles.detailsToggle}>{showDetails ? tr("ui.hide_details") : tr("ui.show_details")}</Text>
           </Pressable>
         ) : null}
       </View>

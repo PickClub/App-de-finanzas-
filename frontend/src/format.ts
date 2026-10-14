@@ -1,3 +1,4 @@
+import { catLabel } from "@/src/category-labels";
 import i18n, { localeTag } from "@/src/i18n";
 
 export function formatCurrency(amount: number, currency = "USD"): string {
@@ -59,12 +60,8 @@ export function formatDateTime(iso: string): string {
   }
 }
 
-// System/default category display translation. User-created categories are NOT
-// translated: we only map the known canonical Spanish default names to the
-// active language. Anything not in the map is returned unchanged.
-export function translateCategoryName(name?: string | null): string {
-  if (!name) return "";
-  const key = `categories.system.${name}`;
-  const translated = i18n.t(key, { defaultValue: name });
-  return translated || name;
+// Custom/ambiguous category names stay exactly as stored. Only explicitly
+// identified system categories may use the centralized catalog mapping.
+export function translateCategoryName(name?: string | null, systemCategory = false): string {
+  return catLabel(name, i18n.language, systemCategory);
 }

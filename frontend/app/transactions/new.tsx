@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, Alert, Keyboard } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -14,16 +18,27 @@ import { ConfirmSheet, AppSheet } from "@/src/components/sheets";
 
 import { us } from "@/src/ui-scale";
 const TYPE_LABEL: Record<string, string> = {
-  income: "Ingreso",
-  expense: "Gasto",
-  transfer: "Transferencia",
-  debt_payment: "Pago de deuda",
+  get income() { return tr("txType.income"); },
+  get expense() { return tr("txType.expense"); },
+  get transfer() { return tr("txType.transfer"); },
+  get debt_payment() { return tr("txType.debt_payment"); },
 };
 const TYPE_ICON: Record<string, string> = {
   expense: "trending-down",
   income: "trending-up",
   transfer: "swap-horizontal",
 };
+
+// Toggle a text color locally: Android nested text does not reliably animate
+// native opacity. Only this tiny child renders on each blink, never the form.
+function AmountCursor({ color }: { color: string }) {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const timer = setInterval(() => setVisible(value => !value), 500);
+    return () => clearInterval(timer);
+  }, []);
+  return <Text testID="amount-cursor" style={{ color: visible ? color : "transparent" }} accessible={false}>│</Text>;
+}
 
 // Same light-mode identity values used by Home (app/(tabs)/index.tsx HOME_LIGHT
 // + its sage background / mint badge / forest green). Local to this screen only;
@@ -82,6 +97,7 @@ const CALC_ROWS: { k: string; kind: "op" | "num" | "eq" }[][] = [
 const KEY_ID: Record<string, string> = { "+": "plus", "−": "minus", "×": "times", "÷": "divide", ".": "dot", "=": "equals" };
 
 export default function NewTransaction() {
+  useInterfaceLanguage();
   const { colors, scheme } = useTheme();
   const pal = useMemo(() => screenPalette(colors, scheme), [colors, scheme]);
   const styles = useStyles();
@@ -104,6 +120,7 @@ export default function NewTransaction() {
 
   const [type, setType] = useState<string>(params.type || "expense");
   const [amount, setAmount] = useState("");
+  const [hasEnteredNumber, setHasEnteredNumber] = useState(false);
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState<string | undefined>();
   const [accountId, setAccountId] = useState<string | undefined>();
@@ -187,7 +204,7 @@ export default function NewTransaction() {
     if (!Number.isFinite(cur)) return;
     if (acc !== null && op) {
       const r = applyOp(acc, op, cur);
-      if (r === null) { setCalcError("No se puede dividir entre 0"); return; }
+      if (r === null) { setCalcError(tr("ui.cannot_divide_by_zero")); return; }
       setAcc(r);
     } else {
       setAcc(round2(cur));
@@ -210,7 +227,7 @@ export default function NewTransaction() {
       setAmount(numStr(acc));
     } else {
       const r = applyOp(acc, op, parseFloat(amount));
-      if (r === null) { setCalcError("No se puede dividir entre 0"); return; }
+      if (r === null) { setCalcError(tr("ui.cannot_divide_by_zero")); return; }
       setAmount(numStr(r));
     }
     setAcc(null);
@@ -242,7 +259,7 @@ export default function NewTransaction() {
   };
 
   const pressKey = (k: string, kind: "op" | "num" | "eq") => {
-    if (kind === "num") pressDigit(k);
+    if (kind === "num") { setHasEnteredNumber(true); pressDigit(k); }
     else if (kind === "op") pressOp(k as Op);
     else pressEquals();
   };
@@ -252,10 +269,10 @@ export default function NewTransaction() {
     if (deletion.locked.current || (params.id && !resourceLoaded)) return;
     const amt = finalAmount;
     if (amt === null || !Number.isFinite(amt) || amt <= 0) {
-      Alert.alert("Falta información", calcError || "Ingresa un monto válido");
+      Alert.alert(tr("ui.missing_information"), localizedError(calcError || tr("ui.enter_a_valid_amount")));
       return;
     }
-    const finalName = name.trim() || "Sin descripción";
+    const finalName = params.id ? name : name.trim() || "Sin descripción";
     const payload: any = {
       name: finalName,
       amount: round2(amt),
@@ -265,6 +282,19 @@ export default function NewTransaction() {
       to_account_id: type === "transfer" ? toAccountId : undefined,
       notes,
     };
+    if (params.id && sourceQ.data?.id === sourceId
+        && ["expense", "income", "transfer"].includes(sourceQ.data.type)
+        && !sourceQ.data.debt_id && !sourceQ.data.debt_payment_id
+        && !sourceQ.data.bill_payment_id && !sourceQ.data.goal_contribution_id && !sourceQ.data.recurring_record_id) {
+      const original = sourceQ.data;
+      // Optional unchanged fields are omitted: the backend preserves their
+      // exact stored values, including legacy nulls, notes and the date.
+      if (amount === String(original.amount) && acc === null && !op) payload.amount = original.amount;
+      for (const field of ["category_id", "account_id", "to_account_id", "notes"] as const) {
+        const unchanged = field === "notes" ? notes === (original.notes || "") : payload[field] === original[field];
+        if (unchanged) delete payload[field];
+      }
+    }
     savingRef.current = true;
     setSaving(true);
     try {
@@ -275,7 +305,7 @@ export default function NewTransaction() {
     } catch (e: any) {
       savingRef.current = false;
       setSaving(false);
-      Alert.alert("Error", e.message);
+      Alert.alert(tr("ui.error"), localizedError(e.message));
     }
   };
 
@@ -292,16 +322,16 @@ export default function NewTransaction() {
           <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={us(24)} color={pal.onSurface} />
           </Pressable>
-          <Text style={styles.title}>{params.id ? "Editar" : "Nuevo"} movimiento</Text>
+          <Text style={styles.title}>{tr(params.id ? "ui.edit_transaction" : "ui.new_transaction")}</Text>
         </View>
         <Text testID="transaction-source-state" style={{ color: colors.muted, textAlign: "center", marginTop: us(40) }}>
-          {missing || deletion.deleted.current ? "Movimiento no encontrado" : sourceQ.isError
-            ? sourceQ.error instanceof ApiError ? sourceQ.error.detail : "No se pudo cargar el movimiento. Inténtalo de nuevo."
-            : "Cargando…"}
+          {missing || deletion.deleted.current ? tr("ui.transaction_not_found") : sourceQ.isError
+            ? sourceQ.error instanceof ApiError ? localizedError(sourceQ.error) : tr("ui.could_not_load_the_transaction_please_try_again")
+            : tr("ui.loading")}
         </Text>
         {sourceQ.isError && !missing && !deletion.deleted.current && (
           <Pressable testID="transaction-source-retry" disabled={sourceQ.isFetching} onPress={() => void sourceQ.refetch()} style={styles.saveBtn}>
-            <Text style={{ color: colors.onSurface, textAlign: "center" }}>Reintentar</Text>
+            <Text style={{ color: colors.onSurface, textAlign: "center" }}>{tr("ui.retry")}</Text>
           </Pressable>
         )}
       </View>
@@ -373,7 +403,7 @@ export default function NewTransaction() {
         <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={us(24)} color={pal.onSurface} />
         </Pressable>
-        <Text style={styles.title}>{params.id ? "Editar" : "Nuevo"} movimiento</Text>
+        <Text style={styles.title}>{tr(params.id ? "ui.edit_transaction" : "ui.new_transaction")}</Text>
         {params.id && (
           <Pressable testID="delete-tx" disabled={deletion.busy} onPress={() => { if (!deletion.locked.current) setConfirmDel(true); }} style={styles.backBtn}>
             <Ionicons name="trash-outline" size={us(22)} color={pal.expenseRed} />
@@ -381,7 +411,7 @@ export default function NewTransaction() {
         )}
       </View>
 
-      <ScrollView
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingHorizontal: us(spacing.lg), paddingBottom: us(spacing.lg) }}
       >
@@ -408,7 +438,7 @@ export default function NewTransaction() {
         <View style={styles.selectGrid}>
           {renderSelectCard({
             testID: "pick-account",
-            label: type === "transfer" ? "Desde cuenta" : "Cuenta",
+            label: type === "transfer" ? tr("ui.from_account") : tr("ui.account"),
             icon: selAcc?.icon,
             tint: selAcc?.color,
             value: selAcc?.name,
@@ -417,7 +447,7 @@ export default function NewTransaction() {
           {type === "transfer"
             ? renderSelectCard({
                 testID: "pick-to-account",
-                label: "Hacia cuenta",
+                get label() { return tr("ui.to_account"); },
                 icon: selToAcc?.icon,
                 tint: selToAcc?.color,
                 value: selToAcc?.name,
@@ -425,7 +455,7 @@ export default function NewTransaction() {
               })
             : renderSelectCard({
                 testID: "pick-category",
-                label: "Categoría",
+                get label() { return tr("ui.category"); },
                 icon: selCat?.icon,
                 tint: selCat?.color,
                 value: selCat?.name,
@@ -434,7 +464,7 @@ export default function NewTransaction() {
         </View>
 
         {/* description (multiline) */}
-        <Text style={styles.label}>Descripción</Text>
+        <Text style={styles.label}>{tr("ui.description")}</Text>
         <View style={styles.descCard}>
           <View style={[styles.descIcon, { backgroundColor: pal.mint }]}>
             <Ionicons name="create-outline" size={us(17)} color={pal.forest} />
@@ -443,7 +473,7 @@ export default function NewTransaction() {
             testID="name-input"
             value={name}
             onChangeText={setName}
-            placeholder="Ej. Supermercado, cena, etc."
+            placeholder={tr("ui.e_g_groceries_dinner_etc")}
             placeholderTextColor={pal.muted}
             style={styles.descInput}
             multiline
@@ -454,7 +484,7 @@ export default function NewTransaction() {
         {/* amount */}
         <View style={styles.amountCard}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.cardLabel}>Monto</Text>
+            <Text style={styles.cardLabel}>{tr("ui.amount")}</Text>
             <Text
               testID="amount-display"
               style={[styles.amountText, { color: amount === "" && !pending ? pal.muted : pal.forest }]}
@@ -462,6 +492,7 @@ export default function NewTransaction() {
               adjustsFontSizeToFit
             >
               {display}
+              {!sourceId && !hasEnteredNumber && ["income", "expense", "transfer"].includes(type) && !saving && !deletion.busy && <AmountCursor color={pal.forest} />}
             </Text>
             {hint ? (
               <Text testID="amount-hint" style={[styles.amountHint, calcError && { color: pal.expenseRed }]} numberOfLines={1}>
@@ -502,7 +533,7 @@ export default function NewTransaction() {
             </View>
           ))}
         </View>
-      </ScrollView>
+      </ElasticScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + us(12) }]}>
         <Pressable
@@ -511,7 +542,7 @@ export default function NewTransaction() {
           disabled={saving}
           style={({ pressed }) => [styles.saveBtn, { backgroundColor: activeColor }, (pressed || saving) && { opacity: 0.85 }]}
         >
-          <Text style={styles.saveText}>{saving ? "Guardando…" : "Guardar"}</Text>
+          <Text style={styles.saveText}>{saving ? tr("ui.saving") : tr("ui.save")}</Text>
         </Pressable>
       </View>
 
@@ -519,7 +550,7 @@ export default function NewTransaction() {
         <Text style={styles.sheetTitle}>{pickerTitle}</Text>
         <ScrollView style={{ maxHeight: us(380) }} contentContainerStyle={{ paddingHorizontal: us(spacing.lg), gap: us(8) }}>
           {pickerItems.length === 0 ? (
-            <Text style={styles.sheetEmpty}>No hay opciones disponibles</Text>
+            <Text style={styles.sheetEmpty}>{tr("ui.no_options_available")}</Text>
           ) : (
             pickerItems.map((it: any) => {
               const sel = pickerSelected === it.id;
@@ -546,9 +577,9 @@ export default function NewTransaction() {
         icon="trash-outline"
         accent={pal.expenseRed}
         destructive
-        title="¿Eliminar este movimiento?"
-        description="Esta acción eliminará permanentemente este movimiento y puede afectar tus saldos y estadísticas."
-        confirmLabel="Eliminar"
+        title={tr("ui.delete_this_transaction")}
+        description={tr("ui.this_permanently_deletes_the_transaction_and_may_affect_your_balances_and_reports")}
+        confirmLabel={tr("ui.delete")}
         confirmTestID="confirm-delete-edit"
         onConfirm={remove}
       />

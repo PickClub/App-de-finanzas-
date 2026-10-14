@@ -1,3 +1,5 @@
+import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import React, { useMemo, useRef, useState } from "react";
 import { View, ScrollView, Platform, Animated as RNAnimated } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -11,12 +13,12 @@ import { formatCurrency } from "@/src/format";
 
 import { us } from "@/src/ui-scale";
 const RANGES = [
-  { id: "7d", label: "7d", pillLabel: "7 días", days: 7, periodLabel: "Últimos 7 días" },
-  { id: "30d", label: "30d", pillLabel: "30 días", days: 30, periodLabel: "Últimos 30 días" },
-  { id: "3m", label: "3m", pillLabel: "3 meses", days: 90, periodLabel: "Últimos 3 meses" },
-  { id: "6m", label: "6m", pillLabel: "6 meses", days: 180, periodLabel: "Últimos 6 meses" },
-  { id: "1y", label: "1a", pillLabel: "1 año", days: 365, periodLabel: "Último año" },
-  { id: "all", label: "Todo", pillLabel: "Todo", days: 99999, periodLabel: "Histórico" },
+  { id: "7d", label: "7d", get pillLabel() { return tr("ui.7_days"); }, days: 7, get periodLabel() { return tr("ui.last_7_days"); } },
+  { id: "30d", label: "30d", get pillLabel() { return tr("ui.30_days"); }, days: 30, get periodLabel() { return tr("ui.last_30_days"); } },
+  { id: "3m", label: "3m", get pillLabel() { return tr("ui.3_months"); }, days: 90, get periodLabel() { return tr("ui.last_3_months"); } },
+  { id: "6m", label: "6m", get pillLabel() { return tr("ui.6_months"); }, days: 180, get periodLabel() { return tr("ui.last_6_months"); } },
+  { id: "1y", label: "1a", get pillLabel() { return tr("ui.1_year"); }, days: 365, get periodLabel() { return tr("ui.last_year"); } },
+  { id: "all", get label() { return tr("ui.all"); }, get pillLabel() { return tr("ui.all"); }, days: 99999, get periodLabel() { return tr("ui.all_time"); } },
 ];
 
 // Solid colored circular icon (white glyph) — colors come from the theme tokens.
@@ -78,6 +80,7 @@ function RangePill({
 }
 
 export default function Reports() {
+  useInterfaceLanguage();
   const { colors, scheme } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -123,10 +126,10 @@ export default function Reports() {
 
   // Cash-flow table rows — real values only, never hardcoded.
   const cashRows = [
-    { key: "count", icon: "list-outline", label: "Cantidad", inc: String(incomeCount), exp: String(expenseCount) },
-    { key: "daily", icon: "calendar-outline", label: "Promedio diario", inc: formatCurrency(incomeDaily), exp: formatCurrency(expenseDaily) },
-    { key: "perReg", icon: "document-text-outline", label: "Promedio por registro", inc: formatCurrency(incomeAvg), exp: formatCurrency(expenseAvg) },
-    { key: "total", icon: "calculator-outline", label: "Total del período", inc: formatCurrency(totalIncome), exp: formatCurrency(totalExpense) },
+    { key: "count", icon: "list-outline", get label() { return tr("ui.count"); }, inc: String(incomeCount), exp: String(expenseCount) },
+    { key: "daily", icon: "calendar-outline", get label() { return tr("ui.daily_average"); }, inc: formatCurrency(incomeDaily), exp: formatCurrency(expenseDaily) },
+    { key: "perReg", icon: "document-text-outline", get label() { return tr("ui.average_per_transaction"); }, inc: formatCurrency(incomeAvg), exp: formatCurrency(expenseAvg) },
+    { key: "total", icon: "calculator-outline", get label() { return tr("ui.period_total"); }, inc: formatCurrency(totalIncome), exp: formatCurrency(totalExpense) },
   ];
 
   // Expense-by-category (only expenses that have a category).
@@ -148,14 +151,14 @@ export default function Reports() {
   const shownCats = showAll ? byCategory : byCategory.slice(0, 5);
 
   return (
-    <ScrollView
+    <ElasticScrollView
       style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#E8EFE7" }}
       contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(120) }}
     >
       <View style={styles.screenHead}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Informes</Text>
-          <Text style={styles.subtitle}>Analiza tu actividad financiera</Text>
+          <Text style={styles.title}>{tr("ui.reports")}</Text>
+          <Text style={styles.subtitle}>{tr("ui.explore_your_financial_activity")}</Text>
         </View>
       </View>
 
@@ -182,10 +185,10 @@ export default function Reports() {
         </View>
         <View style={{ flex: 1, marginLeft: us(10) }}>
           <View style={styles.titleRow}>
-            <Text style={styles.headTitle}>Flujo de efectivo</Text>
+            <Text style={styles.headTitle}>{tr("ui.cash_flow")}</Text>
             <Ionicons name="information-circle-outline" size={us(15)} color={colors.muted} />
           </View>
-          <Text style={styles.headSubtitle}>Resumen de tu actividad en el período</Text>
+          <Text style={styles.headSubtitle}>{tr("ui.your_activity_for_this_period")}</Text>
         </View>
       </View>
       <View style={styles.card}>
@@ -193,13 +196,13 @@ export default function Reports() {
         <View style={styles.table}>
           <View style={[styles.tRow, styles.tHeaderRow]}>
             <View style={styles.tConcept}>
-              <Text style={[styles.tHeaderText, { color: colors.muted }]}>Concepto</Text>
+              <Text style={[styles.tHeaderText, { color: colors.muted }]}>{tr("ui.type")}</Text>
             </View>
             <View style={styles.tCol}>
-              <Text style={[styles.tHeaderText, { color: colors.incomeGreen }]}>Ingresos</Text>
+              <Text style={[styles.tHeaderText, { color: colors.incomeGreen }]}>{tr("ui.income")}</Text>
             </View>
             <View style={styles.tCol}>
-              <Text style={[styles.tHeaderText, { color: colors.expenseRed }]}>Gastos</Text>
+              <Text style={[styles.tHeaderText, { color: colors.expenseRed }]}>{tr("ui.expenses")}</Text>
             </View>
           </View>
           {cashRows.map((r, i) => (
@@ -232,8 +235,8 @@ export default function Reports() {
             <Ionicons name="wallet-outline" size={us(20)} color={balance >= 0 ? colors.incomeGreen : colors.expenseRed} />
           </View>
           <View style={styles.netTextWrap}>
-            <Text style={styles.netTitle}>Saldo neto del período</Text>
-            <Text style={styles.netSub}>Ingresos menos gastos</Text>
+            <Text style={styles.netTitle}>{tr("ui.net_balance_for_this_period")}</Text>
+            <Text style={styles.netSub}>{tr("ui.income_minus_expenses")}</Text>
           </View>
           <View style={styles.netVDivider} />
           <View style={styles.netCalc}>
@@ -263,12 +266,12 @@ export default function Reports() {
           <Ionicons name="pie-chart" size={us(18)} color={accent} />
         </View>
         <View style={{ flex: 1, marginLeft: us(10) }}>
-          <Text style={styles.headTitle}>Gastos por categoría</Text>
-          <Text style={styles.headSubtitle}>Tus principales categorías en este período</Text>
+          <Text style={styles.headTitle}>{tr("ui.expenses_by_category")}</Text>
+          <Text style={styles.headSubtitle}>{tr("ui.your_top_categories_for_this_period")}</Text>
         </View>
         {byCategory.length > 0 && (
           <Pressable onPress={() => setShowAll((v) => !v)} style={styles.topBadge} testID="toggle-cats">
-            <Text style={styles.topBadgeText}>{showAll ? "Todas" : "Top 5"}</Text>
+            <Text style={styles.topBadgeText}>{showAll ? tr("ui.all") : tr("ui.top_5")}</Text>
             <Ionicons name={showAll ? "chevron-up" : "chevron-down"} size={us(14)} color={colors.muted} />
           </Pressable>
         )}
@@ -301,16 +304,16 @@ export default function Reports() {
             })}
             {byCategory.length > 5 && (
               <Pressable onPress={() => setShowAll((v) => !v)} style={styles.verTodas} testID="ver-todas">
-                <Text style={styles.verTodasText}>{showAll ? "Ver menos" : "Ver todas las categorías"}</Text>
+                <Text style={styles.verTodasText}>{showAll ? tr("ui.see_less") : tr("ui.view_all_categories")}</Text>
                 <Ionicons name={showAll ? "chevron-up" : "chevron-forward"} size={us(18)} color={colors.onSurface} />
               </Pressable>
             )}
           </View>
         ) : (
-          <Text style={styles.emptyText}>Sin datos para este período</Text>
+          <Text style={styles.emptyText}>{tr("ui.no_data_for_this_period")}</Text>
         )}
       </View>
-    </ScrollView>
+    </ElasticScrollView>
   );
 }
 

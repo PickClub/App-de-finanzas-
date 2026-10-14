@@ -1,3 +1,6 @@
+import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { View, ScrollView, StyleSheet, Animated, Easing, Platform } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -16,10 +19,10 @@ import { LockToggle, useLock } from "@/src/lock";
 
 import { us, ufs } from "@/src/ui-scale";
 const TABS = [
-  { id: "all", label: "Todos" },
-  { id: "paid", label: "Pagados" },
-  { id: "i_owe", label: "Yo debo" },
-  { id: "they_owe", label: "Me deben" },
+  { id: "all", get label() { return tr("ui.all"); } },
+  { id: "paid", get label() { return tr("ui.paid"); } },
+  { id: "i_owe", get label() { return tr("ui.i_owe"); } },
+  { id: "they_owe", get label() { return tr("ui.owed_to_me"); } },
 ];
 
 // ---------------------------------------------------------------------------
@@ -94,6 +97,7 @@ function buildStat(list: any[]): Stat {
 }
 
 export default function Debts() {
+  useInterfaceLanguage();
   const { scheme } = useTheme();
   const P = useMemo(() => palette(scheme), [scheme]);
   const styles = useStyles();
@@ -218,7 +222,7 @@ export default function Debts() {
 
   return (
     <View style={{ flex: 1, backgroundColor: P.page }}>
-      <ScrollView
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         style={{ flex: 1, backgroundColor: "transparent" }}
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140) }}
         showsVerticalScrollIndicator={false}
@@ -229,8 +233,8 @@ export default function Debts() {
             <Ionicons name="chevron-back" size={us(22)} color={P.text} />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Deudas y préstamos</Text>
-            <Text style={styles.subtitle}>Tus deudas en un solo lugar</Text>
+            <Text style={styles.title}>{tr("ui.debts_loans")}</Text>
+            <Text style={styles.subtitle}>{tr("ui.your_debts_in_one_place")}</Text>
           </View>
           <LockToggle testID="lock-debts" compact />
           <Pressable
@@ -259,19 +263,19 @@ export default function Debts() {
                 <BackBlock
                   icon="arrow-up"
                   accent={P.red}
-                  title="A quién debo"
+                  title={tr("ui.i_owe")}
                   total={formatCurrencyInt(oweTotal)}
                   list={oweList}
-                  emptyText="Sin deudas"
+                  emptyText={tr("ui.no_debts")}
                 />
                 <View style={styles.summaryDivider} />
                 <BackBlock
                   icon="arrow-down"
                   accent={P.incomeGreen}
-                  title="Quién me debe"
+                  title={tr("ui.owed_to_me")}
                   total={formatCurrencyInt(lentTotal)}
                   list={lentList}
-                  emptyText="Nadie te debe"
+                  emptyText={tr("ui.nothing_owed_to_you")}
                 />
               </>
             ) : (
@@ -279,24 +283,24 @@ export default function Debts() {
                 <View style={styles.summaryLeft}>
                   <ProgressRing size={us(116)} stroke={us(11)} progress={summary.pct * entryT} color={P.ring} trackColor={P.ringTrack}>
                     <Text style={styles.sumPct}>{summaryPct}%</Text>
-                    <Text style={styles.sumPctSub}>Pagado</Text>
+                    <Text style={styles.sumPctSub}>{tr("ui.paid")}</Text>
                   </ProgressRing>
                   <Text style={styles.sumCaption}>
                     <Text style={{ color: P.green, fontWeight: "800" }}>{formatCurrencyInt(summary.paid)}</Text>
-                    <Text style={{ color: P.muted }}> de {formatCurrencyInt(summary.original)}</Text>
+                    <Text style={{ color: P.muted }}> {tr("ui.of")}{formatCurrencyInt(summary.original)}</Text>
                   </Text>
                 </View>
 
                 <View style={styles.summaryDivider} />
 
                 <View style={styles.summaryRight}>
-                  <MetricRow icon="people" tint={P.green} label="Total de deudas" value={String(summary.count)} valueColor={P.text} last={false} />
+                  <MetricRow icon="people" tint={P.green} label={tr("ui.total_debt")} value={String(summary.count)} valueColor={P.text} last={false} />
                   <View style={styles.metricDivider} />
-                  <MetricRow icon="document-text" tint={P.red} label="Pendiente" value={formatCurrencyInt(summary.remaining)} valueColor={P.red} last={false} />
+                  <MetricRow icon="document-text" tint={P.red} label={tr("ui.pending")} value={formatCurrencyInt(summary.remaining)} valueColor={P.red} last={false} />
                   <View style={styles.metricDivider} />
-                  <MetricRow icon="server" tint={P.green} label="Total" value={formatCurrencyInt(summary.original)} valueColor={P.text} last={false} />
+                  <MetricRow icon="server" tint={P.green} label={tr("ui.total")} value={formatCurrencyInt(summary.original)} valueColor={P.text} last={false} />
                   <View style={styles.metricDivider} />
-                  <MetricRow icon="checkmark-circle" tint={P.incomeGreen} label="Pagado" value={formatCurrencyInt(summary.paid)} valueColor={P.incomeGreen} last />
+                  <MetricRow icon="checkmark-circle" tint={P.incomeGreen} label={tr("ui.paid")} value={formatCurrencyInt(summary.paid)} valueColor={P.incomeGreen} last />
                 </View>
               </>
             )}
@@ -351,11 +355,11 @@ export default function Debts() {
                       <View style={[styles.statusPill, { backgroundColor: statusColor + "22" }]}>
                         <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
                         <Text style={{ color: statusColor, fontSize: ufs(11), fontWeight: "700" }}>
-                          {isPaid ? "Pagada" : "Activa"}
+                          {isPaid ? tr("ui.paid") : tr("ui.active_2")}
                         </Text>
                       </View>
                       <Text style={styles.debtSub}>
-                        {d.direction === "i_owe" ? "Yo debo" : "Me deben"}{d.person ? ` · ${d.person}` : ""}
+                        {d.direction === "i_owe" ? tr("ui.i_owe") : tr("ui.owed_to_me")}{d.person ? ` · ${d.person}` : ""}
                       </Text>
                     </View>
                   </View>
@@ -371,7 +375,7 @@ export default function Debts() {
                       <View style={[styles.amountIcon, { backgroundColor: P.red + "1F" }]}>
                         <Ionicons name="document-text" size={us(11)} color={P.red} />
                       </View>
-                      <Text style={styles.amountLabel}>Pendiente</Text>
+                      <Text style={styles.amountLabel}>{tr("ui.pending")}</Text>
                     </View>
                     <Text style={[styles.amountValue, { color: P.text }]} numberOfLines={1} adjustsFontSizeToFit>
                       {formatCurrencyInt(d.remaining_amount)}
@@ -382,7 +386,7 @@ export default function Debts() {
                       <View style={[styles.amountIcon, { backgroundColor: accent + "1F" }]}>
                         <Ionicons name="checkmark-circle" size={us(12)} color={accent} />
                       </View>
-                      <Text style={styles.amountLabel}>Pagado</Text>
+                      <Text style={styles.amountLabel}>{tr("ui.paid")}</Text>
                     </View>
                     <Text style={[styles.amountValue, { color: P.text }]} numberOfLines={1} adjustsFontSizeToFit>
                       {formatCurrencyInt(d.total_paid)}
@@ -393,7 +397,7 @@ export default function Debts() {
                       <View style={[styles.amountIcon, { backgroundColor: P.green + "1F" }]}>
                         <Ionicons name="stats-chart" size={us(11)} color={P.green} />
                       </View>
-                      <Text style={styles.amountLabel}>Total</Text>
+                      <Text style={styles.amountLabel}>{tr("ui.total")}</Text>
                     </View>
                     <Text style={[styles.amountValue, { color: P.text }]} numberOfLines={1} adjustsFontSizeToFit>
                       {formatCurrencyInt(d.original_amount)}
@@ -420,17 +424,17 @@ export default function Debts() {
           {filtered.length === 0 && (
             <View style={{ alignItems: "center", padding: us(40) }}>
               <Ionicons name="cash-outline" size={us(48)} color={P.muted} />
-              <Text style={{ color: P.muted, marginTop: us(10) }}>Sin deudas en esta vista</Text>
+              <Text style={{ color: P.muted, marginTop: us(10) }}>{tr("ui.no_debts_in_this_view")}</Text>
             </View>
           )}
 
           {/* Add debt */}
           <Pressable testID="add-debt-inline" onPress={() => router.push("/debts/new")} style={styles.addRow}>
             <Ionicons name="add" size={us(20)} color={P.green} />
-            <Text style={styles.addRowText}>Agregar nueva deuda o préstamo</Text>
+            <Text style={styles.addRowText}>{tr("ui.add_debt_or_loan")}</Text>
           </Pressable>
         </View>
-      </ScrollView>
+      </ElasticScrollView>
     </View>
   );
 }
@@ -523,6 +527,7 @@ function BackBlock({
   list: any[];
   emptyText: string;
 }) {
+  useInterfaceLanguage();
   const { scheme } = useTheme();
   const P = palette(scheme);
   const styles = useStyles();
@@ -541,7 +546,7 @@ function BackBlock({
           <Text style={[styles.backRowValue, { color: P.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatCurrencyInt(d.remaining_amount)}</Text>
         </View>
       ))}
-      {more > 0 && <Text style={styles.backMore}>+ {more} más</Text>}
+      {more > 0 && <Text style={styles.backMore}>{tr("ui.more_items", { count: more })}</Text>}
       {list.length === 0 && <Text style={styles.backEmpty}>{emptyText}</Text>}
     </View>
   );

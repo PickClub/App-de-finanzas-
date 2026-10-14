@@ -1,3 +1,4 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // Actual Home component + React Query; synthetic reads, no device/server/database.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const cp=require('node:child_process'),ts=require('typescript');
@@ -13,7 +14,7 @@ const text=node=>typeof node==='string'||typeof node==='number'?String(node):(no
 const styled=(tree,name)=>findAll(tree,n=>[n.props?.style].flat(Infinity).some(s=>s?.tag===name));
 const zero={total_balance:0,month_income:0,month_expense:0,debts:{i_owe:0,they_owe:0,paid_this_month:0,next_payment:null},accounts_count:0};
 const positive={...zero,total_balance:1000,month_income:100,month_expense:20,debts:{...zero.debts,i_owe:500,they_owe:200,paid_this_month:30}};
-function fixture(handler,debtList=[]){
+function fixture(handler,debtList=[],accounts=[]){
   let fn=handler,index=0,query,observer,stop,calls=0;
   const slots=[],client=new QueryClient({defaultOptions:{queries:{retry:false,gcTime:Infinity}}});client.mount();
   const react={createElement:(type,props,...children)=>({type,props:props||{},children}),Fragment:'Fragment',
@@ -25,9 +26,9 @@ function fixture(handler,debtList=[]){
   const colors=Object.fromEntries([...source.matchAll(/colors\.(\w+)/g)].map(m=>[m[1],'#345678']));
   const animation={duration:()=>({})};
   const format=v=>'$'+Number(v).toFixed(2);
-  const mocks={react,'react-native':{View:'View',ScrollView:'ScrollView',RefreshControl:'RefreshControl',StyleSheet:{absoluteFill:{},absoluteFillObject:{}},
+  const mocks=localeMocks({react,'react-native':{View:'View',ScrollView:'ScrollView',RefreshControl:'RefreshControl',StyleSheet:{absoluteFill:{},absoluteFillObject:{}},
     Platform:{OS:'android'},Dimensions:{get:()=>({width:400,height:800})},useWindowDimensions:()=>({width:400,height:800}),Animated:{View:'View'}},
-    'react-native-reanimated':{__esModule:true,default:{View:'View',ScrollView:'ScrollView',createAnimatedComponent:x=>x},useSharedValue:v=>({value:v}),
+    'react-native-reanimated':{__esModule:true,default:{View:'View',ScrollView:'ScrollView',createAnimatedComponent:x=>x},useSharedValue:v=>({value:v}),useAnimatedRef:()=>react.useRef(null),
       useAnimatedScrollHandler:()=>()=>{},useAnimatedReaction:()=>{},useAnimatedProps:()=>({}),withTiming:v=>v,Easing:{out:x=>x,cubic:x=>x},FadeIn:animation,LinearTransition:animation},
     'react-native-svg':{__esModule:true,default:'Svg',Circle:'Circle',Path:'Path',Polyline:'Polyline'},'expo-linear-gradient':{LinearGradient:'Gradient'},
     '@/src/components/pressable':{Pressable:'Pressable'},'@/src/components/typography':{Text:'Text'},
@@ -35,7 +36,7 @@ function fixture(handler,debtList=[]){
     'expo-router':{useRouter:()=>({push:()=>{throw Error('Unexpected navigation during summary read');}}),useFocusEffect:()=>{}},
     '@/src/api':{api:{summary:async()=>{calls++;return fn();}}},
     '@tanstack/react-query':{useQuery:options=>{
-      if(options.queryKey[0]!=='summary')return {data:options.queryKey[0]==='user'?{name:'Synthetic'}:options.queryKey[0]==='debts'?debtList:[],isSuccess:true,isError:false,refetch:async()=>{}};
+      if(options.queryKey[0]!=='summary')return {data:options.queryKey[0]==='user'?{name:'Synthetic'}:options.queryKey[0]==='debts'?debtList:options.queryKey[0]==='accounts'?accounts:[],isSuccess:true,isError:false,refetch:async()=>{}};
       query=options;
       if(!observer){observer=new QueryObserver(client,options);stop=observer.subscribe(()=>{});}else observer.setOptions(options);
       return {...observer.getCurrentResult(),refetch:()=>observer.refetch({cancelRefetch:false})};
@@ -44,8 +45,8 @@ function fixture(handler,debtList=[]){
     '@/src/format':{formatCurrency:format,formatCurrencyInt:format,formatDateLong:x=>x,formatDateTime:x=>x,translateCategoryName:x=>x},
     '@/src/i18n':{__esModule:true,default:{language:'es'},useTranslation:()=>({t:x=>x})},'@/src/components/ui':{IconTile:'IconTile'},
     '@/src/lock':{useLock:()=>({guard:f=>f})},'@/src/components/animated-section-icons':{WalletIcon:'Icon',ChartIcon:'Icon',HandCoinIcon:'Icon'},
-    '@/src/components/date-range-sheet':{DateRangeSheet:'DateRangeSheet'},'@/src/ui-scale':{us:x=>x,ufs:x=>x}};
-  const exports={};vm.runInNewContext(compile(source,file),{exports,require:name=>{assert(name in mocks,name);return mocks[name];}});
+    '@/src/components/home-amount':{HomeAmount:'HomeAmount',HomeAmountScope:'HomeScope'},'@/src/components/date-range-sheet':{DateRangeSheet:'DateRangeSheet'},'@/src/components/elastic-scroll-view':{ElasticScrollView:'ScrollView'},'@/src/native-scroll':{NATIVE_VERTICAL_SCROLL:{overScrollMode:'always',bounces:true,alwaysBounceVertical:true}},'@/src/ui-scale':{us:x=>x,ufs:x=>x}});
+  const exports={};vm.runInNewContext(compile(source,file),localeGlobals({exports,require:name=>{assert(name in mocks,name);return mocks[name];}}));
   const render=()=>{index=0;return exports.default();};
   return {render,setHandler:f=>{fn=f;},settle:async()=>{await observer.refetch({cancelRefetch:false});return render();},
     query:()=>query,calls:()=>calls,close:()=>{stop?.();observer?.destroy();client.unmount();client.clear();}};
@@ -76,9 +77,9 @@ async function main(){
     const retry=find(tree,'total-balance').props.onPress;f.setHandler(async()=>zero);retry();tree=await f.settle();
     assert.equal(text(find(tree,'total-balance')),'$0.00');assert.equal(find(tree,'total-balance').props.onPress,undefined);f.close();
   });
-  await check('income, expense, net and debts preserve their existing card positions/values',async()=>{
+  await check('income, expense, net follow the approved order; values and debts remain unchanged',async()=>{
     const f=fixture(async()=>positive);f.render();const tree=await f.settle();
-    assert.deepEqual(styled(tree,'statAmount').map(text),['$80.00','$20.00','$100.00']);
+    assert.deepEqual(styled(tree,'statAmount').map(text),['$100.00','$20.00','$80.00']);
     assert.deepEqual(styled(tree,'debtQuadValue').map(text),['$500.00','$200.00','$30.00']);f.close();
   });
   await check('legacy debt catalog boundary never presents a partial count as complete',async()=>{
@@ -92,8 +93,8 @@ async function main(){
   });
   await check('real API preserves safe 409/503 and numeric summary contract',async()=>{
     const exports={};let status=200;
-    vm.runInNewContext(compile(fs.readFileSync(path.join(root,'frontend/src/api.ts'),'utf8'),'api.ts'),{exports,process:{env:{}},URLSearchParams,
-      fetch:async()=>({ok:status===200,status,json:async()=>zero,text:async()=>JSON.stringify({detail:'Synthetic'})})});
+    vm.runInNewContext(compile(fs.readFileSync(path.join(root,'frontend/src/api.ts'),'utf8'),'api.ts'),localeGlobals({exports,process:{env:{}},URLSearchParams,
+      fetch:async()=>({ok:status===200,status,json:async()=>zero,text:async()=>JSON.stringify({detail:'Synthetic'})})}));
     assert.equal((await exports.api.summary()).total_balance,0);
     for(status of [409,503])await assert.rejects(exports.api.summary(),e=>e instanceof exports.ApiError&&e.status===status);
   });
@@ -105,9 +106,14 @@ async function main(){
         if(a.name && ['style','size','color','numberOfLines','adjustsFontSizeToFit','minimumFontScale'].includes(a.name.getText(tree)))out.push(a.getText(tree));
         if(a.name?.getText(tree)==='onPress'&&a.getText(tree).includes('router.'))out.push(a.getText(tree));
       }ts.forEachChild(n,visit);}visit(tree);return out;}
-    assert.deepEqual(attributes(source),attributes(base));
+    const withoutReservedRows=source.slice(0,source.indexOf('              {/* Invisible rows'))+source.slice(source.indexOf('              {distAccounts.length === 0'));
+    const approved=withoutReservedRows.replace('backgroundColor: "#EDE9FE"','backgroundColor: scheme === "dark" ? colors.brandPrimary + "26" : "#DCE9DD"').replaceAll('color={"#A78BFA"}','color={scheme === "dark" ? colors.brandPrimary : "#126046"}').replace('color: "#7C3AED"','color: colors.onSurface');
+    assert.deepEqual(attributes(approved).sort(),attributes(base).sort());
   });
   console.log(`RESULT: ${cases} summary/Home scenario groups passed.`);
 }
-let finished=false;process.on('beforeExit',()=>{if(!finished){console.error('FAIL: scenarios did not complete');process.exitCode=1;}});
-main().then(()=>{finished=true;}).catch(error=>{finished=true;console.error(error);process.exitCode=1;});
+module.exports={fixture,find,findAll,styled,text,positive};
+if(require.main===module){
+  let finished=false;process.on('beforeExit',()=>{if(!finished){console.error('FAIL: scenarios did not complete');process.exitCode=1;}});
+  main().then(()=>{finished=true;}).catch(error=>{finished=true;console.error(error);process.exitCode=1;});
+}

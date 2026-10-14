@@ -1,3 +1,5 @@
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React from "react";
 import { View, ScrollView } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -84,7 +86,7 @@ export default function More() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.container,
@@ -209,7 +211,7 @@ export default function More() {
             <Text style={styles.suggBtnText}>{t("more.send")}</Text>
           </View>
         </Pressable>
-      </ScrollView>
+      </ElasticScrollView>
     </View>
   );
 }

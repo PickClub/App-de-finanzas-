@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import { tr, useTranslation } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -8,7 +12,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
-import { useTranslation } from "@/src/i18n";
+
 import { AppSheet } from "@/src/components/sheets";
 import { DateRangeSheet, type DateRangeSheetHandle, type DateRange } from "@/src/components/date-range-sheet";
 import { catLabel } from "@/src/category-labels";
@@ -118,7 +122,7 @@ export default function BillForm() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(24), paddingHorizontal: us(spacing.lg) }}>
+        <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(24), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
             <Pressable testID="bill-form-back" onPress={() => router.back()} style={styles.backBtn}>
               <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
@@ -150,7 +154,7 @@ export default function BillForm() {
           <Text style={styles.label}>{t("bills.amount")}</Text>
           <View style={styles.input}>
             <Text style={[styles.inputText, { color: colors.muted, marginRight: us(4) }]}>$</Text>
-            <TextInput testID="bill-amount-input" value={amount} onChangeText={(v) => { setAmount(v.replace(/[^0-9.,]/g, "")); setError(null); }} placeholder="0" placeholderTextColor={colors.muted} keyboardType="decimal-pad" style={[styles.inputText, { flex: 1, padding: 0 }, mont()]} />
+            <TextInput testID="bill-amount-input" value={amount} onChangeText={(v) => { setAmount(v.replace(/[^0-9.,]/g, "")); setError(null); }} placeholder={tr("ui.0")} placeholderTextColor={colors.muted} keyboardType="decimal-pad" style={[styles.inputText, { flex: 1, padding: 0 }, mont()]} />
           </View>
 
           <Text style={styles.label}>{t("bills.category")} · {t("bills.optional")}</Text>
@@ -167,12 +171,12 @@ export default function BillForm() {
 
           <Text style={styles.label}>{t("bills.repeat")}</Text>
           <View style={styles.wrapRow}>
-            {BILL_FREQS.map((f) => <Chip key={f} testID={`bill-freq-${f}`} sel={freq === f} label={t(`bills.r_${f}`)} onPress={() => setFreq(f)} />)}
+            {BILL_FREQS.map((f) => <Chip key={f} testID={`bill-freq-${f}`} sel={freq === f} label={t(`bills.r_${f}`, { defaultValue: t("common.unknown") })} onPress={() => setFreq(f)} />)}
           </View>
 
           <Text style={styles.label}>{t("bills.reminder")}</Text>
           <View style={styles.wrapRow}>
-            {BILL_REMINDERS.map((r) => <Chip key={String(r)} testID={`bill-rem-${r ?? "none"}`} sel={reminder === r} label={t(`bills.rem_${r ?? "none"}`)} onPress={() => setReminder(r)} />)}
+            {BILL_REMINDERS.map((r) => <Chip key={String(r)} testID={`bill-rem-${r ?? "none"}`} sel={reminder === r} label={t(`bills.rem_${r ?? "none"}`, { defaultValue: t("common.unknown") })} onPress={() => setReminder(r)} />)}
           </View>
           <Text style={styles.hint}>{t("bills.reminderHint")}</Text>
 
@@ -207,10 +211,10 @@ export default function BillForm() {
           {error ? (
             <View style={styles.errorBox} testID="bill-form-error">
               <Ionicons name="alert-circle" size={us(16)} color={colors.expenseRed} />
-              <Text style={styles.errorText}>{error}</Text>
+              <Text style={styles.errorText}>{localizedError(error)}</Text>
             </View>
           ) : null}
-        </ScrollView>
+        </ElasticScrollView>
         {/* Save button stays reachable above the keyboard / safe area. */}
         <View style={[styles.footer, { paddingBottom: insets.bottom + us(12) }]}>
           <Pressable testID="save-bill" onPress={save} disabled={saving} style={({ pressed }) => [styles.saveBtn, (pressed || saving) && { opacity: 0.75 }]}>

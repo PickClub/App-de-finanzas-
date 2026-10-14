@@ -1,3 +1,4 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // C7: render the actual screens against synthetic React Query/API responses.
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const vm = require('node:vm'), cp = require('node:child_process'), ts = require('typescript');
@@ -31,7 +32,7 @@ function fixture(kind, initial, pending = true, id = 'resource') {
   const api = new Proxy({getDebt:async()=>{reads++;return next();},billGet:async()=>{reads++;return next();},listAccounts:async()=>[]},{get:(target,key)=>target[key]||forbidden});
   const payment = {record:pending?journal:null,problem:null,ready:true,locked:pending,submit:forbidden,retry:forbidden,reconcile:forbidden,acknowledge:forbidden,recover:forbidden};
   const theme={useTheme:()=>({colors:styles,scheme:'light'}),makeStyles:()=>()=>styles,radius:{},spacing:{lg:16,md:12}};
-  const mocks = {
+  const mocks = localeMocks({
     react,'react-native':{View:'View',ScrollView:'ScrollView',ActivityIndicator:'ActivityIndicator',KeyboardAvoidingView:'KeyboardAvoidingView',Platform:{OS:'android',select:x=>x.default},Alert:{alert:()=>{}}},
     '@/src/components/pressable':{Pressable:'Pressable'},'@/src/components/typography':{Text:'Text',TextInput:'TextInput'},
     '@react-native-vector-icons/ionicons':{default:'Icon'},
@@ -42,16 +43,16 @@ function fixture(kind, initial, pending = true, id = 'resource') {
     '@/src/debt-payments/local-flow':{localPaymentFlow:{recover:forbidden,verify:forbidden}},
     '@/src/theme':theme,'@/src/format':{formatCurrency:()=>'',formatCurrencyInt:()=>''},
     '@/src/components/ui':{IconTile:'IconTile'},'@/src/components/sheets':{AppSheet:'AppSheet',ConfirmSheet:'ConfirmSheet'},
-    '@/src/ui-scale':{us:x=>x},'@/src/debt-payments/view':{paymentView:()=>({title:'Pago',editable:false,preview:false,action:'Verificar registro'})},
+    '@/src/components/elastic-scroll-view':{ElasticScrollView:'ScrollView'},'@/src/native-scroll':{NATIVE_VERTICAL_SCROLL:{overScrollMode:'always',bounces:true,alwaysBounceVertical:true}},'@/src/ui-scale':{us:x=>x},'@/src/debt-payments/view':{paymentView:()=>({title:'Pago',editable:false,preview:false,action:'Verificar registro'})},
     '@/src/i18n':{useTranslation:()=>({t:x=>x,i18n:{language:'es'}})},
     '@/src/components/date-range-sheet':{DateRangeSheet:'DateRangeSheet'},
     '@/src/bills/shared':{FOREST:'#126046',useMontserrat:()=>()=>({}),deepen:x=>x,safeHex:()=> '#126046',longDate:()=>'',toYmd:()=> '2026-10-20',parseAmount:Number},
     '@/src/obligation-payments/use-payment':{useObligationPayment:()=>payment},
     '@/src/obligation-payments/journal':{invalidateObligationPayments:forbidden,reconciliationMessage:()=> 'Original pending payment'},
-  };
+  });
   const output=ts.transpileModule(source(files[kind]),{fileName:files[kind],reportDiagnostics:true,compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}});
   assert.equal((output.diagnostics||[]).filter(x=>x.category===ts.DiagnosticCategory.Error).length,0);
-  const exports={};vm.runInNewContext(output.outputText,{exports,require:n=>{assert(n in mocks,n);return mocks[n];}});
+  const exports={};vm.runInNewContext(output.outputText,localeGlobals({exports,require:n=>{assert(n in mocks,n);return mocks[n];}}));
   return {q,data,get enabled(){return enabled;},setNext:f=>next=f,render:()=>{stateIndex=0;return exports.default();},counts:()=>({reads,backs,writes}),journalIntact:()=>assert.equal(JSON.stringify(journal),before)};
 }
 function find(tree,id) {
@@ -108,7 +109,7 @@ async function run() {
     function protectedCode(text){const tree=ts.createSourceFile(file,text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),blocks=[];
       function visit(n){if(ts.isVariableDeclaration(n)&&['save','ask'].includes(n.name.getText(tree)))blocks.push(n.initializer.getText(tree));
         if(ts.isCallExpression(n)&&['useEffect','useFocusEffect'].includes(n.expression.getText(tree)))blocks.push(n.getText(tree));ts.forEachChild(n,visit);}visit(tree);return blocks;}
-    assert.deepEqual(protectedCode(current),protectedCode(previous));
+    assert.deepEqual(protectedCode(current).map(normalizeUI),protectedCode(previous).map(normalizeUI));
   }
   console.log('PASS: financial handlers, journal recovery effects and style definitions are identical to HEAD.');
 }

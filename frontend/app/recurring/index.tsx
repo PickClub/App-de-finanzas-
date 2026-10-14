@@ -1,5 +1,7 @@
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useCallback, useMemo, useState } from "react";
-import { View, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
+import { View, ScrollView, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -50,7 +52,7 @@ export default function RecurringPayments() {
   const monthLbl = monthName(ym.y, ym.m, i18n.language);
   const openNew = () => router.push("/recurring/new" as any);
 
-  const freqLabel = (f: string) => t(`rp.f_${f}`);
+  const freqLabel = (f: string) => t(`rp.f_${f}`, { defaultValue: t("common.unknown") });
 
   const renderCard = (it: any) => {
     const base = safeHex(it.color);
@@ -72,7 +74,7 @@ export default function RecurringPayments() {
         <View style={{ alignItems: "flex-end", marginLeft: us(8) }}>
           <Text style={[styles.cardAmount, mont(true)]} numberOfLines={1}>{formatCurrencyInt(it.due_expected ?? it.amount)}</Text>
           <View style={[styles.pill, { backgroundColor: tint + "22" }]}>
-            <Text style={[styles.pillText, { color: deepen(tint, isDark, 0.15) }]} testID={`rp-status-${it.id}`}>{t(`rp.st_${st}`)}</Text>
+            <Text style={[styles.pillText, { color: deepen(tint, isDark, 0.15) }]} testID={`rp-status-${it.id}`}>{t(`rp.st_${st}`, { defaultValue: t("common.unknown") })}</Text>
           </View>
         </View>
         <Ionicons name="chevron-forward" size={us(16)} color={colors.muted} style={{ marginLeft: us(6) }} />
@@ -82,9 +84,8 @@ export default function RecurringPayments() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}
-        refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={refetch} tintColor={colors.incomeGreen} />}
         showsVerticalScrollIndicator={false}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
@@ -116,7 +117,7 @@ export default function RecurringPayments() {
                 <View style={{ flex: 1, paddingRight: us(8) }}>
                   <Text style={[styles.summaryTitle, mont()]}>{t("rp.monthPayments")}</Text>
                   <Pressable testID="rp-month-picker" onPress={() => { setPickerYear(ym.y); setMonthOpen(true); }} hitSlop={8} style={styles.monthBtn}>
-                    <Text style={styles.summarySub}>{t("rp.plannedFor", { month: `${i18n.language === "en" ? monthLbl : monthLbl.toLowerCase()} ${ym.y}` })}</Text>
+                    <Text style={styles.summarySub}>{t("rp.plannedFor", { month: `${!i18n.language.startsWith("es") ? monthLbl : monthLbl.toLowerCase()} ${ym.y}` })}</Text>
                     <Ionicons name="chevron-down" size={us(14)} color={colors.muted} />
                   </Pressable>
                 </View>
@@ -221,7 +222,7 @@ export default function RecurringPayments() {
             )}
           </>
         )}
-      </ScrollView>
+      </ElasticScrollView>
 
       <AppSheet visible={monthOpen} onClose={() => setMonthOpen(false)} testID="rp-month-sheet">
         <Text style={[styles.sheetTitle, mont()]}>{t("rp.monthPick")}</Text>

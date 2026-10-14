@@ -1,11 +1,12 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // In-memory regressions only. Never uses native storage, network or MongoDB.
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const ts=require('typescript'),root=path.resolve(__dirname,'..');
 const compile=f=>ts.transpileModule(fs.readFileSync(path.join(root,f),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 const journal={},v2={},v1={};class ApiError extends Error{constructor(status){super('HTTP '+status);this.status=status;}}
-vm.runInNewContext(compile('src/debt-payments/journal-v2.ts'),{exports:journal});
-vm.runInNewContext(compile('src/debt-payments/flow-v2.ts'),{exports:v2,require:n=>n==='../api'?{ApiError}:journal});
-vm.runInNewContext(compile('src/debt-payments/pending.ts'),{exports:v1,require:n=>n==='./journal-v2'?journal:n.includes('async-storage')?{default:{}}:{ApiError,api:{},debtPaymentBackend:()=>''}});
+vm.runInNewContext(compile('src/debt-payments/journal-v2.ts'),localeGlobals({exports:journal}));
+vm.runInNewContext(compile('src/debt-payments/flow-v2.ts'),localeGlobals({exports:v2,require:n=>n==='../api'?{ApiError}:journal}));
+vm.runInNewContext(compile('src/debt-payments/pending.ts'),localeGlobals({exports:v1,require:n=>n==='./journal-v2'?journal:n.includes('async-storage')?{default:{}}:{ApiError,api:{},debtPaymentBackend:()=>''}}));
 const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222';
 const payload={debt_id:'d',amount:100,account_id:'a',notes:'',date:null};
 const context={version:1,environment_id:A,user_id:'default-user',mode:'single_user',capabilities:{expected_context_headers:true,debt_payment_reconciliation:true,cross_device_recovery:false}};
@@ -22,9 +23,9 @@ function fixture(){
   return existing?{status:'matched',original_request_matches:true,current_payment:existing}:{status:'not_found'};}
  const legacy=()=>v1.createPaymentCoordinator({storage,backend:()=>url,newKey:()=>`v1-${++keys}`,send,reconcile});
  const modern=()=>v2.createV2PaymentFlow({storage,expected:context,readContext:async()=>{if(flags.context)throw Error('context unavailable');return context;},newKey:()=>`v2-${++keys}`,send,reconcile});
- function selected(env={},dev=true){const out={};vm.runInNewContext(compile('src/debt-payments/local-flow.ts'),{exports:out,__DEV__:dev,process:{env},
+ function selected(env={},dev=true){const out={};vm.runInNewContext(compile('src/debt-payments/local-flow.ts'),localeGlobals({exports:out,__DEV__:dev,process:{env},
   require:n=>n.includes('async-storage')?{default:storage}:n==='../api'?{api:{getFinancialContext:async()=>context,createContextProtectedDebtPayment:send,reconcileDebtPayment:reconcile}}:
-   n==='./pending'?{pendingDebtPayments:legacy()}:v2});return out.localPaymentFlow;}
+   n==='./pending'?{pendingDebtPayments:legacy()}:v2}));return out.localPaymentFlow;}
  return {disk,ledger,flags,legacy,modern,selected,counts:()=>({keys,sends,queries,balance,remaining}),alias:()=>url='http://alias.invalid'};
 }
 async function main(){
@@ -78,7 +79,7 @@ async function main(){
  f=fixture();f.flags.lost=true;await assert.rejects(f.modern().submit(payload));f.flags.lost=false;f.flags.context=true;
  const ui={exports:{},pendingDebtPayments:f.modern(),operation:null,d:{id:'d'},amt:100,accountId:'a',notes:'',recoveryReady:{current:false},recoveryError:{current:Error('previous failure')},savingRef:{current:false},
   qc:{invalidateQueries(){}},setOperation:r=>ui.operation=r,setAmount(){},setAccountId(){},setNotes(){},setSaving(){},setReady(){},Alert:{alert(){}}};
- vm.runInNewContext(ts.transpileModule('exports.save='+handler,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,ui);
+ vm.runInNewContext(ts.transpileModule('exports.save='+handler,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,localeGlobals(ui));
  await ui.exports.save();assert.equal(ui.recoveryReady.current,false);assert.equal(f.counts().sends,1);
  f.flags.context=false;await ui.exports.save();assert.equal(ui.operation.state,'confirmed');assert.equal(ui.recoveryReady.current,true);assert.equal(f.counts().sends,1);assert.equal(f.counts().keys,1);
  console.log('PASS final R6: actual Verify register button retries after temporary error and reconciles; never calls payment creation');

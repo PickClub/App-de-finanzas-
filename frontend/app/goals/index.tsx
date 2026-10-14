@@ -1,5 +1,7 @@
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useCallback, useMemo, useState } from "react";
-import { View, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
+import { View, ScrollView, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -104,9 +106,8 @@ export default function Goals() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}
-        refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={refetch} tintColor={colors.incomeGreen} />}
         showsVerticalScrollIndicator={false}
       >
         {/* Header (unchanged) */}
@@ -220,7 +221,7 @@ export default function Goals() {
             )}
           </>
         )}
-      </ScrollView>
+      </ElasticScrollView>
 
       <AppSheet visible={sortOpen} onClose={() => setSortOpen(false)} testID="goals-sort-sheet">
         <Text style={[styles.sheetTitle, mont()]}>{t("goals.sortLabel")}</Text>

@@ -1,3 +1,5 @@
+import { tr } from "@/src/i18n";
+import { localizedError } from "@/src/i18n/errors";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { useRouter, type Href } from "expo-router";
@@ -16,7 +18,7 @@ export function useResourceDeletion(destination: Href, queryKeys: string[][], ex
     locked.current = true;
     deleted.current = true;
     setBusy(true);
-    Alert.alert("Registro no disponible", "El registro ya no existe. Volverás a su lista.");
+    Alert.alert(tr("ui.record_unavailable"), localizedError(tr("ui.this_record_no_longer_exists_returning_to_the_list")));
     if (exit) exit(); else router.dismissTo(destination);
   }, [router, destination, exit]);
   const remove = async (operation: () => Promise<unknown>) => {
@@ -27,7 +29,7 @@ export function useResourceDeletion(destination: Href, queryKeys: string[][], ex
       await operation();
       deleted.current = true;
       void Promise.all(queryKeys.map((queryKey) => qc.invalidateQueries({ queryKey, refetchType: "all" })))
-        .catch(() => Alert.alert("Actualizar datos", "El registro se eliminó, pero no se pudo refrescar la lista."));
+        .catch(() => Alert.alert(tr("ui.refresh_data"), localizedError(tr("ui.the_record_was_deleted_but_the_list_could_not_refresh"))));
       if (exit) exit(); else router.dismissTo(destination);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
@@ -35,7 +37,7 @@ export function useResourceDeletion(destination: Href, queryKeys: string[][], ex
       } else {
         let message = error instanceof Error ? error.message : "No se pudo eliminar el registro.";
         if (error instanceof ApiError && error.status === 409) message = error.detail;
-        Alert.alert("No se pudo eliminar", message);
+        Alert.alert(tr("ui.could_not_delete"), localizedError(message));
       }
     } finally {
       if (!deleted.current) { locked.current = false; setBusy(false); }

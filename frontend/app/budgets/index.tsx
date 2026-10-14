@@ -1,5 +1,7 @@
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useCallback, useMemo, useState } from "react";
-import { View, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
+import { View, ScrollView, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -113,9 +115,8 @@ export default function Budgets() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}
-        refreshControl={<RefreshControl refreshing={overviewQ.isRefetching} onRefresh={refetch} tintColor={colors.incomeGreen} />}
         showsVerticalScrollIndicator={false}
       >
         {/* Header (unchanged) */}
@@ -146,7 +147,7 @@ export default function Budgets() {
               <LinearGradient colors={pastel(colors.incomeGreen, isDark)} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={styles.fill} pointerEvents="none" />
               <View style={styles.rowBetween}>
                 <View style={{ flex: 1, paddingRight: us(8) }}>
-                  <Text style={[styles.summaryTitle, mont()]} numberOfLines={1}>{t("budgets.summaryOf", { month: i18n.language === "en" ? monthLbl : monthLbl.toLowerCase() })}</Text>
+                  <Text style={[styles.summaryTitle, mont()]} numberOfLines={1}>{t("budgets.summaryOf", { month: !i18n.language.startsWith("es") ? monthLbl : monthLbl.toLowerCase() })}</Text>
                   <Text style={styles.summarySub} numberOfLines={2}>{t("budgets.summarySub")}</Text>
                 </View>
                 <Pressable testID="budget-month-picker" onPress={openMonth} style={({ pressed }) => [styles.monthPill, pressed && styles.pressed]}>
@@ -243,7 +244,7 @@ export default function Budgets() {
             )}
           </>
         )}
-      </ScrollView>
+      </ElasticScrollView>
 
       {/* Month / year picker */}
       <AppSheet visible={monthOpen} onClose={() => setMonthOpen(false)} testID="budget-month-sheet">

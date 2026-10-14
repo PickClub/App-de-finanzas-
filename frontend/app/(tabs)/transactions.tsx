@@ -1,3 +1,4 @@
+import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
 import React from "react";
 import { View } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -14,14 +15,15 @@ import { us } from "@/src/ui-scale";
 const WAVE_BARS = [10, 18, 28, 20, 34, 20, 28, 18, 10];
 
 export default function IA() {
+  useInterfaceLanguage();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + us(24) }]}>
       {/* Heading */}
-      <Text style={styles.title}>Registra con IA</Text>
-      <Text style={styles.subtitle}>Dime un gasto o ingreso</Text>
+      <Text style={styles.title}>{tr("ui.record_with_ai")}</Text>
+      <Text style={styles.subtitle}>{tr("ui.describe_an_expense_or_income")}</Text>
 
       {/* Microphone — main action */}
       <View style={styles.micArea}>
@@ -44,14 +46,13 @@ export default function IA() {
         ))}
       </View>
 
-      <Text style={styles.tapHint}>Toca para hablar</Text>
+      <Text style={styles.tapHint}>{tr("ui.tap_to_speak")}</Text>
 
       {/* Example card */}
       <View style={styles.exampleCard}>
-        <Text style={styles.exampleLabel}>Puedes decir algo como:</Text>
+        <Text style={styles.exampleLabel}>{tr("ui.for_example")}</Text>
         <Text style={styles.exampleText}>
-          “Gasté $47 en Walmart en comida con mi tarjeta Chase”
-        </Text>
+          {tr("ui.i_spent_47_on_groceries_at_walmart_using_my_chase_card")}</Text>
       </View>
     </View>
   );

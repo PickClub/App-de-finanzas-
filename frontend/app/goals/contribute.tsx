@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import { tr, useTranslation } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Switch } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -8,7 +12,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
-import { useTranslation } from "@/src/i18n";
+
 import { formatCurrencyInt } from "@/src/format";
 import { AppSheet } from "@/src/components/sheets";
 import { DateRangeSheet, type DateRangeSheetHandle, type DateRange } from "@/src/components/date-range-sheet";
@@ -110,7 +114,7 @@ export default function GoalContribution() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <ScrollView
+        <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}
         >
@@ -146,7 +150,7 @@ export default function GoalContribution() {
                   testID="contrib-amount-input"
                   value={amount}
                   onChangeText={(v) => { setAmount(v.replace(/[^0-9.,]/g, "")); setError(null); }}
-                  placeholder="0"
+                  placeholder={tr("ui.0")}
                   placeholderTextColor={colors.muted}
                   keyboardType="decimal-pad"
                   autoFocus
@@ -206,7 +210,7 @@ export default function GoalContribution() {
               {error ? (
                 <View style={styles.errorBox} testID="contrib-error">
                   <Ionicons name="alert-circle" size={us(16)} color={colors.expenseRed} />
-                  <Text style={styles.errorText}>{error}</Text>
+                  <Text style={styles.errorText}>{localizedError(error)}</Text>
                 </View>
               ) : null}
 
@@ -220,7 +224,7 @@ export default function GoalContribution() {
               </Pressable>
             </>
           )}
-        </ScrollView>
+        </ElasticScrollView>
       </KeyboardAvoidingView>
 
       <AppSheet visible={accOpen} onClose={() => setAccOpen(false)} testID="contrib-account-sheet">

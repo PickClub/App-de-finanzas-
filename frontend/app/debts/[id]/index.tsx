@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import i18n, { tr, useTranslation as useInterfaceLanguage, localeTag } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, Alert, Platform } from "react-native";
 import Svg, { Path } from "react-native-svg";
@@ -9,7 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
-import i18n, { localeTag } from "@/src/i18n";
+
 import { formatCurrencyInt, formatDateLong } from "@/src/format";
 import { ProgressRing } from "@/src/components/ProgressRing";
 
@@ -52,6 +56,7 @@ function formatCreated(iso?: string | null): string {
 }
 
 export default function DebtDetail() {
+  useInterfaceLanguage();
   const { colors, scheme } = useTheme();
   const pal = detailPalette(colors, scheme);
   const styles = useStyles();
@@ -69,7 +74,7 @@ export default function DebtDetail() {
     if (!missing || deleted.current) return;
     deleted.current = true;
     processing.current = true;
-    Alert.alert("Deuda no disponible", "Esta deuda ya no existe. Volverás a Deudas.");
+    Alert.alert(tr("ui.debt_unavailable"), tr("ui.this_debt_no_longer_exists_returning_to_debts"));
     router.dismissTo("/debts");
   }, [missing, router]);
 
@@ -97,7 +102,7 @@ export default function DebtDetail() {
         // Start refreshes, but never keep a deleted detail open while they finish.
         void Promise.all([["debts"], ["transactions"], ["accounts"], ["summary"]]
           .map((queryKey) => qc.invalidateQueries({ queryKey, refetchType: "all" })))
-          .catch(() => Alert.alert("Actualizar datos", "La deuda se eliminó. No se pudo actualizar la lista; vuelve a intentarlo."));
+          .catch(() => Alert.alert(tr("ui.refresh_data"), tr("ui.the_debt_was_deleted_but_the_list_could_not_refresh_please_try_again")));
         router.dismissTo("/debts");
       }
     } catch (error) {
@@ -106,7 +111,7 @@ export default function DebtDetail() {
           ? error.detail
           : "Esta deuda tiene pagos o movimientos vinculados. Anúlalos desde el historial antes de eliminarla."
         : error instanceof Error ? error.message : "No se pudo completar la operación. Inténtalo de nuevo.";
-      Alert.alert("No se pudo eliminar", message);
+      Alert.alert(tr("ui.could_not_delete"), localizedError(message));
     } finally {
       if (!deleted.current) {
         processing.current = false;
@@ -116,17 +121,17 @@ export default function DebtDetail() {
   };
   const cancelPayment = (paymentId: string) => {
     if (processing.current) return;
-    Alert.alert("Anular pago", "Se eliminará el movimiento asociado y se revertirá el efecto de este pago en el saldo de la cuenta y en el pendiente de la deuda. ¿Continuar?", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Anular pago", style: "destructive", onPress: () => { void executeDeletion(paymentId); } },
+    Alert.alert(tr("ui.cancel_payment"), tr("ui.this_removes_the_linked_transaction_and_reverses_the_payment_s_effect_on_the_account_balance_an"), [
+      { text: tr("ui.cancel"), style: "cancel" },
+      { text: tr("ui.cancel_payment"), style: "destructive", onPress: () => { void executeDeletion(paymentId); } },
     ]);
   };
   const remove = () => {
     if (processing.current) return;
-    Alert.alert("Eliminar deuda", "¿Estás seguro?", [
-      { text: "Cancelar", style: "cancel" },
+    Alert.alert(tr("ui.delete_debt"), tr("ui.are_you_sure"), [
+      { text: tr("ui.cancel"), style: "cancel" },
       {
-        text: "Eliminar",
+        text: tr("ui.delete"),
         style: "destructive",
         onPress: () => { void executeDeletion(); },
       },
@@ -140,20 +145,20 @@ export default function DebtDetail() {
   const freq = FREQ_LABEL[d.payment_frequency];
   const payments = paysQ.data || [];
   const amountCols = [
-    { key: "orig", label: "Original", value: d.original_amount, icon: "server-outline", color: pal.forest, soft: pal.mint },
-    { key: "pend", label: "Pendiente", value: d.remaining_amount, icon: "time-outline", color: pal.coral, soft: pal.coralSoft },
-    { key: "paid", label: "Pagado", value: d.total_paid, icon: "checkmark-circle-outline", color: pal.violet, soft: pal.violetSoft },
+    { key: "orig", get label() { return tr("ui.original"); }, value: d.original_amount, icon: "server-outline", color: pal.forest, soft: pal.mint },
+    { key: "pend", get label() { return tr("ui.pending"); }, value: d.remaining_amount, icon: "time-outline", color: pal.coral, soft: pal.coralSoft },
+    { key: "paid", get label() { return tr("ui.paid"); }, value: d.total_paid, icon: "checkmark-circle-outline", color: pal.violet, soft: pal.violetSoft },
   ];
   const infoRows: { key: string; label: string; value: string; icon?: string; muted?: boolean }[] = [
-    { key: "min", label: "Pago mínimo", value: formatCurrencyInt(d.minimum_payment), icon: "card-outline" },
-    { key: "freq", label: "Frecuencia", value: freq || "Sin configurar", icon: "calendar-outline", muted: !freq },
-    { key: "int", label: "Interés", value: `${d.interest_rate}%` },
-    { key: "created", label: "Fecha de creación", value: formatCreated(d.start_date), icon: "calendar-number-outline" },
-    ...(d.due_date ? [{ key: "due", label: "Próximo vencimiento", value: formatDateLong(d.due_date), icon: "alarm-outline" }] : []),
+    { key: "min", get label() { return tr("ui.minimum_payment"); }, value: formatCurrencyInt(d.minimum_payment), icon: "card-outline" },
+    { key: "freq", get label() { return tr("ui.frequency"); }, value: freq || "Sin configurar", icon: "calendar-outline", muted: !freq },
+    { key: "int", get label() { return tr("ui.interest"); }, value: `${d.interest_rate}%` },
+    { key: "created", get label() { return tr("ui.created_on"); }, value: formatCreated(d.start_date), icon: "calendar-number-outline" },
+    ...(d.due_date ? [{ key: "due", get label() { return tr("ui.next_due_date"); }, value: formatDateLong(d.due_date), icon: "alarm-outline" }] : []),
   ];
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: pal.bg }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
+    <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} style={{ flex: 1, backgroundColor: pal.bg }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
       <View style={styles.headerRow}>
         <Pressable onPress={() => router.back()} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
           <Ionicons name="chevron-back" size={us(24)} color={pal.forest} />
@@ -175,16 +180,16 @@ export default function DebtDetail() {
             <Ionicons name={(d.icon || "cash-outline") as any} size={us(30)} color={d.color} />
           </View>
           <Text style={[styles.heroTitle, { color: pal.onSurface }]} numberOfLines={2}>
-            {d.direction === "i_owe" ? "Yo debo a" : "Me debe"} {d.person || ""}
+            {d.direction === "i_owe" ? tr("ui.i_owe") : tr("ui.owed_to_me")} {d.person || ""}
           </Text>
           <Text style={[styles.heroSub, { color: pal.muted }]} numberOfLines={1}>{d.name}</Text>
           <View style={[styles.statusPill, { backgroundColor: isPaid ? pal.mint : pal.coralSoft }]}>
-            <Text style={[styles.statusText, { color: isPaid ? pal.forest : pal.coral }]}>{isPaid ? "PAGADA ✓" : "ACTIVA"}</Text>
+            <Text style={[styles.statusText, { color: isPaid ? pal.forest : pal.coral }]}>{isPaid ? tr("ui.paid_2") : tr("ui.active")}</Text>
           </View>
         </View>
         <ProgressRing progress={progress} color={d.color} trackColor={pal.track} size={us(128)} stroke={us(11)}>
           <View style={{ alignItems: "center" }}>
-            <Text style={[styles.ringLabel, { color: pal.muted }]}>Pagado</Text>
+            <Text style={[styles.ringLabel, { color: pal.muted }]}>{tr("ui.paid")}</Text>
             <Text style={[styles.ringValue, { color: pal.onSurface }]}>{pct}%</Text>
           </View>
         </ProgressRing>
@@ -239,10 +244,10 @@ export default function DebtDetail() {
         style={[styles.payBtn, { backgroundColor: pal.forest }, shadow, d.status === "paid" && { opacity: 0.5 }]}
       >
         <Ionicons name="add-circle-outline" size={us(26)} color={pal.dark ? colors.onSuccess : "#fff"} />
-        <Text style={[styles.payText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>Registrar pago</Text>
+        <Text style={[styles.payText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{tr("ui.record_payment")}</Text>
       </Pressable>
 
-      <Text style={[styles.historyTitle, { color: pal.dark ? pal.onSurface : pal.forest }]}>Historial de pagos</Text>
+      <Text style={[styles.historyTitle, { color: pal.dark ? pal.onSurface : pal.forest }]}>{tr("ui.payment_history")}</Text>
       {payments.length > 0 ? (
         <View style={[cardStyle, styles.historyCard]}>
           {payments.map((p: any, idx: number) => (
@@ -261,7 +266,7 @@ export default function DebtDetail() {
                 accessibilityState={{ disabled: busy, busy }}
                 style={[styles.cancelBtn, { backgroundColor: pal.coralSoft }]}
               >
-                <Text style={[styles.cancelText, { color: pal.coral }]}>Anular pago</Text>
+                <Text style={[styles.cancelText, { color: pal.coral }]}>{tr("ui.cancel_payment")}</Text>
               </Pressable>
             </View>
           ))}
@@ -277,11 +282,11 @@ export default function DebtDetail() {
               <Ionicons name="list-outline" size={us(28)} color={pal.forest} />
             </View>
           </View>
-          <Text style={[styles.emptyTitle, { color: pal.dark ? pal.onSurface : pal.forest }]}>Sin pagos registrados</Text>
-          <Text style={[styles.emptySub, { color: pal.muted }]}>Cuando registres un pago, aparecerá aquí en orden cronológico.</Text>
+          <Text style={[styles.emptyTitle, { color: pal.dark ? pal.onSurface : pal.forest }]}>{tr("ui.no_payments_recorded")}</Text>
+          <Text style={[styles.emptySub, { color: pal.muted }]}>{tr("ui.payments_will_appear_here_in_chronological_order")}</Text>
         </View>
       )}
-    </ScrollView>
+    </ElasticScrollView>
   );
 }
 

@@ -1,3 +1,4 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // C1: actual navigation handlers and read-only filter/pagination expressions.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const cp=require('node:child_process'),ts=require('typescript');
@@ -18,7 +19,7 @@ function inspect(source,file){
   }visit(tree);return {variables,press,effects};
 }
 const d=inspect(detail,detailFile),l=inspect(list,listFile);
-function execute(code,context){vm.runInNewContext(ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,context);}
+function execute(code,context){vm.runInNewContext(ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,localeGlobals(context));}
 const plain=v=>JSON.parse(JSON.stringify(v));
 const allRange={start:Date.parse('2026-10-01T00:00:00Z'),end:Date.parse('2026-10-31T23:59:59.999Z')};
 const transaction=(id,type,account_id,to_account_id,date='2026-10-15T12:00:00Z',amount=100)=>({id,type,account_id,to_account_id,date,amount});

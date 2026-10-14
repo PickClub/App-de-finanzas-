@@ -1,3 +1,4 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // Isolated hook tests using existing TypeScript; no Expo server or API/database.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -14,12 +15,12 @@ function compile(file) {
   return result.outputText;
 }
 const apiExports = {};
-vm.runInNewContext(compile('src/api.ts'), { exports: apiExports, process: { env: {} } });
+vm.runInNewContext(compile('src/api.ts'), localeGlobals({ exports: apiExports, process: { env: {} } }));
 const { ApiError } = apiExports;
 function hook(destination) {
   const alerts = [], navigation = [], refreshes = [], states = [], effects = [];
   const exports = {};
-  const mocks = {
+  const mocks = localeMocks({
     react: { useRef: v => ({ current: v }), useState: () => [false, v => states.push(v)],
       useCallback: fn => fn, useEffect: fn => effects.push(fn) },
     'react-native': { Alert: { alert: (...args) => alerts.push(args) } },
@@ -28,16 +29,16 @@ function hook(destination) {
       refreshes.push(args); return new Promise(() => {});
     } }) },
     './api': { ApiError },
-  };
-  vm.runInNewContext(compile('src/use-resource-deletion.ts'), { exports, require: name => mocks[name] });
+  });
+  vm.runInNewContext(compile('src/use-resource-deletion.ts'), localeGlobals({ exports, require: name => mocks[name] }));
   return { deletion: exports.useResourceDeletion(destination, [['transactions'], ['accounts']]),
     alerts, navigation, refreshes, states, effects, missing: exports.useMissingResource };
 }
 async function main() {
   const accountExports = {};
-  vm.runInNewContext(compile('src/account-deletion-navigation.ts'), {
+  vm.runInNewContext(compile('src/account-deletion-navigation.ts'), localeGlobals({
     exports: accountExports, require: () => ({ useNavigation: () => ({}) }),
-  });
+  }));
   for (const withList of [false, true]) {
     const routes = [{ name: '(tabs)', key: 'home' }];
     if (withList) routes.push({ name: 'accounts/index', key: 'existing-list' });
@@ -108,7 +109,7 @@ async function main() {
       Alert: { alert: (...args) => alerts.push(args) } };
     for (const key of ['DeleteBusy', 'Notes', 'EditorOpen', 'Editing', 'MenuNote', 'ConfirmDelete']) context['set' + key] = v => states[key] = v;
     const code = ts.transpileModule(`const handler = ${handler};`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-    vm.runInNewContext(code + '\nglobalThis.run = handler;', context);
+    vm.runInNewContext(code + '\nglobalThis.run = handler;', localeGlobals(context));
     const pending = context.run('n'); await context.run('n'); assert.equal(writes, 1);
     finish(success); await pending;
     assert.equal(noteDeleting.current, false);

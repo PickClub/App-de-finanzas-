@@ -1,3 +1,5 @@
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useCallback, useState } from "react";
 import { View, ScrollView, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -61,7 +63,7 @@ export default function BudgetDetail() {
   };
 
   const periodText = b
-    ? `${t(`budgets.${b.period}`)}${b.window_start ? ` · ${shortDate(b.window_start, i18n.language)} – ${shortDate(b.window_end, i18n.language)}` : ""}`
+    ? `${t(`budgets.${b.period}`, { defaultValue: t("common.unknown") })}${b.window_start ? ` · ${shortDate(b.window_start, i18n.language)} – ${shortDate(b.window_end, i18n.language)}` : ""}`
     : "";
 
   const InfoRow = ({ icon, label, value, color }: { icon: string; label: string; value: string; color?: string }) => (
@@ -76,7 +78,7 @@ export default function BudgetDetail() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(60), paddingHorizontal: us(spacing.lg) }}>
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(60), paddingHorizontal: us(spacing.lg) }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
           <Pressable testID="budget-detail-back" onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
@@ -100,7 +102,7 @@ export default function BudgetDetail() {
                   <Text style={[styles.heroTitle, mont()]} numberOfLines={1}>{budgetLabel(b, cat, i18n.language)}</Text>
                   <View style={[styles.statusPill, { backgroundColor: barColor + "22" }]}>
                     <Text style={[styles.statusText, { color: b.status === "normal" ? forest : barColor }]} testID="budget-detail-status">
-                      {b.active ? t(`budgets.status_${b.status}`) : t("budgets.inactive")}
+                      {b.active ? t(`budgets.status_${b.status}`, { defaultValue: t("common.unknown") }) : t("budgets.inactive")}
                     </Text>
                   </View>
                 </View>
@@ -125,7 +127,7 @@ export default function BudgetDetail() {
               <InfoRow icon="trending-down-outline" label={t("budgets.spentAcc")} value={formatCurrencyInt(b.spent)} color={colors.expenseRed} />
               <InfoRow icon="wallet-outline" label={over ? t("budgets.exceededLbl") : t("budgets.availableLbl")} value={formatCurrencyInt(Math.abs(b.available))} color={over ? colors.expenseRed : forest} />
               <InfoRow icon="calendar-outline" label={t("budgets.period")} value={periodText} />
-              <InfoRow icon="pulse-outline" label={t("budgets.statusLbl")} value={b.active ? t(`budgets.status_${b.status}`) : t("budgets.inactive")} />
+              <InfoRow icon="pulse-outline" label={t("budgets.statusLbl")} value={b.active ? t(`budgets.status_${b.status}`, { defaultValue: t("common.unknown") }) : t("budgets.inactive")} />
               <InfoRow icon="notifications-outline" label={t("budgets.alertsLbl")} value={b.alerts_enabled === false ? t("budgets.alertsOff") : t("budgets.alertsAt", { pct: b.alert_threshold || 80 })} />
             </View>
 
@@ -164,7 +166,7 @@ export default function BudgetDetail() {
             </View>
           </>
         )}
-      </ScrollView>
+      </ElasticScrollView>
 
       <ConfirmSheet
         visible={confirmDel}

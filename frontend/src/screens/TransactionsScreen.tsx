@@ -1,3 +1,4 @@
+import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
 import React, { useMemo, useState } from "react";
 import { View, ScrollView, StyleSheet, FlatList, Modal, KeyboardAvoidingView, Platform } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -14,23 +15,24 @@ import { LockToggle, useLock } from "@/src/lock";
 
 import { us, ufs } from "@/src/ui-scale";
 const TYPE_FILTERS = [
-  { id: "all", label: "Todos" },
-  { id: "income", label: "Ingresos" },
-  { id: "expense", label: "Gastos" },
-  { id: "transfer", label: "Transferencias" },
-  { id: "debt_payment", label: "Pagos deuda" },
+  { id: "all", get label() { return tr("ui.all"); } },
+  { id: "income", get label() { return tr("ui.income"); } },
+  { id: "expense", get label() { return tr("ui.expenses"); } },
+  { id: "transfer", get label() { return tr("ui.transfers"); } },
+  { id: "debt_payment", get label() { return tr("ui.debt_payments"); } },
 ];
 
 const DATE_RANGES = [
-  { id: "all", label: "Cualquier fecha", days: null as number | null },
-  { id: "7d", label: "Últimos 7 días", days: 7 },
-  { id: "30d", label: "Últimos 30 días", days: 30 },
-  { id: "90d", label: "Últimos 3 meses", days: 90 },
-  { id: "365d", label: "Último año", days: 365 },
-  { id: "month", label: "Este mes", days: 0 },
+  { id: "all", get label() { return tr("ui.any_date"); }, days: null as number | null },
+  { id: "7d", get label() { return tr("ui.last_7_days"); }, days: 7 },
+  { id: "30d", get label() { return tr("ui.last_30_days"); }, days: 30 },
+  { id: "90d", get label() { return tr("ui.last_3_months"); }, days: 90 },
+  { id: "365d", get label() { return tr("ui.last_year"); }, days: 365 },
+  { id: "month", get label() { return tr("ui.this_month"); }, days: 0 },
 ];
 
 export default function Transactions() {
+  useInterfaceLanguage();
   const { colors } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -86,7 +88,7 @@ export default function Transactions() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <View style={[styles.header, { paddingTop: insets.top + us(12) }]}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(10) }}>
-          <Text style={styles.title}>Movimientos</Text>
+          <Text style={styles.title}>{tr("ui.transactions")}</Text>
           <LockToggle testID="lock-tx" compact />
           <Pressable
             testID="open-filters"
@@ -107,7 +109,7 @@ export default function Transactions() {
             testID="search-input"
             value={q}
             onChangeText={setQ}
-            placeholder="Buscar movimiento…"
+            placeholder={tr("ui.search_transactions")}
             placeholderTextColor={colors.muted}
             style={styles.searchInput}
           />
@@ -169,7 +171,7 @@ export default function Transactions() {
               />
             )}
             <Pressable testID="clear-filters" onPress={clearAll} style={styles.clearBtn}>
-              <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: ufs(12) }}>Limpiar</Text>
+              <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: ufs(12) }}>{tr("ui.clear")}</Text>
             </Pressable>
           </ScrollView>
         )}
@@ -182,7 +184,7 @@ export default function Transactions() {
         ListEmptyComponent={
           <View style={{ alignItems: "center", padding: us(spacing.xxl) }}>
             <Ionicons name="documents-outline" size={us(48)} color={colors.muted} />
-            <Text style={{ color: colors.muted, marginTop: us(10) }}>Sin movimientos</Text>
+            <Text style={{ color: colors.muted, marginTop: us(10) }}>{tr("ui.no_transactions")}</Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -223,17 +225,17 @@ export default function Transactions() {
           <View style={styles.sheet}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Filtros</Text>
+              <Text style={styles.sheetTitle}>{tr("ui.filters")}</Text>
               <Pressable onPress={() => setFiltersOpen(false)} testID="close-filters" hitSlop={8}>
                 <Ionicons name="close" size={us(24)} color={colors.onSurface} />
               </Pressable>
             </View>
 
             <ScrollView contentContainerStyle={{ paddingBottom: us(20) }}>
-              <Text style={styles.sheetLabel}>Cuenta</Text>
+              <Text style={styles.sheetLabel}>{tr("ui.account")}</Text>
               <View style={styles.optRow}>
                 <FilterPill
-                  label="Todas"
+                  label={tr("ui.all")}
                   active={!accountId}
                   onPress={() => setAccountId(undefined)}
                   testID="filter-acc-all"
@@ -251,10 +253,10 @@ export default function Transactions() {
                 ))}
               </View>
 
-              <Text style={styles.sheetLabel}>Categoría</Text>
+              <Text style={styles.sheetLabel}>{tr("ui.category")}</Text>
               <View style={styles.optRow}>
                 <FilterPill
-                  label="Todas"
+                  label={tr("ui.all")}
                   active={!categoryId}
                   onPress={() => setCategoryId(undefined)}
                   testID="filter-cat-all"
@@ -272,7 +274,7 @@ export default function Transactions() {
                 ))}
               </View>
 
-              <Text style={styles.sheetLabel}>Fecha</Text>
+              <Text style={styles.sheetLabel}>{tr("ui.date")}</Text>
               <View style={styles.optRow}>
                 {DATE_RANGES.map((r) => (
                   <FilterPill
@@ -288,10 +290,10 @@ export default function Transactions() {
 
             <View style={styles.footerRow}>
               <Pressable testID="filters-clear" onPress={clearAll} style={styles.footerGhost}>
-                <Text style={{ color: colors.onSurface, fontWeight: "700" }}>Limpiar</Text>
+                <Text style={{ color: colors.onSurface, fontWeight: "700" }}>{tr("ui.clear")}</Text>
               </Pressable>
               <Pressable testID="filters-apply" onPress={() => setFiltersOpen(false)} style={styles.footerApply}>
-                <Text style={{ color: "#fff", fontWeight: "800" }}>Aplicar</Text>
+                <Text style={{ color: "#fff", fontWeight: "800" }}>{tr("ui.apply")}</Text>
               </Pressable>
             </View>
           </View>

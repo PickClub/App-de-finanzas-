@@ -1,16 +1,6 @@
-// Centralized bilingual (es/en) i18n system for the app.
-//
-// - i18next + react-i18next, locally bundled JSON resources (no network).
-// - Spanish is the fallback language.
-// - On first launch we detect the device language (expo-localization); once the
-//   user picks a language manually, the saved preference wins.
-// - Persistence uses the app's existing `storage` abstraction (AsyncStorage on
-//   native, localStorage on web). On web we also read localStorage synchronously
-//   so the first paint is already in the correct language (no flash), mirroring
-//   the ThemeProvider pattern.
-import i18n from "i18next";
+// English-first bundled localization. Only an explicit saved preference overrides en-US.
+import { createInstance, type PostProcessorModule } from "i18next";
 import { initReactI18next, useTranslation } from "react-i18next";
-import * as Localization from "expo-localization";
 import React, {
   createContext,
   useCallback,
@@ -18,51 +8,78 @@ import React, {
   useEffect,
   useMemo,
   useState,
+  useRef,
 } from "react";
 import { storage } from "@/src/utils/storage";
 
 import en from "./locales/en.json";
 import es from "./locales/es.json";
 
-export type Lang = "es" | "en";
-export const SUPPORTED_LANGS: Lang[] = ["es", "en"];
+const i18n = createInstance();
+const reportedMissing = new Set<string>();
+const developmentCoverage: PostProcessorModule = {
+  type: "postProcessor",
+  name: "developmentCoverage",
+  process(value, keys, options) {
+    if (typeof __DEV__ === "undefined" || !__DEV__) return value;
+    const language = options.lng || i18n.language;
+    const namespace = Array.isArray(options.ns) ? options.ns[0] : options.ns || "translation";
+    const requested = Array.isArray(keys) ? keys[0] : keys;
+    // Share i18next's plural resolver and its fallback for runtimes without Intl.PluralRules.
+    const suffix = typeof options.count === "number"
+      ? i18n.services.pluralResolver.getSuffix(language, options.count, options) : "";
+    const pluralKey = `${requested}${suffix}`;
+    if (i18n.getResource(language, namespace, pluralKey) === undefined
+      && i18n.getResource(language, namespace, requested) === undefined) {
+      const identity = `${language}:${namespace}:${pluralKey}`;
+      if (!reportedMissing.has(identity)) {
+        reportedMissing.add(identity);
+        console.warn(`[i18n] Missing ${identity}; using English fallback`);
+      }
+    }
+    return value;
+  },
+};
+
+export type Lang = "en-US" | "es";
+export const SUPPORTED_LANGS: Lang[] = ["en-US", "es"];
 const LANG_KEY = "app-language";
 
-function detectDeviceLang(): Lang {
-  try {
-    const locales = Localization.getLocales?.() || [];
-    const code = (locales[0]?.languageCode || "").toLowerCase();
-    if (code === "en") return "en";
-    if (code === "es") return "es";
-  } catch {
-    /* noop */
-  }
-  return "es"; // fallback
+export function normalizeLanguage(value: unknown): Lang | null {
+  return value === "en" || value === "en-US" ? "en-US" : value === "es" ? "es" : null;
 }
 
 // Synchronous best-effort initial language (web reads localStorage; native falls
-// back to device detection and hydrates the saved value asynchronously).
+// back to English and hydrates the saved value asynchronously).
 function readInitialLang(): Lang {
   try {
     const g: any = globalThis as any;
     if (typeof g.localStorage !== "undefined") {
       const v = g.localStorage.getItem(LANG_KEY);
-      if (v === "es" || v === "en") return v;
+      const saved = normalizeLanguage(v) || (() => { try { return normalizeLanguage(JSON.parse(v || "null")); } catch { return null; } })();
+      if (saved) return saved;
     }
   } catch {
     /* noop */
   }
-  return detectDeviceLang();
+  return "en-US";
 }
 
 if (!i18n.isInitialized) {
   i18n
     .use(initReactI18next)
+    .use(developmentCoverage)
     .init({
-      resources: { es: { translation: es }, en: { translation: en } },
+      resources: { "en-US": { translation: en }, es: { translation: es } },
       lng: readInitialLang(),
-      fallbackLng: "es",
+      fallbackLng: "en-US",
       supportedLngs: SUPPORTED_LANGS,
+      load: "currentOnly",
+      saveMissing: true,
+      postProcess: ["developmentCoverage"],
+      missingKeyHandler: (_languages, namespace, key) => {
+        if (typeof __DEV__ !== "undefined" && __DEV__) console.warn(`[i18n] Missing ${namespace}:${key}`);
+      },
       interpolation: { escapeValue: false },
       returnNull: false,
       returnEmptyString: false,
@@ -71,28 +88,36 @@ if (!i18n.isInitialized) {
 
 export default i18n;
 
+/** Reactive components subscribe with useTranslation; display helpers read the current locale. */
+export function tr(key: string, values?: Record<string, unknown>): string {
+  return String(i18n.t(key, values));
+}
+
 /** Locale string for Intl/date formatting derived from the active language. */
 export function localeTag(lang?: string): string {
-  return (lang || i18n.language) === "en" ? "en-US" : "es-ES";
+  return (lang || i18n.language).startsWith("es") ? "es-US" : "en-US";
 }
 
 type LangContextValue = {
   lang: Lang;
-  setLang: (l: Lang) => void;
+  setLang: (l: Lang) => Promise<void>;
 };
 
 const LangContext = createContext<LangContextValue>({
-  lang: "es",
-  setLang: () => {},
+  lang: "en-US",
+  setLang: async () => {},
 });
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
+  const selectionRevision = useRef(0);
+  const writes = useRef(Promise.resolve());
   const [lang, setLangState] = useState<Lang>(() => (i18n.language as Lang) || readInitialLang());
 
   // Hydrate the persisted preference once (covers native cold starts). On web
   // the synchronous localStorage read above is already authoritative.
   useEffect(() => {
     let active = true;
+    const revision = selectionRevision.current;
     (async () => {
       try {
         const g: any = globalThis as any;
@@ -102,8 +127,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       } catch {
         /* noop */
       }
-      const saved = await storage.getItem<Lang | "">(LANG_KEY, "" as Lang);
-      if (active && (saved === "es" || saved === "en")) {
+      const saved = normalizeLanguage(await storage.getItem<string>(LANG_KEY, ""));
+      if (active && revision === selectionRevision.current && saved) {
         if (i18n.language !== saved) i18n.changeLanguage(saved);
         setLangState(saved);
       }
@@ -114,15 +139,21 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setLang = useCallback((l: Lang) => {
-    setLangState(l);
-    i18n.changeLanguage(l);
-    storage.setItem(LANG_KEY, l);
-    try {
-      const g: any = globalThis as any;
-      if (typeof g.localStorage !== "undefined") g.localStorage.setItem(LANG_KEY, l);
-    } catch {
-      /* noop */
-    }
+    const selected = normalizeLanguage(l);
+    if (!selected) return Promise.reject(new Error("Unsupported language"));
+    selectionRevision.current += 1;
+    const save = async () => {
+      if (!await storage.setItem(LANG_KEY, selected)) throw new Error("Language preference could not be saved");
+      await i18n.changeLanguage(selected);
+      setLangState(selected);
+      try {
+        const g: any = globalThis;
+        if (typeof g.localStorage !== "undefined") g.localStorage.setItem(LANG_KEY, JSON.stringify(selected));
+      } catch { /* Native storage remains authoritative. */ }
+    };
+    const pending = writes.current.then(save);
+    writes.current = pending.catch(() => {});
+    return pending;
   }, []);
 
   const value = useMemo<LangContextValue>(() => ({ lang, setLang }), [lang, setLang]);

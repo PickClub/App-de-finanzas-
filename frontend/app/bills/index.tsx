@@ -1,5 +1,7 @@
+import { ElasticFlatList } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useCallback, useRef, useState } from "react";
-import { View, FlatList, ActivityIndicator, RefreshControl } from "react-native";
+import { View, FlatList, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -90,7 +92,7 @@ export default function BillsScreen() {
         <View style={{ alignItems: "flex-end", gap: us(4), marginLeft: us(8) }}>
           <Text style={[styles.rowAmount, mont()]} numberOfLines={1}>{formatCurrencyInt(b.status === "paid" ? b.amount : b.remaining)}</Text>
           <View style={[styles.pill, { backgroundColor: sc + (isDark ? "2E" : "1C") }]}>
-            <Text style={[styles.pillText, { color: sc }]}>{b.partial ? t("bills.partial") : t(`bills.s_${b.status}`)}</Text>
+            <Text style={[styles.pillText, { color: sc }]}>{b.partial ? t("bills.partial") : t(`bills.s_${b.status}`, { defaultValue: t("common.unknown") })}</Text>
           </View>
         </View>
         <View style={styles.chev}>
@@ -170,7 +172,7 @@ export default function BillsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <FlatList
+      <ElasticFlatList {...NATIVE_VERTICAL_SCROLL}
         data={items}
         keyExtractor={(b) => b.id}
         renderItem={({ item }) => <BillRow b={item} />}
@@ -180,16 +182,13 @@ export default function BillsScreen() {
         initialNumToRender={12}
         windowSize={7}
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={forest} />}
         showsVerticalScrollIndicator={false}
       />
     </View>
   );
 }
 
-const useStyles = makeStyles((colors, scheme) => {
-  const dark = scheme === "dark";
-  const shadow = { shadowColor: "#126046", shadowOpacity: dark ? 0 : 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 2 }, elevation: dark ? 0 : 1 };
+const useStyles = makeStyles((colors) => {
   return {
     header: { flexDirection: "row", alignItems: "center", gap: 12 },
     backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
@@ -197,7 +196,7 @@ const useStyles = makeStyles((colors, scheme) => {
     subtitle: { fontSize: 13.5, color: colors.muted, marginTop: 8, marginBottom: 14 },
     grid: { gap: 10 },
     gridRow: { flexDirection: "row", gap: 10 },
-    sumCard: { flex: 1, borderRadius: radius.cardLg, padding: 12, minHeight: 112, borderWidth: 1, borderColor: colors.border, ...shadow },
+    sumCard: { flex: 1, borderRadius: radius.cardLg, padding: 12, minHeight: 112, borderWidth: 1, borderColor: colors.border },
     sumIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
     sumChevron: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSecondary },
     sumLabel: { fontSize: 12.5, color: colors.muted, marginTop: 10 },
@@ -209,7 +208,7 @@ const useStyles = makeStyles((colors, scheme) => {
     filters: { flexDirection: "row", gap: 6, marginTop: 12, marginBottom: 12 },
     chip: { flex: 1, height: 38, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", paddingHorizontal: 4, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
     chipText: { fontSize: 12.5, fontWeight: "600", color: colors.onSurface },
-    row: { flexDirection: "row", alignItems: "center", padding: 12, borderRadius: radius.cardLg, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, ...shadow },
+    row: { flexDirection: "row", alignItems: "center", padding: 12, borderRadius: radius.cardLg, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
     rowIcon: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center", marginRight: 12 },
     rowName: { fontSize: 15, color: colors.onSurface },
     rowSub: { fontSize: 12.5, color: colors.muted, marginTop: 1 },

@@ -1,3 +1,4 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // C8/C12: actual handlers, synthetic mutation/refetch/cache; no backend writes.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const cp=require('node:child_process'),ts=require('typescript');
@@ -20,7 +21,7 @@ function goal(realOn=false){let requests=0,backs=0,finish,fail;const keys=[],cal
     setSaving:v=>ctx.saving=v,setError:v=>ctx.error=v,router:{back:()=>backs++},qc:{invalidateQueries:({queryKey})=>{keys.push(queryKey[0]);return Promise.resolve();}},
     api:{createGoalContribution:(...args)=>{requests++;calls.push(plain(args));return new Promise((resolve,reject)=>{finish=resolve;fail=reject;});}},
   };
-  vm.createContext(ctx);vm.runInContext(compile('globalThis.save='+parsed.goal.variables.save),ctx);
+  vm.createContext(localeGlobals(ctx));vm.runInContext(compile('globalThis.save='+parsed.goal.variables.save),ctx);
   return {ctx,keys,calls,run:ctx.save,finish:()=>finish({id:'contribution'}),fail:()=>fail(new ApiError(503)),counts:()=>({requests,backs})};
 }
 function refresh(kind,functions={}){const counts={};
@@ -28,9 +29,9 @@ function refresh(kind,functions={}){const counts={};
   for(const name of kind==='list'?['listQ','sumQ']:['q']){
     counts[name]=0;ctx[name]={isFetching:true,refetch:options=>{counts[name]++;assert.deepEqual(plain(options),{cancelRefetch:false});return functions[name]?.();}};
   }
-  vm.createContext(ctx);
+  vm.createContext(localeGlobals(ctx));
   vm.runInContext(compile('globalThis.run='+(parsed[kind].variables.onRefresh||parsed[kind].refresh.onRefresh)),ctx);
-  return {ctx,counts,run:ctx.run,visible:()=>vm.runInContext(parsed[kind].refresh.refreshing,ctx)};
+  return {ctx,counts,run:ctx.run,visible:()=>ctx.refreshing};
 }
 const tick=()=>new Promise(r=>setImmediate(r));
 async function main(){
@@ -57,7 +58,8 @@ async function main(){
     assert.equal(f.visible(),false);assert.equal(f.ctx.refreshingRef.current,false);
     const repeat=f.run();await tick();for(const q of queries)done[q]();await repeat;
     assert(queries.every(q=>f.counts[q]===2));assert.equal(f.visible(),false);
-    console.log('PASS C12 '+kind+': manual-only indicator, delayed queries, concurrent gestures coalesced and completion reset.');
+    assert.deepEqual(parsed[kind].refresh,{});
+    console.log('PASS C12 '+kind+': retained refresh handler coalesces requests and resets; no pull-to-refresh UI intercepts scrolling.');
     for(const errorMode of ['reject','throw']){
       const failing={};for(const q of queries)failing[q]=()=>errorMode==='reject'?Promise.reject(Error('synthetic')):(()=>{throw Error('synthetic');})();
       f=refresh(kind,failing);await f.run();assert.equal(f.visible(),false);assert.equal(f.ctx.refreshingRef.current,false);assert(queries.every(q=>f.counts[q]===1));
@@ -72,7 +74,11 @@ async function main(){
   if(!process.env.C8_C12_TEST_REF){
     for(const [kind,file] of Object.entries(files)){
       const old=cp.execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),base=inspect(old,file),marker='const useStyles =';
-      assert.equal(sources[kind].slice(sources[kind].indexOf(marker)),old.slice(old.indexOf(marker)));
+      const originalStyles=kind==='list'?old.slice(old.indexOf(marker))
+        .replace('makeStyles((colors, scheme) => {','makeStyles((colors) => {')
+        .replace('  const dark = scheme === "dark";\n','')
+        .replace(/^  const shadow = .*\n/m,'').replaceAll(', ...shadow','') : old.slice(old.indexOf(marker));
+      assert.equal(sources[kind].slice(sources[kind].indexOf(marker)),originalStyles);
       if(kind==='goal'){assert.deepEqual(parsed.goal.calls,base.calls);assert.equal(parsed.goal.variables.dateIso,base.variables.dateIso);assert.equal(parsed.goal.variables.idemKey,base.variables.idemKey);}
       if(kind==='detail')assert.equal(parsed.detail.variables.doConfirm,base.variables.doConfirm);
       const out=ts.transpileModule(sources[kind],{fileName:file,reportDiagnostics:true,compilerOptions:{jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2020}});

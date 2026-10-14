@@ -1,8 +1,9 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // Synthetic storage and transport only: no native storage, real network or MongoDB.
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const ts=require('typescript'),root=path.resolve(__dirname,'..');
 const compile=f=>ts.transpileModule(fs.readFileSync(path.join(root,f),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-const out={};vm.runInNewContext(compile('src/obligation-payments/journal.ts'),{exports:out});
+const out={};vm.runInNewContext(compile('src/obligation-payments/journal.ts'),localeGlobals({exports:out}));
 const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222';
 const target={kind:'bill',id:'bill',due:'2026-10-20'};
 const payload={amount:100,account_id:'account',date:'2026-10-12T12:00:00.000Z',notes:null};
@@ -51,8 +52,8 @@ async function main(){
   assert.deepEqual(out.verifiedDeletionContext(valid,kind,pinned),pinned);
  }
  const apiModule={},requests=[];
- vm.runInNewContext(compile('src/api.ts'),{exports:apiModule,process:{env:{EXPO_PUBLIC_BACKEND_URL:'http://synthetic.invalid'}},
-  fetch:async(url,options)=>{requests.push({url,options});return {ok:true,json:async()=>({ok:true})};}});
+ vm.runInNewContext(compile('src/api.ts'),localeGlobals({exports:apiModule,process:{env:{EXPO_PUBLIC_BACKEND_URL:'http://synthetic.invalid'}},
+  fetch:async(url,options)=>{requests.push({url,options});return {ok:true,json:async()=>({ok:true})};}}));
  const ctx=out.verifiedContext(context());
  await apiModule.api.billDeletePayment('payment',ctx);await apiModule.api.rpDeletePayment('record',ctx);
  for(const {options} of requests){assert.equal(options.method,'DELETE');assert.equal(options.headers['MoneyFlow-Environment-ID'],A);assert.equal(options.headers['MoneyFlow-User-ID'],'default-user');}
@@ -161,7 +162,7 @@ async function main(){
   assert.ok(verifyBranch.includes('await invalidateObligationPayments(qc)'));
   assert.ok(verifyBranch.includes('return;'));
   assert.ok(!verifyBranch.includes('payment.retry()')&&!verifyBranch.includes('payment.submit(')&&!verifyBranch.includes('payment.acknowledge('));
-  assert.ok(source.includes('Cerrar verificación'));
+  assert.ok(source.includes('ui.close_verification'));
  }
  console.log('PASS: actual screen handlers, frozen recovery, confirmation-before-cleanup, late-response navigation guard and TSX syntax');
 }

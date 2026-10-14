@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useMemo, useRef, useState } from "react";
 import { View, ScrollView, Alert, KeyboardAvoidingView, Platform, Keyboard } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -91,10 +95,10 @@ const COLORS = COLOR_PALETTE;
 const DEFAULT_COLOR = "#F5B83B";
 const ICONS = ["cash-outline", "card-outline", "car-outline", "home-outline", "person-outline", "briefcase-outline", "gift-outline"];
 const FREQ = [
-  { id: "weekly", label: "Semanal" },
-  { id: "biweekly", label: "Quincenal" },
-  { id: "monthly", label: "Mensual" },
-  { id: "none", label: "Sin frecuencia" },
+  { id: "weekly", get label() { return tr("ui.weekly"); } },
+  { id: "biweekly", get label() { return tr("ui.every_two_weeks"); } },
+  { id: "monthly", get label() { return tr("ui.monthly"); } },
+  { id: "none", get label() { return tr("ui.no_schedule"); } },
 ];
 
 // Visual-only selection card used on the first step of "Nueva deuda".
@@ -149,6 +153,7 @@ function SelectCard({
 }
 
 export default function NewDebt() {
+  useInterfaceLanguage();
   const { colors, scheme } = useTheme();
   const styles = useStyles();
   const params = useLocalSearchParams<{ direction?: string }>();
@@ -185,7 +190,7 @@ export default function NewDebt() {
   const save = async () => {
     if (savingRef.current) return;
     const amt = parseFloat(amount);
-    if (!name.trim() || !amt) return Alert.alert("Completa nombre y monto");
+    if (!name.trim() || !amt) return Alert.alert(tr("ui.enter_a_name_and_amount"));
     savingRef.current = true;
     setSaving(true);
     try {
@@ -208,7 +213,7 @@ export default function NewDebt() {
     } catch (e: any) {
       savingRef.current = false;
       setSaving(false);
-      Alert.alert("Error", e?.message || "No se pudo guardar la deuda");
+      Alert.alert(tr("ui.error"), localizedError(e?.message || tr("ui.could_not_save_debt")));
     }
   };
 
@@ -219,20 +224,20 @@ export default function NewDebt() {
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
           </Pressable>
-          <Text style={styles.title}>Nueva deuda</Text>
+          <Text style={styles.title}>{tr("ui.new_debt")}</Text>
           <View style={{ width: us(40) }} />
         </View>
         <View style={styles.selWrap}>
           <View style={[styles.selIconTile, { backgroundColor: colors.incomeGreen + "1A" }]}>
             <Ionicons name="wallet-outline" size={us(28)} color={forest} />
           </View>
-          <Text style={styles.selHeading}>¿Qué quieres registrar?</Text>
-          <Text style={styles.selSubheading}>Selecciona el tipo de deuda</Text>
+          <Text style={styles.selHeading}>{tr("ui.what_would_you_like_to_record")}</Text>
+          <Text style={styles.selSubheading}>{tr("ui.choose_a_debt_type")}</Text>
           <View style={styles.selRow}>
             <SelectCard
               testID="dir-i-owe"
-              title="Yo debo"
-              subtitle={"Dinero que debo\npagar"}
+              title={tr("ui.i_owe")}
+              subtitle={tr("ui.money_i_owe")}
               arrowIcon="arrow-down"
               accent={colors.expenseRed}
               circleBg={colors.expenseRed + "1A"}
@@ -242,8 +247,8 @@ export default function NewDebt() {
             />
             <SelectCard
               testID="dir-they-owe"
-              title="Me deben"
-              subtitle={"Dinero por\ncobrar"}
+              title={tr("ui.owed_to_me")}
+              subtitle={tr("ui.money_owed_to_me")}
               arrowIcon="arrow-up"
               accent={forest}
               circleBg={colors.incomeGreen + "1A"}
@@ -265,7 +270,7 @@ export default function NewDebt() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, backgroundColor: pal.bg }}>
-      <ScrollView
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(spacing.lg), paddingHorizontal: us(spacing.lg), gap: us(10) }}
       >
@@ -273,36 +278,36 @@ export default function NewDebt() {
           <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: pal.card, borderColor: pal.border }]}>
             <Ionicons name="chevron-back" size={us(24)} color={pal.onSurface} />
           </Pressable>
-          <Text style={[styles.title, { color: pal.onSurface }]}>{iOwe ? "Yo debo" : "Me deben"}</Text>
+          <Text style={[styles.title, { color: pal.onSurface }]}>{iOwe ? tr("ui.i_owe") : tr("ui.owed_to_me")}</Text>
           <View style={{ width: us(40) }} />
         </View>
 
         {/* B. Debt name */}
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>Nombre de la deuda</Text>
+          <Text style={styles.cardLabel}>{tr("ui.debt_name")}</Text>
           <View style={styles.fieldRow}>
             <View style={[styles.fieldIcon, { backgroundColor: pal.mint }]}>
               <Ionicons name="document-text-outline" size={us(20)} color={pal.forest} />
             </View>
-            <TextInput testID="debt-name" value={name} onChangeText={setName} placeholder="Ej. Tarjeta Chase" placeholderTextColor={pal.muted} style={styles.fieldInput} />
+            <TextInput testID="debt-name" value={name} onChangeText={setName} placeholder={tr("ui.e_g_chase_card")} placeholderTextColor={pal.muted} style={styles.fieldInput} />
           </View>
         </View>
 
         {/* C. Person */}
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>{iOwe ? "A quién debo" : "Quién me debe"}</Text>
+          <Text style={styles.cardLabel}>{iOwe ? tr("ui.i_owe") : tr("ui.owed_to_me")}</Text>
           <View style={styles.fieldRow}>
             <View style={[styles.fieldIcon, { backgroundColor: pal.mint }]}>
               <Ionicons name="person-outline" size={us(20)} color={pal.forest} />
             </View>
-            <TextInput testID="debt-person" value={person} onChangeText={setPerson} placeholder="Nombre de la persona o entidad" placeholderTextColor={pal.muted} style={styles.fieldInput} />
+            <TextInput testID="debt-person" value={person} onChangeText={setPerson} placeholder={tr("ui.person_or_organization_name")} placeholderTextColor={pal.muted} style={styles.fieldInput} />
           </View>
         </View>
 
         {/* D. Total amount + category */}
         <View style={styles.pairRow}>
           <View style={[styles.card, { flex: 1.1, minWidth: 0 }]}>
-            <Text style={styles.cardLabel}>Monto total</Text>
+            <Text style={styles.cardLabel}>{tr("ui.total_amount")}</Text>
             <View style={styles.fieldRow}>
               <View style={[styles.fieldIcon, { backgroundColor: pal.mint }]}>
                 <Ionicons name="cash-outline" size={us(20)} color={pal.forest} />
@@ -323,7 +328,7 @@ export default function NewDebt() {
             onPress={() => { Keyboard.dismiss(); setCatSheet(true); }}
             style={({ pressed }) => [styles.card, { flex: 1, minWidth: 0 }, pressed && styles.pressed]}
           >
-            <Text style={styles.cardLabel}>Categoría</Text>
+            <Text style={styles.cardLabel}>{tr("ui.category")}</Text>
             <View style={styles.catRow}>
               {selCat ? (
                 <IconTile icon={selCat.icon} tint={selCat.color} size={us(40)} />
@@ -333,7 +338,7 @@ export default function NewDebt() {
                 </View>
               )}
               <Text style={[styles.catName, !selCat && { color: pal.muted }]} numberOfLines={2}>
-                {selCat ? selCat.name : "Sin categoría"}
+                {selCat ? selCat.name : tr("ui.no_category")}
               </Text>
               <Ionicons name="chevron-forward" size={us(18)} color={pal.onSurface} />
             </View>
@@ -341,7 +346,7 @@ export default function NewDebt() {
         </View>
 
         {/* Optional sections (closed by default) */}
-        <Collapsible testID="toggle-min-pay" icon="cash-outline" title="Pago mínimo" summary={minSummary} pal={pal} styles={styles}>
+        <Collapsible testID="toggle-min-pay" icon="cash-outline" title={tr("ui.minimum_payment")} summary={minSummary} pal={pal} styles={styles}>
           <TextInput
             testID="debt-min-pay"
             value={minPay}
@@ -353,7 +358,7 @@ export default function NewDebt() {
           />
         </Collapsible>
 
-        <Collapsible testID="toggle-frequency" icon="calendar-outline" title="Frecuencia de pago" summary={freqSummary} pal={pal} styles={styles}>
+        <Collapsible testID="toggle-frequency" icon="calendar-outline" title={tr("ui.payment_frequency")} summary={freqSummary} pal={pal} styles={styles}>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(8) }}>
             {FREQ.map((f) => {
               const sel = frequency === f.id;
@@ -371,14 +376,14 @@ export default function NewDebt() {
           </View>
         </Collapsible>
 
-        <Collapsible testID="toggle-interest" icon="trending-up-outline" title="Interés (%)" summary={intSummary} pal={pal} styles={styles}>
+        <Collapsible testID="toggle-interest" icon="trending-up-outline" title={tr("ui.interest_2")} summary={intSummary} pal={pal} styles={styles}>
           <View style={[styles.innerInputRow]}>
             <TextInput
               testID="debt-interest"
               value={interest}
               onChangeText={setInterest}
               keyboardType="decimal-pad"
-              placeholder="0"
+              placeholder={tr("ui.0")}
               placeholderTextColor={pal.muted}
               style={[styles.innerInputFlat, styles.amountInput]}
             />
@@ -388,7 +393,7 @@ export default function NewDebt() {
 
         {/* Icon + color personalization */}
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>Icono</Text>
+          <Text style={styles.cardLabel}>{tr("ui.icon")}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: us(10), paddingVertical: us(2) }}>
             {ICONS.map((ic) => (
               <Pressable key={ic} testID={`debt-icon-${ic}`} onPress={() => setIcon(ic)} style={[styles.iconOpt, icon === ic && { borderColor: color, borderWidth: 2 }]}>
@@ -396,7 +401,7 @@ export default function NewDebt() {
               </Pressable>
             ))}
           </ScrollView>
-          <Text style={[styles.cardLabel, { marginTop: us(12) }]}>Color</Text>
+          <Text style={[styles.cardLabel, { marginTop: us(12) }]}>{tr("ui.color")}</Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(10), paddingVertical: us(2) }}>
             {COLORS.map((c) => (
               <Pressable
@@ -410,7 +415,7 @@ export default function NewDebt() {
             ))}
           </View>
         </View>
-      </ScrollView>
+      </ElasticScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + us(12), backgroundColor: pal.bg }]}>
         <Pressable
@@ -419,13 +424,13 @@ export default function NewDebt() {
           disabled={saving}
           style={({ pressed }) => [styles.saveBtn, { backgroundColor: pal.forest }, (pressed || saving) && { opacity: 0.85 }]}
         >
-          <Text style={styles.saveText}>{saving ? "Guardando…" : "Guardar deuda"}</Text>
+          <Text style={styles.saveText}>{saving ? tr("ui.saving") : tr("ui.save_debt")}</Text>
         </Pressable>
       </View>
 
       <AppSheet visible={catSheet} onClose={() => setCatSheet(false)} testID="debt-category-sheet">
         <View style={styles.sheetHeader}>
-          <Text style={styles.sheetTitle}>Categoría</Text>
+          <Text style={styles.sheetTitle}>{tr("ui.category")}</Text>
           <Pressable testID="debt-category-close" onPress={() => setCatSheet(false)} style={styles.sheetClose}>
             <Ionicons name="close" size={us(20)} color={pal.onSurface} />
           </Pressable>
@@ -439,12 +444,12 @@ export default function NewDebt() {
             <View style={[styles.fieldIcon, { backgroundColor: pal.mint }]}>
               <Ionicons name="remove-circle-outline" size={us(20)} color={pal.forest} />
             </View>
-            <Text style={styles.sheetRowText}>Sin categoría</Text>
+            <Text style={styles.sheetRowText}>{tr("ui.no_category")}</Text>
             <View style={[styles.radio, !categoryId && { borderColor: pal.forest }]}>
               {!categoryId && <View style={[styles.radioDot, { backgroundColor: pal.forest }]} />}
             </View>
           </Pressable>
-          {cats.length === 0 && <Text style={styles.sheetEmpty}>No hay categorías disponibles</Text>}
+          {cats.length === 0 && <Text style={styles.sheetEmpty}>{tr("ui.no_categories_available")}</Text>}
           {cats.map((c: any) => {
             const sel = c.id === categoryId;
             return (

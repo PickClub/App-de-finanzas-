@@ -1,3 +1,4 @@
+import { tr, useTranslation as useInterfaceLanguage, useTranslation } from "@/src/i18n";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Tabs, useRouter } from "expo-router";
 import { View, BackHandler } from "react-native";
@@ -19,7 +20,7 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, makeStyles } from "@/src/theme";
-import { useTranslation } from "@/src/i18n";
+
 
 import { us, touchSlop } from "@/src/ui-scale";
 
@@ -414,6 +415,7 @@ function QuickMenu({ geometry }: { geometry: CenterGeometry | null }) {
 }
 
 export default function TabsLayout() {
+  useInterfaceLanguage();
   const { colors } = useTheme();
   const rootRef = useRef<View>(null);
   const centerSlot = useRef<View>(null);
@@ -442,12 +444,12 @@ export default function TabsLayout() {
   return (
     <View ref={rootRef} collapsable={false} onLayout={measureCenter} style={{ flex: 1, backgroundColor: colors.surface }}>
       <Tabs tabBar={renderTabBar} screenOptions={{ headerShown: false, animation: "none" }}>
-        <Tabs.Screen name="index" options={{ title: "Cuentas" }} />
-        <Tabs.Screen name="transactions" options={{ title: "IA" }} />
+        <Tabs.Screen name="index" options={{ get title() { return tr("ui.accounts"); } }} />
+        <Tabs.Screen name="transactions" options={{ get title() { return tr("ui.ai"); } }} />
         <Tabs.Screen name="fab" options={{ title: "" }} />
-        <Tabs.Screen name="reports" options={{ title: "Informes" }} />
-        <Tabs.Screen name="notes" options={{ title: "Notas", lazy: false }} />
-        <Tabs.Screen name="more" options={{ title: "Más" }} />
+        <Tabs.Screen name="reports" options={{ get title() { return tr("ui.reports"); } }} />
+        <Tabs.Screen name="notes" options={{ get title() { return tr("ui.notes"); }, lazy: false }} />
+        <Tabs.Screen name="more" options={{ get title() { return tr("ui.more"); } }} />
       </Tabs>
       <QuickMenu geometry={geometry} />
     </View>

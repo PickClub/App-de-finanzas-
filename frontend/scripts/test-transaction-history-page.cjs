@@ -1,3 +1,4 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // Actual screen + React Query, synthetic API only: no Expo server or database.
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const vm = require('node:vm'), cp = require('node:child_process'), ts = require('typescript');
@@ -16,8 +17,8 @@ const text = tree => typeof tree === 'string' ? tree : (tree?.children || []).fl
 const plain = value => JSON.parse(JSON.stringify(value));
 const apiExports = {};
 let fetchResponse, requests = [];
-vm.runInNewContext(compile('frontend/src/api.ts'), {exports:apiExports,process:{env:{}},URLSearchParams,
-  fetch:async (url,options) => {requests.push({url,options});return fetchResponse();} });
+vm.runInNewContext(compile('frontend/src/api.ts'), localeGlobals({exports:apiExports,process:{env:{}},URLSearchParams,
+  fetch:async (url,options) => {requests.push({url,options});return fetchResponse();} }));
 const { ApiError } = apiExports;
 const row = (id, rest={}) => ({id:String(id),type:'expense',date:'2026-10-10T12:00:00Z',amount:'70',account_id:'A',category_id:'C',name:`Synthetic ${id}`,...rest});
 function createFixture(backend, initialParams={}) {
@@ -39,7 +40,7 @@ function createFixture(backend, initialParams={}) {
   const api = {listCategories:async()=>[],getTransactionPage:async (filters,cursor,signal)=>{
     calls.push({filters:plain(filters),cursor,signal});return backend(filters,cursor,signal);
   }, listTransactions:()=>{throw Error('Downloaded legacy history');}};
-  const mocks = {react,
+  const mocks = localeMocks({react,
     'react-native':{View:'View',ScrollView:'ScrollView',Platform:{OS:'android'},RefreshControl:'RefreshControl'},
     'react-native-reanimated':{default:{View:'AnimatedView'},FadeIn:{duration:()=>({})}},
     '@/src/components/pressable':{Pressable:'Pressable'},'@/src/components/typography':{Text:'Text'},
@@ -57,11 +58,11 @@ function createFixture(backend, initialParams={}) {
     '@/src/format':{formatCurrency:value=>{displayedAmounts.push(value);return String(value);},formatDateTime:value=>value,translateCategoryName:value=>value},
     '@/src/i18n':{default:{language:'es'},useTranslation:()=>({t:x=>x})},
     '@/src/components/ui':{IconTile:'IconTile'},'@/src/lock':{useLock:()=>({guard:fn=>fn})},
-    '@/src/components/sheets':{AppSheet:'AppSheet'},'@/src/components/date-range-sheet':{DateRangeSheet:'DateRangeSheet'},'@/src/ui-scale':{us:x=>x},
-  };
+    '@/src/components/sheets':{AppSheet:'AppSheet'},'@/src/components/date-range-sheet':{DateRangeSheet:'DateRangeSheet'},'@/src/components/elastic-scroll-view':{ElasticScrollView:'ScrollView'},'@/src/native-scroll':{NATIVE_VERTICAL_SCROLL:{overScrollMode:'always',bounces:true,alwaysBounceVertical:true}},'@/src/ui-scale':{us:x=>x},
+  });
   const NativeDate=Date;
   class FixedDate extends NativeDate {constructor(...args){super(...(args.length?args:['2026-10-15T12:00:00Z']));}}
-  const exports={};vm.runInNewContext(compile(screen),{exports,require:name=>{assert(name in mocks,name);return mocks[name];},Date:FixedDate});
+  const exports={};vm.runInNewContext(compile(screen),localeGlobals({exports,require:name=>{assert(name in mocks,name);return mocks[name];},Date:FixedDate}));
   const render=()=>{index=0;effects=[];const tree=exports.default();effects.forEach(fn=>fn());if(first){first=false;focus();}return tree;};
   return {render,calls,pushes,displayedAmounts,client,
     settle:async()=>{await observer.refetch({cancelRefetch:false});return render();},
@@ -72,7 +73,7 @@ function syntheticBackend(records) {
   return async (filters,cursor) => {
     let items=records.filter(r=>(!filters.account_id || r.account_id===filters.account_id || (r.type==='transfer' && r.to_account_id===filters.account_id))
       && (!filters.category_id || r.category_id===filters.category_id) && (!filters.types || filters.types.includes(r.type))
-      && new Date(r.date)>=new Date(filters.start) && new Date(r.date)<new Date(filters.end));
+      && (!filters.start || new Date(r.date)>=new Date(filters.start)) && (!filters.end || new Date(r.date)<new Date(filters.end)));
     // Integer fixtures only; exact high-precision ordering is supplied separately.
     items.sort((a,b)=>filters.order==='high'||filters.order==='low'
       ? (BigInt(a.amount)>BigInt(b.amount)?1:BigInt(a.amount)<BigInt(b.amount)?-1:0)*(filters.order==='high'?-1:1)
@@ -177,13 +178,13 @@ async function main(){
     find(tree,'all-tx-error-prev').props.onPress();f.render();tree=await f.settle();assert.equal(f.calls.at(-1).cursor,undefined);
     assert(!find(tree,'all-tx-error'));f.close();
   });
-  await check('refresh/focus restarts at first page; common invalidation still reaches active page',async()=>{
+  await check('focus restarts at first page; invalidation remains active without pull-to-refresh',async()=>{
     const f=createFixture(syntheticBackend(Array.from({length:45},(_,i)=>row(i))));f.render();let tree=await f.settle();
     find(tree,'all-tx-page-next').props.onPress();f.render();tree=await f.settle();assert.equal(f.calls.at(-1).cursor,'20');
     tree=f.focus();tree=await f.settle();assert.equal(f.calls.at(-1).cursor,undefined);
     const before=f.calls.length;await f.client.invalidateQueries({queryKey:['transactions']});tree=f.render();assert(f.calls.length>before);
     function refreshControl(node){if(!node||typeof node!=='object')return;return node.props?.refreshControl || (node.children||[]).flat(Infinity).map(refreshControl).find(Boolean);}
-    refreshControl(tree).props.onRefresh();f.render();await f.settle();assert.equal(f.calls.at(-1).cursor,undefined);f.close();
+    assert.equal(refreshControl(tree),undefined);assert.equal(f.calls.at(-1).cursor,undefined);f.close();
   });
   await check('style definitions unchanged; no local filtering/sorting/slicing or legacy list request',async()=>{
     const source=read(screen),base=cp.execFileSync('git',['show',`HEAD:${screen}`],{cwd:root,encoding:'utf8'}),marker='const useStyles =';

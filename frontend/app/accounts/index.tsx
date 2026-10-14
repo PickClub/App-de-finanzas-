@@ -1,3 +1,5 @@
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React from "react";
 import { View, ScrollView, Platform } from "react-native";
 import Svg, { Path } from "react-native-svg";
@@ -47,7 +49,7 @@ export default function Accounts() {
   const shadow = pal.dark ? null : styles.softShadow;
 
   return (
-    <ScrollView
+    <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
       style={{ flex: 1, backgroundColor: pal.bg }}
       contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40) }}
     >
@@ -99,7 +101,7 @@ export default function Accounts() {
           </Pressable>
         ))}
       </View>
-    </ScrollView>
+    </ElasticScrollView>
   );
 }
 

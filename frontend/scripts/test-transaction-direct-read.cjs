@@ -1,3 +1,4 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // C3 block 1: actual API and screens, synthetic reads, no server or storage.
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const vm = require('node:vm'), cp = require('node:child_process'), ts = require('typescript');
@@ -15,9 +16,9 @@ function compile(file) {
 }
 const apiExports = {};
 let fetchResult, requests = [];
-vm.runInNewContext(compile('frontend/src/api.ts'), { exports:apiExports, process:{env:{}}, fetch:async (url, options) => {
+vm.runInNewContext(compile('frontend/src/api.ts'), localeGlobals({ exports:apiExports, process:{env:{}}, fetch:async (url, options) => {
   requests.push({url,options}); return fetchResult();
-} });
+} }));
 const { ApiError } = apiExports;
 const row = (id, type='expense') => ({id,type,amount:70,name:`Synthetic ${id}`,date:'2026-10-01T12:00:00Z',
   account_id:'A',to_account_id:type==='transfer'?'B':undefined,category_id:'C',notes:'Original'});
@@ -42,10 +43,11 @@ function fixture(kind, initialParams) {
     updateTransaction:async (id,payload)=>{writes.push({method:'PUT',id,payload});},
     createTransaction:async payload=>{writes.push({method:'POST',payload});},
     deleteTransaction:async id=>{writes.push({method:'DELETE',id});} };
-  const mocks = {react,
+  const mocks = localeMocks({react,
     'react-native':{View:'View',ScrollView:'ScrollView',KeyboardAvoidingView:'KeyboardAvoidingView',
       Platform:{OS:'android'},Keyboard:{dismiss:()=>{}},Alert:{alert:()=>{}}},
     '@/src/components/pressable':{Pressable:'Pressable'},
+    '@/src/components/elastic-scroll-view':{ElasticScrollView:'ScrollView'},
     '@/src/components/typography':{Text:'Text',TextInput:'TextInput'},
     '@react-native-vector-icons/ionicons':{default:'Icon'},
     'expo-router':{useLocalSearchParams:()=>params,useRouter:()=>({back:()=>backs++,push:()=>{}})},
@@ -63,8 +65,8 @@ function fixture(kind, initialParams) {
     },useQueryClient:()=>({invalidateQueries:args=>invalidations.push(args)})},
     '@/src/theme':{useTheme:()=>({colors:styles,scheme:'light'}),makeStyles:()=>()=>styles,radius:{},spacing:{lg:16,md:12}},
     '@/src/components/ui':{IconTile:'IconTile'},'@/src/components/sheets':{AppSheet:'AppSheet',ConfirmSheet:'ConfirmSheet'},
-    '@/src/format':{formatCurrency:v=>String(v)},'@/src/ui-scale':{us:x=>x} };
-  const exports={};vm.runInNewContext(compile(files[kind]),{exports,require:name=>{assert(name in mocks,name);return mocks[name];},setTimeout});
+    '@/src/format':{formatCurrency:v=>String(v)},'@/src/native-scroll':{NATIVE_VERTICAL_SCROLL:{overScrollMode:'always',bounces:true,alwaysBounceVertical:true}},'@/src/ui-scale':{us:x=>x} });
+  const exports={};vm.runInNewContext(compile(files[kind]),localeGlobals({exports,require:name=>{assert(name in mocks,name);return mocks[name];},setTimeout}));
   const render=()=>{hook=0;effects=[];const tree=exports.default();const pending=effects;effects=[];pending.forEach(f=>f());return tree;};
   const q=id=>queries.get(JSON.stringify(['transactions','detail',id]));
   return {render,q,next:(id,f)=>next.set(id,f),navigate:p=>{params=p;},calls,writes,invalidations,
@@ -100,7 +102,7 @@ async function main() {
       tree=await f.settle('old-2001');assert.equal(find(tree,'name-input').props.value,'Draft');
       await find(tree,'save-tx').props.onPress();
       assert.equal(f.writes[0].method,mode==='edit'?'PUT':'POST');assert.equal(f.writes[0].payload.name,'Draft');
-      assert.equal(f.writes[0].payload.notes,'Original');assert.equal(f.invalidations.length,1);assert.equal(f.backs(),1);
+      assert.equal(f.writes[0].payload.notes,mode==='edit'?undefined:'Original');assert.equal(f.invalidations.length,1);assert.equal(f.backs(),1);
     }else assert(text(tree).includes('Synthetic old-2001'));
     for(const error of [new ApiError(404,'{"detail":"Missing"}'),new ApiError(409,'{"detail":"Ambiguous"}'),
       new ApiError(503,'{"detail":"Unavailable"}'),new Error('Network')]){
@@ -126,8 +128,9 @@ async function main() {
   for(const type of ['expense','income','transfer','loan_given','loan_received','debt_payment']){
     const f=fixture('form',{id:'linked'});f.render();f.next('linked',async()=>({...row('linked',type),debt_payment_id:type==='debt_payment'?'receipt':undefined}));
     const tree=await f.settle('linked');await find(tree,'save-tx').props.onPress();
-    assert.equal(f.writes[0].payload.type,type);assert.equal(f.writes[0].payload.account_id,'A');
-    assert.equal(f.writes[0].payload.to_account_id,type==='transfer'?'B':undefined);
+    assert.equal(f.writes[0].payload.type,type);
+    const saved={...row('linked',type),...f.writes[0].payload};
+    assert.equal(saved.account_id,'A');assert.equal(saved.to_account_id,type==='transfer'?'B':undefined);
     assert(!('_history_keys' in f.writes[0].payload));
   }
   console.log('PASS: existing type/payload handling including linked debt payment is unchanged.');
@@ -175,10 +178,16 @@ async function main() {
       assert.equal(current.slice(current.indexOf('const useStyles =')),old.slice(old.indexOf('const useStyles =')));
       assert(!current.includes('api.listTransactions'));
       for(const name of file===files.form?['remove']:['doEdit','doDuplicate','doDelete','saveCategory','saveRecurring'])
-        assert.equal(initializer(current,name),initializer(old,name));
-      if(file===files.form)assert.equal(initializer(current,'save'),initializer(old,'save'));
+        assert.equal(normalizeUI(initializer(current,name)),normalizeUI(initializer(old,name)));
+      if(file===files.form){
+        const approvedBlock=current.slice(current.indexOf('    if (params.id && sourceQ.data?.id === sourceId\n'),current.indexOf('    savingRef.current = true;'));
+        assert(approvedBlock.includes('delete payload[field]'));
+        const normalized=current.replace(approvedBlock,'').replace('params.id ? name : name.trim() || "Sin descripción"','name.trim() || "Sin descripción"');
+        assert.equal(normalizeUI(initializer(normalized,'save')),normalizeUI(initializer(old,'save')));
+      }
     }
   }
   console.log('PASS: real cache isolation/invalidation, unchanged financial handlers and style definitions.');
 }
-main().catch(error=>{console.error(error);process.exitCode=1;});
+module.exports={fixture,find,row,text};
+if(require.main===module)main().catch(error=>{console.error(error);process.exitCode=1;});

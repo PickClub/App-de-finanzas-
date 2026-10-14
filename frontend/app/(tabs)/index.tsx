@@ -1,5 +1,9 @@
+import i18n, { tr, useTranslation } from "@/src/i18n";
+import { HomeAmount, HomeAmountScope, validAmountLayout, type AmountLayout } from "@/src/components/home-amount";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { View, ScrollView, StyleSheet, RefreshControl, Dimensions, Platform, Animated as RNAnimated, useWindowDimensions } from "react-native";
+import { View, ScrollView, StyleSheet, Dimensions, Platform, Animated as RNAnimated, useWindowDimensions } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Animated, {
@@ -23,7 +27,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing, type ThemeColors } from "@/src/theme";
 import { formatCurrency, formatCurrencyInt, formatDateLong, formatDateTime, translateCategoryName } from "@/src/format";
-import i18n, { useTranslation } from "@/src/i18n";
+
 import { IconTile } from "@/src/components/ui";
 import { useLock } from "@/src/lock";
 import { WalletIcon, ChartIcon, HandCoinIcon } from "@/src/components/animated-section-icons";
@@ -89,8 +93,8 @@ const darken = (hex: string, amt: number) => mixToward(hex, 0, amt);
 
 function accountTypeLabel(t: string) {
   const m: Record<string, string> = {
-    cash: "Efectivo", checking: "Corriente", savings: "Ahorro",
-    credit_card: "Tarjeta", wallet: "Wallet", other: "Otra",
+    cash: tr("ui.cash"), checking: tr("ui.checking"), savings: tr("ui.savings"),
+    credit_card: tr("ui.credit_card"), wallet: tr("ui.wallet"), other: tr("ui.other"),
   };
   return m[t] || t;
 }
@@ -112,48 +116,47 @@ const MR_SLOTS = 6;
 type MRGhost = { name: string; badge: string; icon: string; tint: string; amount: number; kind: "income" | "expense" | "transfer"; date: string };
 const MR_GHOST_BASE = Date.now();
 const ghostDate = (h: number) => new Date(MR_GHOST_BASE - h * 3600 * 1000).toISOString();
-const MR_GHOSTS: Record<string, { es: string; en: string; bes: string; ben: string; icon: string; tint: string; amount: number; kind: MRGhost["kind"] }[]> = {
+const MR_GHOSTS: Record<string, { labelKey: string; badgeKey: string; icon: string; tint: string; amount: number; kind: MRGhost["kind"] }[]> = {
   all: [
-    { es: "Supermercado", en: "Groceries", bes: "Comida", ben: "Food", icon: "cart-outline", tint: "#F5B83B", amount: 85, kind: "expense" },
-    { es: "Salario", en: "Salary", bes: "Sueldo", ben: "Salary", icon: "briefcase-outline", tint: "#2FA47C", amount: 1200, kind: "income" },
-    { es: "Restaurante", en: "Restaurant", bes: "Comida", ben: "Food", icon: "restaurant-outline", tint: "#FF8A3D", amount: 42, kind: "expense" },
-    { es: "Transferencia", en: "Transfer", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 250, kind: "transfer" },
-    { es: "Gasolina", en: "Gas", bes: "Transporte", ben: "Transport", icon: "car-outline", tint: "#8F5BE8", amount: 60, kind: "expense" },
-    { es: "Compras", en: "Shopping", bes: "Compras", ben: "Shopping", icon: "bag-handle-outline", tint: "#D95345", amount: 125, kind: "expense" },
+    { labelKey: "ui.example_groceries", badgeKey: "ui.example_food", icon: "cart-outline", tint: "#F5B83B", amount: 85, kind: "expense" },
+    { labelKey: "ui.example_salary", badgeKey: "ui.example_salary", icon: "briefcase-outline", tint: "#2FA47C", amount: 1200, kind: "income" },
+    { labelKey: "ui.example_restaurant", badgeKey: "ui.example_food", icon: "restaurant-outline", tint: "#FF8A3D", amount: 42, kind: "expense" },
+    { labelKey: "ui.example_transfer", badgeKey: "ui.example_transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 250, kind: "transfer" },
+    { labelKey: "ui.example_gas", badgeKey: "ui.example_transport", icon: "car-outline", tint: "#8F5BE8", amount: 60, kind: "expense" },
+    { labelKey: "ui.example_shopping", badgeKey: "ui.example_shopping", icon: "bag-handle-outline", tint: "#D95345", amount: 125, kind: "expense" },
   ],
   income: [
-    { es: "Salario", en: "Salary", bes: "Sueldo", ben: "Salary", icon: "briefcase-outline", tint: "#2FA47C", amount: 1200, kind: "income" },
-    { es: "Freelance", en: "Freelance", bes: "Trabajo", ben: "Work", icon: "laptop-outline", tint: "#29C4A9", amount: 350, kind: "income" },
-    { es: "Venta", en: "Sale", bes: "Ventas", ben: "Sales", icon: "pricetag-outline", tint: "#2FA47C", amount: 90, kind: "income" },
-    { es: "Reembolso", en: "Refund", bes: "Reembolso", ben: "Refund", icon: "return-down-back-outline", tint: "#4C83EA", amount: 45, kind: "income" },
-    { es: "Intereses", en: "Interest", bes: "Ahorro", ben: "Savings", icon: "trending-up-outline", tint: "#29C4A9", amount: 18, kind: "income" },
-    { es: "Bono", en: "Bonus", bes: "Sueldo", ben: "Salary", icon: "gift-outline", tint: "#2FA47C", amount: 200, kind: "income" },
+    { labelKey: "ui.example_salary", badgeKey: "ui.example_salary", icon: "briefcase-outline", tint: "#2FA47C", amount: 1200, kind: "income" },
+    { labelKey: "ui.example_freelance", badgeKey: "ui.example_work", icon: "laptop-outline", tint: "#29C4A9", amount: 350, kind: "income" },
+    { labelKey: "ui.example_sale", badgeKey: "ui.example_sales", icon: "pricetag-outline", tint: "#2FA47C", amount: 90, kind: "income" },
+    { labelKey: "ui.example_refund", badgeKey: "ui.example_refund", icon: "return-down-back-outline", tint: "#4C83EA", amount: 45, kind: "income" },
+    { labelKey: "ui.example_interest", badgeKey: "ui.example_savings", icon: "trending-up-outline", tint: "#29C4A9", amount: 18, kind: "income" },
+    { labelKey: "ui.example_bonus", badgeKey: "ui.example_salary", icon: "gift-outline", tint: "#2FA47C", amount: 200, kind: "income" },
   ],
   expense: [
-    { es: "Supermercado", en: "Groceries", bes: "Comida", ben: "Food", icon: "cart-outline", tint: "#F5B83B", amount: 85, kind: "expense" },
-    { es: "Restaurante", en: "Restaurant", bes: "Comida", ben: "Food", icon: "restaurant-outline", tint: "#FF8A3D", amount: 42, kind: "expense" },
-    { es: "Gasolina", en: "Gas", bes: "Transporte", ben: "Transport", icon: "car-outline", tint: "#8F5BE8", amount: 60, kind: "expense" },
-    { es: "Compras", en: "Shopping", bes: "Compras", ben: "Shopping", icon: "bag-handle-outline", tint: "#D95345", amount: 125, kind: "expense" },
-    { es: "Farmacia", en: "Pharmacy", bes: "Salud", ben: "Health", icon: "medkit-outline", tint: "#FF654A", amount: 28, kind: "expense" },
-    { es: "Internet", en: "Internet", bes: "Servicios", ben: "Utilities", icon: "wifi-outline", tint: "#4C83EA", amount: 35, kind: "expense" },
+    { labelKey: "ui.example_groceries", badgeKey: "ui.example_food", icon: "cart-outline", tint: "#F5B83B", amount: 85, kind: "expense" },
+    { labelKey: "ui.example_restaurant", badgeKey: "ui.example_food", icon: "restaurant-outline", tint: "#FF8A3D", amount: 42, kind: "expense" },
+    { labelKey: "ui.example_gas", badgeKey: "ui.example_transport", icon: "car-outline", tint: "#8F5BE8", amount: 60, kind: "expense" },
+    { labelKey: "ui.example_shopping", badgeKey: "ui.example_shopping", icon: "bag-handle-outline", tint: "#D95345", amount: 125, kind: "expense" },
+    { labelKey: "ui.example_pharmacy", badgeKey: "ui.example_health", icon: "medkit-outline", tint: "#FF654A", amount: 28, kind: "expense" },
+    { labelKey: "ui.example_internet", badgeKey: "ui.example_utilities", icon: "wifi-outline", tint: "#4C83EA", amount: 35, kind: "expense" },
   ],
   transfer: [
-    { es: "Transferencia", en: "Transfer", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 250, kind: "transfer" },
-    { es: "A ahorros", en: "To savings", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 150, kind: "transfer" },
-    { es: "Entre cuentas", en: "Between accounts", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 80, kind: "transfer" },
-    { es: "A efectivo", en: "To cash", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 60, kind: "transfer" },
-    { es: "A tarjeta", en: "To card", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 300, kind: "transfer" },
-    { es: "Fondo viaje", en: "Travel fund", bes: "Transferencia", ben: "Transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 120, kind: "transfer" },
+    { labelKey: "ui.example_transfer", badgeKey: "ui.example_transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 250, kind: "transfer" },
+    { labelKey: "ui.example_to_savings", badgeKey: "ui.example_transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 150, kind: "transfer" },
+    { labelKey: "ui.example_between_accounts", badgeKey: "ui.example_transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 80, kind: "transfer" },
+    { labelKey: "ui.example_to_cash", badgeKey: "ui.example_transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 60, kind: "transfer" },
+    { labelKey: "ui.example_to_card", badgeKey: "ui.example_transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 300, kind: "transfer" },
+    { labelKey: "ui.example_travel_fund", badgeKey: "ui.example_transfer", icon: "swap-horizontal-outline", tint: "#4C83EA", amount: 120, kind: "transfer" },
   ],
 };
 function mrGhosts(filter: string, count: number, lang?: string): MRGhost[] {
   if (count <= 0) return [];
-  const en = (lang || "es").startsWith("en");
   const list = MR_GHOSTS[filter] || MR_GHOSTS.all;
   // Use the LAST `count` examples so the visible set stays stable as real rows fill the top.
   return list.slice(MR_SLOTS - count).map((g, i) => ({
-    name: en ? g.en : g.es,
-    badge: en ? g.ben : g.bes,
+    name: tr(g.labelKey, { lng: lang || i18n.language }),
+    badge: tr(g.badgeKey, { lng: lang || i18n.language }),
     icon: g.icon,
     tint: g.tint,
     amount: g.amount,
@@ -565,11 +568,8 @@ export default function Home() {
   const debtCountShareLabel = (amount: number, count: number) => {
     if (hidden) return "••••";
     if (!summaryReady) return summaryPlaceholder;
-    const isEs = i18n.language.startsWith("es");
-    const pct = `${Math.round(debtShare(amount))}% ${isEs ? "del total" : "of total"}`;
-    if (!count) return pct;
-    const noun = isEs ? (count === 1 ? "deuda" : "deudas") : (count === 1 ? "debt" : "debts");
-    return `${count} ${noun} · ${pct}`;
+    return count ? tr("home.debtCountShare", { count, percent: Math.round(debtShare(amount)) })
+      : tr("home.debtShare", { percent: Math.round(debtShare(amount)) });
   };
   // Scheme-aware opacity for the decorative pastel hills (subtle but perceptible).
   const ringTrack = scheme === "dark" ? colors.border : "#E9ECE7";
@@ -641,7 +641,6 @@ export default function Home() {
 
   // Bilingual labels for the "Resumen del mes" section (inline, to avoid
   // touching shared i18n files or any other screen).
-  const l10n = (es: string, en: string) => (i18n.language.startsWith("es") ? es : en);
   // "Distribución de mis cuentas" data — SYNCED to the SAME active page as the
   // top accounts carousel (acctPage is the single source of truth). It shows
   // ONLY the accounts on the active page (max 5), sorted by balance. The donut
@@ -667,6 +666,12 @@ export default function Home() {
   // each icon can play its entrance once when its section first becomes
   // visible. `focusId` bumps on every Home focus so the entrance can replay
   // after the user leaves and returns (scrolling alone never replays it).
+  const balanceHeaderLayout = useSharedValue<AmountLayout | null>(null);
+  const balanceBlockLayout = useSharedValue<AmountLayout | null>(null);
+  const totalAmountLayout = useSharedValue<AmountLayout | null>(null);
+  const summaryRowLayout = useSharedValue<AmountLayout | null>(null);
+  const balanceCardLayout = useSharedValue<AmountLayout | null>(null);
+  const monthAmountLayout = useSharedValue<AmountLayout | null>(null);
   const scrollY = useSharedValue(0);
   const viewportH = useSharedValue(0);
   const accountsY = useSharedValue(0);
@@ -696,44 +701,36 @@ export default function Home() {
   );
 
   return (
+    <HomeAmountScope>
     <View style={{ flex: 1, backgroundColor: scheme === "dark" ? colors.surface : "#E8EFE7" }}>
-    <Animated.ScrollView
+    <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
       testID="home-scroll"
       style={{ flex: 1, backgroundColor: "transparent" }}
       contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(spacing.lg) }}
-      onScroll={scrollHandler}
+      animatedOnScroll={scrollHandler}
       scrollEventThrottle={16}
       onLayout={(e) => {
         viewportH.value = e.nativeEvent.layout.height;
       }}
-      refreshControl={
-        <RefreshControl
-          refreshing={summaryQ.isFetching}
-          onRefresh={() => {
-            summaryQ.refetch();
-            txQ.refetch();
-          }}
-          tintColor={colors.brandPrimary}
-        />
-      }
     >
       {/* Header — compact balance + growth (greeting removed) */}
-      <View style={styles.header}>
+      <View style={styles.header} onLayout={e => { balanceHeaderLayout.value = validAmountLayout(e.nativeEvent.layout); }}>
         <View style={styles.balanceIconTile}>
           <Ionicons name="wallet-outline" size={us(20)} color={colors.brandPrimary} />
         </View>
-        <View style={styles.balanceBlock}>
+        <View style={styles.balanceBlock} onLayout={e => { balanceBlockLayout.value = validAmountLayout(e.nativeEvent.layout); }}>
           <Text
             style={styles.balanceNumber}
+            onLayout={e => { totalAmountLayout.value = validAmountLayout(e.nativeEvent.layout); }}
             testID="total-balance"
             onPress={summaryQ.isError && !summaryQ.isFetching ? () => summaryQ.refetch() : undefined}
             accessibilityRole={summaryQ.isError ? "button" : undefined}
-            accessibilityLabel={summaryQ.isError ? l10n("No se pudo cargar el resumen. Toca para reintentar.", "Summary unavailable. Tap to retry.") : undefined}
+            accessibilityLabel={summaryQ.isError ? tr("ui.summary_unavailable_tap_to_retry") : undefined}
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.6}
           >
-            {summaryQ.isError ? l10n("Reintentar", "Retry") : hidden ? "••••" : summaryReady ? formatCurrencyInt(summary.total_balance) : summaryPlaceholder}
+            <HomeAmount scrollY={scrollY} viewportH={viewportH} layouts={[balanceHeaderLayout, balanceBlockLayout, totalAmountLayout]}>{summaryQ.isError ? tr("ui.retry") : hidden ? "••••" : summaryReady ? formatCurrencyInt(summary.total_balance) : summaryPlaceholder}</HomeAmount>
           </Text>
           <View style={styles.growthRow}>
             <Ionicons
@@ -897,18 +894,18 @@ export default function Home() {
       </View>
 
       {/* Resumen del mes — 3 symmetric stat cards */}
-      <View style={styles.statRow}>
-        {/* Balance del mes (net = income - expense) — number in dark/black */}
+      <View style={styles.statRow} onLayout={e => { summaryRowLayout.value = validAmountLayout(e.nativeEvent.layout); }}>
+        {/* Total ingresado — green */}
         <View style={styles.statCard}>
-          <View style={[styles.statBadge, statCompact && styles.statBadgeCompact, { backgroundColor: scheme === "dark" ? colors.brandPrimary + "26" : "#DCE9DD" }]}>
-            <Ionicons name="wallet-outline" size={us(16)} color={scheme === "dark" ? colors.brandPrimary : "#126046"} />
+          <View style={[styles.statBadge, statCompact && styles.statBadgeCompact, { backgroundColor: colors.incomeGreen + (scheme === "dark" ? "26" : "1F") }]}>
+            <Ionicons name="trending-up" size={us(16)} color={colors.incomeGreen} />
           </View>
-          <Text style={[styles.statTitle, statCompact && styles.statTitleCompact]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Balance del mes", "Month balance")}</Text>
-          <Text style={[styles.statAmount, { color: colors.onSurface }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
-            {money(monthNet)}
+          <Text style={[styles.statTitle, statCompact && styles.statTitleCompact]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{tr("ui.total_income")}</Text>
+          <Text style={[styles.statAmount, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
+            {money(summary?.month_income || 0)}
           </Text>
           <View style={[styles.statSpark, statCompact && styles.statSparkCompact]}>
-            <StatSpark color={scheme === "dark" ? colors.brandPrimary : "#126046"} data={[3, 4, 3.4, 5, 4.6, 6, 5.6, 6.6]} />
+            <StatSpark color={colors.incomeGreen} data={[3, 3.6, 3.2, 4.4, 4, 5, 5.4, 6.4]} />
           </View>
         </View>
         {/* Total gastado — soft / desaturated red */}
@@ -916,7 +913,7 @@ export default function Home() {
           <View style={[styles.statBadge, statCompact && styles.statBadgeCompact, { backgroundColor: colors.expenseRed + (scheme === "dark" ? "26" : "1F") }]}>
             <Ionicons name="trending-down" size={us(16)} color={colors.expenseRed} />
           </View>
-          <Text style={[styles.statTitle, statCompact && styles.statTitleCompact]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Total gastado", "Total spent")}</Text>
+          <Text style={[styles.statTitle, statCompact && styles.statTitleCompact]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{tr("ui.total_spent")}</Text>
           <Text style={[styles.statAmount, { color: lighten(colors.expenseRed, 0.16) }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
             {money(summary?.month_expense || 0)}
           </Text>
@@ -924,17 +921,17 @@ export default function Home() {
             <StatSpark color={colors.expenseRed} data={[3.4, 3, 4, 3.8, 4.8, 4.4, 5.6, 6.2]} />
           </View>
         </View>
-        {/* Total ingresado — green */}
-        <View style={styles.statCard}>
-          <View style={[styles.statBadge, statCompact && styles.statBadgeCompact, { backgroundColor: colors.incomeGreen + (scheme === "dark" ? "26" : "1F") }]}>
-            <Ionicons name="trending-up" size={us(16)} color={colors.incomeGreen} />
+        {/* Balance del mes (net = income - expense) — purple identity */}
+        <View style={styles.statCard} onLayout={e => { balanceCardLayout.value = validAmountLayout(e.nativeEvent.layout); }}>
+          <View style={[styles.statBadge, statCompact && styles.statBadgeCompact, { backgroundColor: "#EDE9FE" }]}>
+            <Ionicons name="wallet-outline" size={us(16)} color={"#A78BFA"} />
           </View>
-          <Text style={[styles.statTitle, statCompact && styles.statTitleCompact]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{l10n("Total ingresado", "Total income")}</Text>
-          <Text style={[styles.statAmount, { color: colors.incomeGreen }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
-            {money(summary?.month_income || 0)}
+          <Text style={[styles.statTitle, statCompact && styles.statTitleCompact]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{tr("ui.month_balance")}</Text>
+          <Text onLayout={e => { monthAmountLayout.value = validAmountLayout(e.nativeEvent.layout); }} style={[styles.statAmount, { color: "#7C3AED" }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
+            <HomeAmount scrollY={scrollY} viewportH={viewportH} layouts={[summaryRowLayout, balanceCardLayout, monthAmountLayout]}>{money(monthNet)}</HomeAmount>
           </Text>
           <View style={[styles.statSpark, statCompact && styles.statSparkCompact]}>
-            <StatSpark color={colors.incomeGreen} data={[3, 3.6, 3.2, 4.4, 4, 5, 5.4, 6.4]} />
+            <StatSpark color={"#A78BFA"} data={[3, 4, 3.4, 5, 4.6, 6, 5.6, 6.6]} />
           </View>
         </View>
       </View>
@@ -943,9 +940,9 @@ export default function Home() {
       <View style={styles.distWrap}>
         <View testID="cuentas-scroll" style={styles.distCard}>
           <View style={styles.distHeader}>
-            <Text style={styles.distTitle}>{l10n("Distribución de mis cuentas", "My accounts distribution")}</Text>
+            <Text style={styles.distTitle}>{tr("ui.my_accounts_distribution")}</Text>
             <Pressable style={styles.distSeePill} onPress={() => router.push("/accounts")} hitSlop={8}>
-              <Text style={styles.distSeeText}>{l10n("Ver cuentas", "View accounts")}</Text>
+              <Text style={styles.distSeeText}>{tr("ui.view_accounts")}</Text>
               <Ionicons name="chevron-forward" size={us(13)} color={scheme === "dark" ? colors.brandPrimary : "#126046"} />
             </Pressable>
           </View>
@@ -996,7 +993,7 @@ export default function Home() {
                 <Text style={styles.distCenterVal} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55}>
                   {hidden ? "••••" : formatCurrencyInt(distTotal)}
                 </Text>
-                <Text style={styles.distCenterLabel}>{l10n("Total", "Total")}</Text>
+                <Text style={styles.distCenterLabel}>{tr("ui.total")}</Text>
               </View>
             </View>
             {/* Side list — SAME paged accounts. Percentages live ONLY here. */}
@@ -1028,6 +1025,16 @@ export default function Home() {
                   </Animated.View>
                 );
               })}
+              {/* Invisible rows reserve the exact five-account list footprint. */}
+              {distAccounts.length > 0 && Array.from({ length: Math.max(0, 5 - distAccounts.length) }, (_, index) => (
+                <View key={`dist-space-${index}`} testID="dist-empty-row" pointerEvents="none" accessible={false}
+                  importantForAccessibility="no-hide-descendants" style={[styles.distRow, { opacity: 0 }]}>
+                  <Text style={styles.distName}> </Text>
+                  <View style={styles.distPctCol}>
+                    <View style={styles.distPctPill}><Text style={styles.distPct}> </Text></View>
+                  </View>
+                </View>
+              ))}
               {distAccounts.length === 0 && (
                 <Text style={styles.distEmpty}>{t("home.noAccounts")}</Text>
               )}
@@ -1303,12 +1310,14 @@ export default function Home() {
           </View>
         </Pressable>
       </View>
-    </Animated.ScrollView>
+    </ElasticScrollView>
     <DateRangeSheet
       ref={dateSheetRef}
       onApply={applyDateRange}
+      allowClear
     />
     </View>
+    </HomeAmountScope>
   );
 }
 

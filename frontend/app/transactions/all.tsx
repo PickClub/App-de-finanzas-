@@ -1,5 +1,8 @@
+import i18n, { tr, useTranslation } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, ScrollView, Platform, RefreshControl } from "react-native";
+import { View, ScrollView, Platform } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
@@ -10,7 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, type TransactionPageFilters } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatCurrency, formatDateTime, translateCategoryName } from "@/src/format";
-import i18n, { useTranslation } from "@/src/i18n";
+
 import { IconTile } from "@/src/components/ui";
 import { useLock } from "@/src/lock";
 import { AppSheet } from "@/src/components/sheets";
@@ -29,7 +32,7 @@ const DAY = 24 * 3600 * 1000;
 const MONTHS_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 const MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-type Period = "today" | "7d" | "30d" | "month" | "custom";
+type Period = "today" | "7d" | "30d" | "month" | "custom" | "all";
 type TypeFilter = "all" | "income" | "expense" | "transfer";
 type SortKey = "recent" | "oldest" | "high" | "low";
 
@@ -98,6 +101,7 @@ export default function AllTransactions() {
 
   // Active window [start, end] for the selected period.
   const range = useMemo(() => {
+    if (period === "all") return null;
     const now = new Date();
     if (period === "today") return { start: startOfDay(now), end: endOfDay(now) };
     if (period === "7d") return { start: startOfDay(new Date(now.getTime() - 6 * DAY)), end: endOfDay(now) };
@@ -110,6 +114,7 @@ export default function AllTransactions() {
 
   // Header label follows the selected period.
   const label = useMemo(() => {
+    if (!range) return tr("ui.all_dates");
     const s = new Date(range.start);
     const e = new Date(range.end);
     if (s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth()) return `${MONTHS[e.getMonth()]} ${e.getFullYear()}`;
@@ -122,9 +127,9 @@ export default function AllTransactions() {
     account_id: accountId || undefined,
     category_id: categoryId || undefined,
     types: type === "income" ? ["income", "loan_received"] : type === "expense" ? ["expense", "debt_payment"] : type === "transfer" ? ["transfer"] : undefined,
-    start: new Date(range.start).toISOString(),
+    start: range ? new Date(range.start).toISOString() : undefined,
     // UI ranges include the final millisecond; the backend uses an exclusive end.
-    end: new Date(range.end + 1).toISOString(),
+    end: range ? new Date(range.end + 1).toISOString() : undefined,
     order: sort,
   }), [accountId, categoryId, type, range, sort]);
   const scope = JSON.stringify(filters);
@@ -158,19 +163,19 @@ export default function AllTransactions() {
   const hasMore = ready && txQ.data.has_more;
   const canVisit = (p: number) => !txQ.isFetching && p >= 1 && p !== safePage && (p <= active.cursors.length || (p === safePage + 1 && hasMore));
   const pageError = txQ.error instanceof ApiError && txQ.error.status === 409
-    ? (en ? "The history contains unverifiable or duplicated data. Retry or review the records." : "El historial contiene datos no verificables o duplicados. Reintenta o revisa los registros.")
-    : (en ? "The history could not be loaded. Try again." : "No se pudo cargar el historial. Reintenta.");
+    ? (tr("ui.the_history_contains_unverifiable_or_duplicated_data_retry_or_review_the_records"))
+    : (tr("ui.the_history_could_not_be_loaded_try_again"));
 
   // Any filter / period / sort change returns to page 1.
   const choosePeriod = (p: Period) => { setPeriod(p); resetPage(); };
   const shiftMonth = (delta: number) => {
-    const base = new Date(range.end);
+    const base = new Date(range?.end ?? Date.now());
     setCursor(new Date(base.getFullYear(), base.getMonth() + delta, 1));
     setPeriod("month");
     resetPage();
   };
   const now = new Date();
-  const labelEnd = new Date(range.end);
+  const labelEnd = new Date(range?.end ?? Date.now());
   const canNext = labelEnd.getFullYear() < now.getFullYear() || (labelEnd.getFullYear() === now.getFullYear() && labelEnd.getMonth() < now.getMonth());
 
   const goPage = (p: number) => {
@@ -187,21 +192,21 @@ export default function AllTransactions() {
   };
 
   const onApplyRange = useCallback((r: DateRange | null) => {
-    if (r) { setCustom(r); setPeriod("custom"); } else { setCustom(null); setPeriod("30d"); }
+    if (r) { setCustom(r); setPeriod("custom"); } else { setCustom(null); setPeriod("all"); }
     resetPage();
   }, [resetPage]);
 
   const SORTS: { id: SortKey; label: string }[] = [
-    { id: "recent", label: en ? "Most recent" : "Más recientes" },
-    { id: "oldest", label: en ? "Oldest" : "Más antiguas" },
-    { id: "high", label: en ? "Highest amount" : "Mayor importe" },
-    { id: "low", label: en ? "Lowest amount" : "Menor importe" },
+    { id: "recent", label: tr("ui.most_recent") },
+    { id: "oldest", label: tr("ui.oldest") },
+    { id: "high", label: tr("ui.highest_amount") },
+    { id: "low", label: tr("ui.lowest_amount") },
   ];
   const PERIODS: { id: Period; label: string }[] = [
-    { id: "today", label: en ? "Today" : "Hoy" },
-    { id: "7d", label: en ? "7 days" : "7 días" },
-    { id: "30d", label: en ? "30 days" : "30 días" },
-    { id: "custom", label: en ? "Custom" : "Personalizar" },
+    { id: "today", label: tr("ui.today") },
+    { id: "7d", label: tr("ui.7_days") },
+    { id: "30d", label: tr("ui.30_days") },
+    { id: "custom", label: tr("ui.custom") },
   ];
   const TYPES: { id: TypeFilter; label: string; icon: string; color: string }[] = [
     { id: "all", label: t("home.filterAll"), icon: "grid", color: pal.forest },
@@ -215,10 +220,9 @@ export default function AllTransactions() {
 
   return (
     <View style={{ flex: 1, backgroundColor: pal.bg }}>
-      <ScrollView
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         ref={scrollRef}
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(32), paddingHorizontal: us(spacing.lg) }}
-        refreshControl={<RefreshControl refreshing={txQ.isFetching} onRefresh={refresh} tintColor={pal.forest} />}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -226,7 +230,7 @@ export default function AllTransactions() {
             <Ionicons name="chevron-back" size={us(24)} color={pal.ink} />
           </Pressable>
           <Text style={[styles.title, { color: pal.ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-            {en ? "All transactions" : "Todas las transacciones"}
+            {tr("ui.all_transactions")}
           </Text>
         </View>
 
@@ -237,6 +241,9 @@ export default function AllTransactions() {
               <Ionicons name="calendar-outline" size={us(20)} color={pal.forest} />
             </View>
             <Text testID="all-tx-month" style={[styles.monthText, { color: pal.text }]} numberOfLines={1}>{label}</Text>
+            {range && <Pressable testID="all-tx-clear-date" accessibilityLabel={en ? tr("ui.clear_date_filter") : tr("ui.clear_date_filter")} onPress={() => onApplyRange(null)} hitSlop={8}>
+              <Ionicons name="close" size={us(18)} color={pal.muted} />
+            </Pressable>}
             <Pressable testID="all-tx-prev-month" onPress={() => shiftMonth(-1)} style={[styles.arrowBtn, { backgroundColor: pal.chip }]}>
               <Ionicons name="chevron-back" size={us(18)} color={pal.text} />
             </Pressable>
@@ -284,35 +291,35 @@ export default function AllTransactions() {
         {/* Count + sort */}
         <View style={styles.infoRow}>
           <Text testID="all-tx-count" style={[styles.infoText, { color: pal.muted }]} numberOfLines={1}>
-            {ready ? (en ? `${total} ${total === 1 ? "transaction" : "transactions"} found` : `${total} ${total === 1 ? "transacción encontrada" : "transacciones encontradas"}`) : (en ? "Count unavailable" : "Conteo no disponible")}
+            {ready ? tr("ui.transactions_found", { count: total }) : tr("ui.count_unavailable")}
           </Text>
           <Pressable testID="all-tx-sort" onPress={() => setSortOpen(true)} style={styles.sortBtn} hitSlop={8}>
             <Ionicons name="filter-outline" size={us(14)} color={pal.muted} />
-            <Text style={[styles.infoText, { color: pal.muted }]} numberOfLines={1}>{en ? "Sort" : "Orden"}: {sortLabel}</Text>
+            <Text style={[styles.infoText, { color: pal.muted }]} numberOfLines={1}>{tr("ui.sort")}: {sortLabel}</Text>
             <Ionicons name="chevron-down" size={us(14)} color={pal.muted} />
           </Pressable>
         </View>
 
         {(accountId || categoryId) && <Text testID="all-tx-active-filters" style={[styles.infoText, { color: pal.muted }]}>
-          {[accountId && (en ? "Account filter active" : "Filtro de cuenta activo"), categoryId && (en ? "Category filter active" : "Filtro de categoría activo")].filter(Boolean).join(" · ")}
+          {[accountId && (tr("ui.account_filter_active")), categoryId && (tr("ui.category_filter_active"))].filter(Boolean).join(" · ")}
         </Text>}
 
         {/* List */}
         <View onLayout={(e) => { listY.current = e.nativeEvent.layout.y; }} style={[cardStyle, styles.listCard]}>
-          <Animated.View key={`${period}|${range.start}|${type}|${sort}|${safePage}`} entering={FadeIn.duration(180)}>
+          <Animated.View key={`${period}|${range?.start ?? "all"}|${type}|${sort}|${safePage}`} entering={FadeIn.duration(180)}>
             {txQ.isPending || txQ.isFetching ? (
-              <Text style={[styles.empty, { color: pal.muted }]}>{en ? "Loading…" : "Cargando…"}</Text>
+              <Text style={[styles.empty, { color: pal.muted }]}>{tr("ui.loading")}</Text>
             ) : txQ.isError ? (
               <View style={styles.emptyWrap}>
                 <Text testID="all-tx-error" style={[styles.empty, { color: pal.muted }]}>{pageError}</Text>
                 <Pressable testID="all-tx-retry" onPress={() => txQ.refetch()} style={styles.sortBtn}>
-                  <Text style={[styles.infoText, { color: pal.forest }]}>{en ? "Retry" : "Reintentar"}</Text>
+                  <Text style={[styles.infoText, { color: pal.forest }]}>{en ? tr("ui.retry") : tr("ui.retry")}</Text>
                 </Pressable>
                 {safePage > 1 && <Pressable testID="all-tx-error-prev" onPress={() => goPage(safePage - 1)} style={styles.sortBtn}>
-                  <Text style={[styles.infoText, { color: pal.forest }]}>{en ? "Previous page" : "Página anterior"}</Text>
+                  <Text style={[styles.infoText, { color: pal.forest }]}>{tr("ui.previous_page")}</Text>
                 </Pressable>}
                 <Pressable testID="all-tx-error-refresh" onPress={refresh} style={styles.sortBtn}>
-                  <Text style={[styles.infoText, { color: pal.forest }]}>{en ? "Restart history" : "Reiniciar historial"}</Text>
+                  <Text style={[styles.infoText, { color: pal.forest }]}>{tr("ui.restart_history")}</Text>
                 </Pressable>
               </View>
             ) : pageItems.length === 0 ? (
@@ -321,10 +328,10 @@ export default function AllTransactions() {
                   <Ionicons name="receipt-outline" size={us(20)} color={pal.forest} />
                 </View>
                 <Text testID="all-tx-empty" style={[styles.empty, { color: pal.muted }]}>
-                  {total === 0 ? (en ? "No transactions in this period" : "No hay transacciones en este período") : (en ? "No transactions on this page. Refresh to restart." : "No hay transacciones en esta página. Actualiza para comenzar de nuevo.")}
+                  {total === 0 ? (tr("ui.no_transactions_in_this_period")) : (tr("ui.no_transactions_on_this_page_refresh_to_restart"))}
                 </Text>
                 {total > 0 && <Pressable testID="all-tx-restart" onPress={refresh} style={styles.sortBtn}>
-                  <Text style={[styles.infoText, { color: pal.forest }]}>{en ? "Refresh" : "Actualizar"}</Text>
+                  <Text style={[styles.infoText, { color: pal.forest }]}>{tr("ui.refresh")}</Text>
                 </Pressable>}
               </View>
             ) : (
@@ -347,7 +354,7 @@ export default function AllTransactions() {
                     >
                       <IconTile icon={iconName} tint={tint} size={us(40)} />
                       <View style={{ flex: 1, minWidth: 0, marginLeft: us(12) }}>
-                        <Text style={[styles.rowName, { color: pal.text }]} numberOfLines={1}>{item.name || (en ? "No description" : "Sin descripción")}</Text>
+                        <Text style={[styles.rowName, { color: pal.text }]} numberOfLines={1}>{item.name || (tr("ui.no_description"))}</Text>
                         <View style={styles.timeRow}>
                           <Ionicons name="time-outline" size={us(12)} color={pal.muted} />
                           <Text style={[styles.rowTime, { color: pal.muted }]} numberOfLines={1}>{formatDateTime(item.date)}</Text>
@@ -382,7 +389,7 @@ export default function AllTransactions() {
                     testID={`all-tx-page-${p}`}
                     onPress={() => goPage(p)}
                     disabled={!canVisit(p)}
-                    accessibilityHint={!canVisit(p) && p !== safePage ? (en ? "Visit preceding pages first" : "Visita primero las páginas anteriores") : undefined}
+                    accessibilityHint={!canVisit(p) && p !== safePage ? (tr("ui.visit_preceding_pages_first")) : undefined}
                     style={[styles.pageBtn, p === safePage ? { backgroundColor: pal.forest, borderColor: pal.forest } : { backgroundColor: pal.card, borderColor: pal.border, opacity: canVisit(p) ? 1 : 0.4 }, shadow]}
                   >
                     <Text style={[styles.pageText, { color: p === safePage ? pal.onForest : pal.text }]}>{p}</Text>
@@ -397,16 +404,16 @@ export default function AllTransactions() {
               {en ? `Showing ${from}–${to} of ${total} transactions` : `Mostrando ${from}–${to} de ${total} transacciones`}
             </Text>
             <Text testID="all-tx-navigation-info" style={[styles.showing, { color: pal.muted }]}>
-              {en ? "Jump only to visited pages; use Next to advance." : "Solo puedes saltar a páginas visitadas; usa Siguiente para avanzar."}
-              {!hasMore ? (en ? " End of history." : " Fin del historial.") : ""}
+              {tr("ui.jump_only_to_visited_pages_use_next_to_advance")}
+              {!hasMore ? (tr("ui.end_of_history")) : ""}
             </Text>
           </>
         )}
-      </ScrollView>
+      </ElasticScrollView>
 
       {/* Sort sheet */}
       <AppSheet visible={sortOpen} onClose={() => setSortOpen(false)} testID="all-tx-sort-sheet">
-        <Text style={[styles.sheetTitle, { color: pal.ink }]}>{en ? "Sort by" : "Ordenar por"}</Text>
+        <Text style={[styles.sheetTitle, { color: pal.ink }]}>{tr("ui.sort_by")}</Text>
         <View style={{ paddingHorizontal: us(spacing.lg), gap: us(8) }}>
           {SORTS.map((s) => {
             const sel = sort === s.id;
@@ -425,7 +432,7 @@ export default function AllTransactions() {
         </View>
       </AppSheet>
 
-      <DateRangeSheet ref={dateSheetRef} onApply={onApplyRange} />
+      <DateRangeSheet ref={dateSheetRef} onApply={onApplyRange} allowClear />
     </View>
   );
 }

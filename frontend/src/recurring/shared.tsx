@@ -53,6 +53,6 @@ export function statusTint(status: string, colors: any) {
 export function dayLabel(ymd: string | null | undefined, lang: string) {
   if (!ymd) return "";
   const [y, m, d] = ymd.slice(0, 10).split("-").map(Number);
-  const tag = lang === "en" ? "en-US" : "es-ES";
+  const tag = !lang.startsWith("es") ? "en-US" : "es-US";
   return new Date(y, m - 1, d).toLocaleDateString(tag, { day: "numeric", month: "short" }).replace(".", "");
 }

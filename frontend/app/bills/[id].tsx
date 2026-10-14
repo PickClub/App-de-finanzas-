@@ -1,6 +1,9 @@
+import { localizedError } from "@/src/i18n/errors";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useRef, useState } from "react";
 import { verifiedDeletionContext, type Context } from "@/src/obligation-payments/journal";
-import { View, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
+import { View, ScrollView, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -107,9 +110,8 @@ export default function BillDetail() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={forest} />}
       >
         <View style={styles.header}>
           <Pressable testID="bill-back" onPress={() => router.back()} style={styles.backBtn}>
@@ -134,7 +136,7 @@ export default function BillDetail() {
               {b.provider ? <Text style={styles.muted} numberOfLines={1}>{b.provider}</Text> : null}
             </View>
             <View style={[styles.pill, { backgroundColor: sc + (isDark ? "2E" : "1C") }]} testID="bill-status">
-              <Text style={[styles.pillText, { color: sc }]}>{b.partial ? t("bills.partial") : t(`bills.s_${b.status}`)}</Text>
+              <Text style={[styles.pillText, { color: sc }]}>{b.partial ? t("bills.partial") : t(`bills.s_${b.status}`, { defaultValue: t("common.unknown") })}</Text>
             </View>
           </View>
           <Text style={[styles.heroAmount, mont()]} testID="bill-amount">{formatCurrencyInt(b.amount)}</Text>
@@ -159,8 +161,8 @@ export default function BillDetail() {
           <Info icon="calendar-outline" label={t("bills.dueDate")} value={longDate(b.due_date, lang)} testID="bill-info-due" />
           <Info icon="pricetag-outline" label={t("bills.category")} value={b.category_name ? catLabel(b.category_name, lang) : t("bills.none")} />
           <Info icon="wallet-outline" label={t("bills.account")} value={b.account_name || t("bills.none")} />
-          <Info icon="repeat-outline" label={t("bills.frequency")} value={t(`bills.r_${b.frequency || "once"}`)} />
-          <Info icon="notifications-outline" label={t("bills.reminder")} value={t(`bills.rem_${b.reminder_days ?? "none"}`)} />
+          <Info icon="repeat-outline" label={t("bills.frequency")} value={t(`bills.r_${b.frequency || "once"}`, { defaultValue: t("common.unknown") })} />
+          <Info icon="notifications-outline" label={t("bills.reminder")} value={t(`bills.rem_${b.reminder_days ?? "none"}`, { defaultValue: t("common.unknown") })} />
           {b.recurring_payment_name ? <Info icon="link-outline" label={t("bills.linkRp")} value={b.recurring_payment_name} /> : null}
           {b.description ? <Info icon="document-text-outline" label={t("bills.description")} value={b.description} /> : null}
         </View>
@@ -168,7 +170,7 @@ export default function BillDetail() {
         {err ? (
           <View style={[styles.notice, { backgroundColor: colors.expenseRed + "14" }]} testID="bill-error">
             <Ionicons name="alert-circle" size={us(16)} color={colors.expenseRed} />
-            <Text style={[styles.small, { color: colors.expenseRed, flex: 1 }]}>{err}</Text>
+            <Text style={[styles.small, { color: colors.expenseRed, flex: 1 }]}>{localizedError(err)}</Text>
           </View>
         ) : null}
 
@@ -204,7 +206,7 @@ export default function BillDetail() {
             </View>
           ))}
         </View>
-      </ScrollView>
+      </ElasticScrollView>
 
       <ConfirmSheet
         visible={confirm !== null}

@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import { tr, useTranslation } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -8,7 +12,7 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
-import { useTranslation } from "@/src/i18n";
+
 import { formatCurrencyInt } from "@/src/format";
 import { AppSheet, ConfirmSheet } from "@/src/components/sheets";
 import { DateRangeSheet, type DateRangeSheetHandle, type DateRange } from "@/src/components/date-range-sheet";
@@ -117,7 +121,7 @@ export default function BillPay() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
+        <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
             <Pressable testID="bill-pay-back" onPress={() => { screenEpoch.current++; router.back(); }} style={styles.backBtn}>
               <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
@@ -129,13 +133,13 @@ export default function BillPay() {
             <View testID="bill-pay-query-error">
               <View style={styles.errorBox}>
                 <Ionicons name="alert-circle" size={us(16)} color={colors.expenseRed} />
-                <Text style={styles.errorText}>{(i18n.language || "es").startsWith("en")
-                  ? resourceState === "missing" ? "Bill not found. It may no longer exist." : "Unable to load the bill. Check your connection and try again."
-                  : resourceState === "missing" ? "No se encontró la factura. Puede que ya no exista." : "No se pudo consultar la factura. Comprueba tu conexión y vuelve a intentarlo."}</Text>
+                <Text style={styles.errorText}>{localizedError((i18n.language || "es").startsWith("en")
+                  ? resourceState === "missing" ? tr("ui.bill_not_found_it_may_no_longer_exist") : tr("ui.could_not_load_the_bill_check_your_connection_and_try_again")
+                  : resourceState === "missing" ? tr("ui.bill_not_found_it_may_no_longer_exist") : tr("ui.could_not_load_the_bill_check_your_connection_and_try_again"))}</Text>
               </View>
-              {payment.record || payment.problem ? <Text style={styles.hint} testID="bill-pay-preserved">{(i18n.language || "es").startsWith("en") ? "The payment record is preserved. This query does not confirm or cancel payments." : "El registro del pago se conserva. Esta consulta no confirma ni anula pagos."}</Text> : null}
+              {payment.record || payment.problem ? <Text style={styles.hint} testID="bill-pay-preserved">{tr("ui.the_payment_record_is_preserved_this_query_does_not_confirm_or_cancel_payments")}</Text> : null}
               {id ? <Pressable testID="bill-pay-retry" disabled={billQ.isFetching} onPress={() => { void billQ.refetch(); }} style={styles.saveBtn}>
-                <Text style={styles.saveText}>{(i18n.language || "es").startsWith("en") ? billQ.isFetching ? "Retrying…" : "Retry" : billQ.isFetching ? "Reintentando…" : "Reintentar"}</Text>
+                <Text style={styles.saveText}>{(i18n.language || "es").startsWith("en") ? billQ.isFetching ? tr("ui.retrying") : tr("ui.retry") : billQ.isFetching ? tr("ui.retrying") : tr("ui.retry")}</Text>
               </Pressable> : null}
             </View>
           ) : (
@@ -151,12 +155,12 @@ export default function BillPay() {
                 </View>
               </View>
 
-              {payment.record || payment.problem ? <Text style={styles.hint} testID="payment-pending-status">{payment.problem || (payment.record ? reconciliationMessage(payment.record) : "")}</Text> : null}
+              {payment.record || payment.problem ? <Text style={styles.hint} testID="payment-pending-status">{localizedError(payment.problem || (payment.record ? reconciliationMessage(payment.record) : ""))}</Text> : null}
               <View pointerEvents={payment.locked ? "none" : "auto"}>
               <Text style={styles.label}>{t("bills.payAmount")}</Text>
               <View style={styles.input}>
                 <Text style={[styles.inputText, { color: colors.muted, marginRight: us(4) }]}>$</Text>
-                <TextInput editable={!payment.locked} testID="bill-pay-amount" value={amountStr} onChangeText={(v) => { setAmount(v.replace(/[^0-9.,]/g, "")); setError(null); }} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.muted} style={[styles.inputText, { flex: 1, padding: 0, fontSize: us(18) }, mont()]} />
+                <TextInput editable={!payment.locked} testID="bill-pay-amount" value={amountStr} onChangeText={(v) => { setAmount(v.replace(/[^0-9.,]/g, "")); setError(null); }} keyboardType="decimal-pad" placeholder={tr("ui.0")} placeholderTextColor={colors.muted} style={[styles.inputText, { flex: 1, padding: 0, fontSize: us(18) }, mont()]} />
               </View>
               {isPartial ? <Text style={styles.hint} testID="bill-pay-partial">{t("bills.payPartial", { amount: formatCurrencyInt(remaining - amt) })}</Text> : null}
               {isOver ? <Text style={[styles.hint, { color: colors.expenseRed }]}>{t("bills.payOver")}</Text> : null}
@@ -185,16 +189,16 @@ export default function BillPay() {
               {error ? (
                 <View style={styles.errorBox} testID="bill-pay-error">
                   <Ionicons name="alert-circle" size={us(16)} color={colors.expenseRed} />
-                  <Text style={styles.errorText}>{error}</Text>
+                  <Text style={styles.errorText}>{localizedError(error)}</Text>
                 </View>
               ) : null}
 
               <Pressable testID="bill-pay-save" onPress={ask} disabled={saving || (!payment.ready && !payment.problem)} style={({ pressed }) => [styles.saveBtn, (pressed || saving) && { opacity: 0.75 }]}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{payment.record?.state === "reconciled" ? "Cerrar verificación" : payment.problem || payment.record ? "Verificar registro" : t("bills.registerPay")}</Text>}
+                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{payment.record?.state === "reconciled" ? tr("ui.close_verification") : payment.problem || payment.record ? tr("ui.verify_record") : t("bills.registerPay")}</Text>}
               </Pressable>
             </>
           )}
-        </ScrollView>
+        </ElasticScrollView>
       </KeyboardAvoidingView>
 
       <AppSheet visible={sheet && resourceState === "ready"} onClose={() => setSheet(false)} testID="bill-pay-sheet">

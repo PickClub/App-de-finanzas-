@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import { tr, useTranslation } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -8,7 +12,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
-import { useTranslation } from "@/src/i18n";
+
 import { AppSheet } from "@/src/components/sheets";
 import { DateRangeSheet, type DateRangeSheetHandle, type DateRange } from "@/src/components/date-range-sheet";
 import {
@@ -113,7 +117,7 @@ export default function GoalForm() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <ScrollView
+        <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}
         >
@@ -154,7 +158,7 @@ export default function GoalForm() {
               testID="goal-target-input"
               value={target}
               onChangeText={(v) => { setTarget(v.replace(/[^0-9.,]/g, "")); setError(null); }}
-              placeholder="0"
+              placeholder={tr("ui.0")}
               placeholderTextColor={colors.muted}
               keyboardType="decimal-pad"
               style={[styles.inputText, { flex: 1, padding: 0 }, mont()]}
@@ -212,7 +216,7 @@ export default function GoalForm() {
               testID="goal-initial-input"
               value={initial}
               onChangeText={(v) => { setInitial(v.replace(/[^0-9.,]/g, "")); setError(null); }}
-              placeholder="0"
+              placeholder={tr("ui.0")}
               placeholderTextColor={colors.muted}
               keyboardType="decimal-pad"
               style={[styles.inputText, { flex: 1, padding: 0 }, mont()]}
@@ -231,7 +235,7 @@ export default function GoalForm() {
           {error ? (
             <View style={styles.errorBox} testID="goal-form-error">
               <Ionicons name="alert-circle" size={us(16)} color={colors.expenseRed} />
-              <Text style={styles.errorText}>{error}</Text>
+              <Text style={styles.errorText}>{localizedError(error)}</Text>
             </View>
           ) : null}
 
@@ -243,7 +247,7 @@ export default function GoalForm() {
           >
             {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{editing ? t("goals.saveChanges") : t("goals.create")}</Text>}
           </Pressable>
-        </ScrollView>
+        </ElasticScrollView>
       </KeyboardAvoidingView>
 
       <AppSheet visible={accOpen} onClose={() => setAccOpen(false)} testID="goal-account-sheet">

@@ -1,3 +1,5 @@
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import { useAccountDeletionExit } from "@/src/account-deletion-navigation";
 import React, { useCallback, useMemo, useState } from "react";
 import { View, ScrollView, Platform, ActivityIndicator } from "react-native";
@@ -117,7 +119,7 @@ export default function AccountDetail() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         contentContainerStyle={{
           paddingTop: insets.top + us(8),
           paddingBottom: insets.bottom + us(28),
@@ -142,7 +144,7 @@ export default function AccountDetail() {
             <Text style={styles.accName}>{account.name}</Text>
             <View style={styles.typeRow}>
               <View style={[styles.typeDot, { backgroundColor: ac }]} />
-              <Text style={styles.typeLabel}>{t(`accounts.types.${account.type}`)}</Text>
+              <Text style={styles.typeLabel}>{t(`accounts.types.${account.type}`, { defaultValue: t("common.unknown") })}</Text>
             </View>
           </View>
         </View>
@@ -166,7 +168,7 @@ export default function AccountDetail() {
             iconColor={forest}
             icon="wallet-outline"
             label={t("accounts.type")}
-            value={t(`accounts.types.${account.type}`)}
+            value={t(`accounts.types.${account.type}`, { defaultValue: t("common.unknown") })}
           />
           <View style={styles.infoDivider} />
           <InfoRow
@@ -243,7 +245,7 @@ export default function AccountDetail() {
           <Ionicons name="create-outline" size={us(20)} color="#fff" />
           <Text style={styles.editText}>{t("accounts.editAccount")}</Text>
         </Pressable>
-      </ScrollView>
+      </ElasticScrollView>
     </View>
   );
 }

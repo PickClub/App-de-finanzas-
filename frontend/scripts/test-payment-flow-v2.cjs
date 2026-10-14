@@ -1,3 +1,4 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // Synthetic storage and server ledger only; no network or MongoDB access.
 const assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
 const ts = require('typescript'), root = path.resolve(__dirname, '..');
@@ -6,8 +7,8 @@ const compile = file => ts.transpileModule(fs.readFileSync(path.join(root,file),
 }).outputText;
 class ApiError extends Error { constructor(status) { super('HTTP '+status); this.status=status; } }
 const journal = {}, flow = {};
-vm.runInNewContext(compile('src/debt-payments/journal-v2.ts'),{exports:journal});
-vm.runInNewContext(compile('src/debt-payments/flow-v2.ts'),{exports:flow,require:n=>n==='../api'?{ApiError}:journal});
+vm.runInNewContext(compile('src/debt-payments/journal-v2.ts'),localeGlobals({exports:journal}));
+vm.runInNewContext(compile('src/debt-payments/flow-v2.ts'),localeGlobals({exports:flow,require:n=>n==='../api'?{ApiError}:journal}));
 const A='11111111-1111-4111-8111-111111111111', B='22222222-2222-4222-8222-222222222222';
 const payload={debt_id:'d',amount:100,account_id:'a',notes:'original',date:null};
 const plain=x=>JSON.parse(JSON.stringify(x));
@@ -37,9 +38,9 @@ async function main(){
   for(const [dev,env,enabled] of [[true,{},false],[false,{EXPO_PUBLIC_R6_LOCAL_V2:'1'},false],
       [true,{EXPO_PUBLIC_R6_LOCAL_V2:'1',EXPO_PUBLIC_R6_EXPECTED_ENVIRONMENT_ID:A,EXPO_PUBLIC_R6_EXPECTED_USER_ID:'default-user'},true]]) {
     const gate={};let constructed=0, supplied;
-    vm.runInNewContext(compile('src/debt-payments/local-flow.ts'),{exports:gate,__DEV__:dev,process:{env},
+    vm.runInNewContext(compile('src/debt-payments/local-flow.ts'),localeGlobals({exports:gate,__DEV__:dev,process:{env},
       require:n=>n.includes('async-storage')?{default:{}}:n==='../api'?{api:{}}:n==='./pending'?{pendingDebtPayments:legacy}:
-        {createV2PaymentFlow:d=>{constructed++;supplied=d;return {prepared:true};}}});
+        {createV2PaymentFlow:d=>{constructed++;supplied=d;return {prepared:true};}}}));
     assert.equal(gate.LOCAL_V2_ENABLED,enabled);assert.equal(constructed,enabled?1:0);
     if(enabled)assert.deepEqual(plain(supplied.expected),{environment_id:A,user_id:'default-user'});
     else assert.equal(gate.localPaymentFlow.recover,legacy.recover);
@@ -111,7 +112,7 @@ async function main(){
     recoveryReady:{current:true},recoveryError:{current:null},savingRef:{current:false},qc:{invalidateQueries(){}},
     setOperation:r=>ui.operation=r,setAmount(){},setAccountId(){},setNotes(){},setSaving(){},setReady(){},
     Alert:{alert:(...a)=>alerts.push(a)}};
-  vm.runInNewContext(ts.transpileModule('exports.save = '+handler,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,ui);
+  vm.runInNewContext(ts.transpileModule('exports.save = '+handler,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,localeGlobals(ui));
   await ui.exports.save();assert.equal(ui.operation.state,'pending');assert.equal(f.counts().balance,900);
   ui.pendingDebtPayments=f.fresh();f.flags.lost=false;await ui.exports.save();assert.equal(ui.operation.state,'confirmed');assert.equal(f.counts().sends,1);
   await ui.exports.save();assert.equal(ui.operation,null);assert.equal(f.counts().sends,1);

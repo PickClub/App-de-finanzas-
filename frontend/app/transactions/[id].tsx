@@ -1,3 +1,8 @@
+import { localizedError } from "@/src/i18n/errors";
+import i18n, { localeTag, tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
+
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useMemo, useState } from "react";
 import { View, ScrollView, StyleSheet, Alert } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -15,12 +20,12 @@ import { formatCurrency } from "@/src/format";
 
 import { us } from "@/src/ui-scale";
 const TYPE_LABEL: Record<string, string> = {
-  income: "Ingreso",
-  expense: "Gasto",
-  transfer: "Transferencia",
-  debt_payment: "Pago de deuda",
-  loan_received: "Préstamo recibido",
-  loan_given: "Préstamo otorgado",
+  get income() { return tr("txType.income"); },
+  get expense() { return tr("txType.expense"); },
+  get transfer() { return tr("txType.transfer"); },
+  get debt_payment() { return tr("txType.debt_payment"); },
+  get loan_received() { return tr("txType.loan_received"); },
+  get loan_given() { return tr("txType.loan_given"); },
 };
 
 function fmtDateTime(iso: string, withYear = false): string {
@@ -29,10 +34,10 @@ function fmtDateTime(iso: string, withYear = false): string {
     const opts: any = withYear
       ? { day: "2-digit", month: "short", year: "numeric" }
       : { day: "2-digit", month: "short" };
-    const date = d.toLocaleDateString("es-ES", opts).replace(".", "");
+    const date = d.toLocaleDateString(localeTag(i18n.language), opts).replace(".", "");
     let h = d.getHours();
     const m = d.getMinutes().toString().padStart(2, "0");
-    const ampm = h >= 12 ? "p.m." : "a.m.";
+    const ampm = h >= 12 ? (i18n.language.startsWith("es") ? "p.m." : "PM") : (i18n.language.startsWith("es") ? "a.m." : "AM");
     h = h % 12;
     if (h === 0) h = 12;
     const sep = withYear ? " · " : ", ";
@@ -44,7 +49,7 @@ function fmtDateTime(iso: string, withYear = false): string {
 
 function fmtDay(d: Date): string {
   try {
-    const s = d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }).replace(".", "");
+    const s = d.toLocaleDateString(localeTag(i18n.language), { day: "2-digit", month: "short", year: "numeric" }).replace(".", "");
     return s.charAt(0).toUpperCase() + s.slice(1);
   } catch {
     return "";
@@ -58,13 +63,14 @@ function addDays(d: Date, n: number): Date {
 }
 
 const FREQ_OPTIONS: { key: "weekly" | "biweekly" | "monthly" | "custom"; label: string; icon: string }[] = [
-  { key: "weekly", label: "Semanal", icon: "calendar-outline" },
-  { key: "biweekly", label: "Cada 2 semanas", icon: "calendar-number-outline" },
-  { key: "monthly", label: "Mensual", icon: "calendar-clear-outline" },
-  { key: "custom", label: "Personalizado", icon: "options-outline" },
+  { key: "weekly", get label() { return tr("ui.weekly"); }, icon: "calendar-outline" },
+  { key: "biweekly", get label() { return tr("ui.every_2_weeks"); }, icon: "calendar-number-outline" },
+  { key: "monthly", get label() { return tr("ui.monthly"); }, icon: "calendar-clear-outline" },
+  { key: "custom", get label() { return tr("ui.custom"); }, icon: "options-outline" },
 ];
 
 export default function TransactionDetail() {
+  useInterfaceLanguage();
   const { colors } = useTheme();
   const styles = useStyles();
   const params = useLocalSearchParams<{ id?: string }>();
@@ -127,17 +133,17 @@ export default function TransactionDetail() {
           <Pressable testID="back-btn" onPress={() => router.back()} style={styles.circleBtn}>
             <Ionicons name="chevron-back" size={us(22)} color={colors.onSurface} />
           </Pressable>
-          <Text style={styles.headerTitle}>Detalle del movimiento</Text>
+          <Text style={styles.headerTitle}>{tr("ui.transaction_detail")}</Text>
           <View style={styles.circleBtn} />
         </View>
         <Text style={{ color: colors.muted, textAlign: "center", marginTop: us(40) }}>
-          {txQ.isLoading ? "Cargando…" : missing || !params.id || deletion.deleted.current
-            ? "Movimiento no encontrado"
-            : txQ.error instanceof ApiError ? txQ.error.detail : "No se pudo cargar el movimiento. Inténtalo de nuevo."}
+          {txQ.isLoading ? tr("ui.loading") : missing || !params.id || deletion.deleted.current
+            ? tr("ui.transaction_not_found")
+            : txQ.error instanceof ApiError ? localizedError(txQ.error) : tr("ui.could_not_load_the_transaction_please_try_again")}
         </Text>
         {params.id && txQ.isError && !missing && !deletion.deleted.current && (
           <Pressable testID="transaction-detail-retry" disabled={txQ.isFetching} onPress={() => void txQ.refetch()} style={styles.saveBtn}>
-            <Text style={{ color: colors.onSurface, textAlign: "center" }}>Reintentar</Text>
+            <Text style={{ color: colors.onSurface, textAlign: "center" }}>{tr("ui.retry")}</Text>
           </Pressable>
         )}
       </View>
@@ -184,7 +190,7 @@ export default function TransactionDetail() {
       qc.invalidateQueries();
       setCatOpen(false);
     } catch (e: any) {
-      Alert.alert("Error", e.message);
+      Alert.alert(tr("ui.error"), localizedError(e.message));
     }
   };
 
@@ -233,26 +239,26 @@ export default function TransactionDetail() {
       setTimeout(
         () =>
           setSoon({
-            title: "Movimiento recurrente creado",
-            desc: "Guardamos la configuración de recurrencia. No se creó ningún movimiento nuevo todavía.",
+            get title() { return tr("ui.recurring_transaction_created"); },
+            get desc() { return tr("ui.the_schedule_was_saved_no_new_transaction_has_been_created_yet"); },
             icon: "checkmark-circle-outline",
             accent: colors.incomeGreen,
           }),
         180,
       );
     } catch (e: any) {
-      Alert.alert("Error", e.message);
+      Alert.alert(tr("ui.error"), localizedError(e.message));
     } finally {
       setRecurSaving(false);
     }
   };
 
   const menu = [
-    { key: "edit", icon: "create-outline", label: "Editar movimiento", tint: colors.brandSecondary, onPress: () => afterMenu(() => setConfirmEdit(true)) },
-    { key: "dup", icon: "copy-outline", label: "Duplicar movimiento", tint: colors.accountsBlue, onPress: () => afterMenu(() => setConfirmDup(true)) },
-    { key: "recur", icon: "sync-outline", label: "Hacer recurrente", tint: colors.incomeGreen, onPress: () => afterMenu(() => setConfirmRecur(true)) },
-    { key: "receipt", icon: "attach-outline", label: "Añadir comprobante", tint: colors.statsPurple, onPress: () => afterMenu(() => setSoon({ title: "Añadir comprobante", desc: "Muy pronto podrás subir una foto o documento del comprobante de este movimiento.", icon: "attach-outline", accent: colors.statsPurple })) },
-    { key: "category", icon: "pricetag-outline", label: "Cambiar categoría", tint: colors.brandSecondary, onPress: openCategorySheet },
+    { key: "edit", icon: "create-outline", get label() { return tr("ui.edit_transaction"); }, tint: colors.brandSecondary, onPress: () => afterMenu(() => setConfirmEdit(true)) },
+    { key: "dup", icon: "copy-outline", get label() { return tr("ui.duplicate_transaction"); }, tint: colors.accountsBlue, onPress: () => afterMenu(() => setConfirmDup(true)) },
+    { key: "recur", icon: "sync-outline", get label() { return tr("ui.make_recurring"); }, tint: colors.incomeGreen, onPress: () => afterMenu(() => setConfirmRecur(true)) },
+    { key: "receipt", icon: "attach-outline", get label() { return tr("ui.add_receipt"); }, tint: colors.statsPurple, onPress: () => afterMenu(() => setSoon({ get title() { return tr("ui.add_receipt"); }, get desc() { return tr("ui.receipt_uploads_will_be_available_soon"); }, icon: "attach-outline", accent: colors.statsPurple })) },
+    { key: "category", icon: "pricetag-outline", get label() { return tr("ui.change_category"); }, tint: colors.brandSecondary, onPress: openCategorySheet },
   ];
 
   function afterMenu(fn: () => void) {
@@ -268,13 +274,13 @@ export default function TransactionDetail() {
         <Pressable testID="back-btn" onPress={() => router.back()} style={styles.circleBtn}>
           <Ionicons name="chevron-back" size={us(22)} color={colors.onSurface} />
         </Pressable>
-        <Text style={styles.headerTitle}>Detalle del movimiento</Text>
+        <Text style={styles.headerTitle}>{tr("ui.transaction_detail")}</Text>
         <Pressable testID="more-btn" onPress={() => setMoreOpen(true)} style={styles.circleBtn}>
           <Ionicons name="ellipsis-horizontal" size={us(20)} color={colors.onSurface} />
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: us(spacing.lg), paddingBottom: insets.bottom + us(40) }}>
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} contentContainerStyle={{ padding: us(spacing.lg), paddingBottom: insets.bottom + us(40) }}>
         {/* Summary card */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryTop}>
@@ -297,8 +303,8 @@ export default function TransactionDetail() {
           <InfoRow
             icon="pricetag-outline"
             tint={cat?.color || colors.brandSecondary}
-            label="Categoría"
-            value={cat?.name || "Sin categoría"}
+            label={tr("ui.category")}
+            value={cat?.name || tr("ui.no_category")}
             onPress={openCategorySheet}
             styles={styles}
             colors={colors}
@@ -307,7 +313,7 @@ export default function TransactionDetail() {
           <InfoRow
             icon={account?.icon || "card-outline"}
             tint={account?.color || colors.accountsBlue}
-            label="Cuenta"
+            label={tr("ui.account")}
             value={account?.name || "Sin cuenta"}
             styles={styles}
             colors={colors}
@@ -316,7 +322,7 @@ export default function TransactionDetail() {
           <InfoRow
             icon="calendar-outline"
             tint={colors.brandSecondary}
-            label="Fecha y hora"
+            label={tr("ui.date_time")}
             value={fmtDateTime(tx.date, true)}
             styles={styles}
             colors={colors}
@@ -325,7 +331,7 @@ export default function TransactionDetail() {
           <InfoRow
             icon="document-text-outline"
             tint={colors.statsPurple}
-            label="Descripción"
+            label={tr("ui.description")}
             value={tx.name}
             styles={styles}
             colors={colors}
@@ -334,8 +340,8 @@ export default function TransactionDetail() {
           <InfoRow
             icon="create-outline"
             tint={colors.muted}
-            label="Notas"
-            value={tx.notes && tx.notes.trim() ? tx.notes : "Sin notas"}
+            label={tr("ui.notes")}
+            value={tx.notes && tx.notes.trim() ? tx.notes : tr("ui.no_notes")}
             styles={styles}
             colors={colors}
           />
@@ -346,13 +352,13 @@ export default function TransactionDetail() {
           <View style={[styles.noteIcon, { backgroundColor: colors.statsPurple + "1A" }]}>
             <Ionicons name="information-circle-outline" size={us(18)} color={colors.statsPurple} />
           </View>
-          <Text style={styles.noteText}>Este movimiento ya está registrado en tus saldos y estadísticas.</Text>
+          <Text style={styles.noteText}>{tr("ui.this_transaction_is_already_included_in_your_balances_and_reports")}</Text>
         </View>
-      </ScrollView>
+      </ElasticScrollView>
 
       {/* ===== Más opciones menu ===== */}
       <AppSheet visible={moreOpen} onClose={() => setMoreOpen(false)} testID="more-sheet">
-        <Text style={styles.sheetTitle}>Más opciones</Text>
+        <Text style={styles.sheetTitle}>{tr("ui.more_options")}</Text>
         <View style={{ marginTop: us(6) }}>
           {menu.map((m) => (
             <Pressable key={m.key} testID={`menu-${m.key}`} onPress={m.onPress} style={styles.menuRow}>
@@ -368,12 +374,12 @@ export default function TransactionDetail() {
             <View style={[styles.menuIcon, { backgroundColor: colors.expenseRed + "1A" }]}>
               <Ionicons name="trash-outline" size={us(19)} color={colors.expenseRed} />
             </View>
-            <Text style={[styles.menuLabel, { color: colors.expenseRed }]}>Eliminar movimiento</Text>
+            <Text style={[styles.menuLabel, { color: colors.expenseRed }]}>{tr("ui.delete_transaction")}</Text>
             <Ionicons name="chevron-forward" size={us(17)} color={colors.expenseRed + "99"} />
           </Pressable>
         </View>
         <Pressable onPress={() => setMoreOpen(false)} style={[styles.cancelRow, { backgroundColor: colors.surfaceTertiary }]}>
-          <Text style={styles.cancelRowText}>Cancelar</Text>
+          <Text style={styles.cancelRowText}>{tr("ui.cancel")}</Text>
         </Pressable>
       </AppSheet>
 
@@ -383,9 +389,9 @@ export default function TransactionDetail() {
         onClose={() => setConfirmEdit(false)}
         icon="create-outline"
         accent={colors.brandPrimary}
-        title="¿Editar este movimiento?"
-        description="Podrás modificar el monto, categoría, cuenta y demás información de este movimiento."
-        confirmLabel="Editar"
+        title={tr("ui.edit_this_transaction")}
+        description={tr("ui.you_can_edit_the_amount_category_account_and_other_transaction_details")}
+        confirmLabel={tr("ui.edit")}
         confirmTestID="confirm-edit"
         onConfirm={doEdit}
       />
@@ -394,9 +400,9 @@ export default function TransactionDetail() {
         onClose={() => setConfirmDup(false)}
         icon="copy-outline"
         accent={colors.brandPrimary}
-        title="¿Duplicar este movimiento?"
-        description="Se creará un nuevo movimiento con la misma información. Podrás revisarlo antes de guardarlo."
-        confirmLabel="Duplicar"
+        title={tr("ui.duplicate_this_transaction")}
+        description={tr("ui.a_new_transaction_will_use_the_same_details_you_can_review_it_before_saving")}
+        confirmLabel={tr("ui.duplicate")}
         confirmTestID="confirm-dup"
         onConfirm={doDuplicate}
       />
@@ -406,9 +412,9 @@ export default function TransactionDetail() {
         icon="trash-outline"
         accent={colors.expenseRed}
         destructive
-        title="¿Eliminar este movimiento?"
-        description="Esta acción eliminará permanentemente este movimiento y puede afectar tus saldos y estadísticas."
-        confirmLabel="Eliminar"
+        title={tr("ui.delete_this_transaction")}
+        description={tr("ui.this_permanently_deletes_the_transaction_and_may_affect_your_balances_and_reports")}
+        confirmLabel={tr("ui.delete")}
         confirmTestID="confirm-delete"
         onConfirm={doDelete}
       />
@@ -420,7 +426,7 @@ export default function TransactionDetail() {
           accent={soon.accent}
           title={soon.title}
           description={soon.desc}
-          confirmLabel="Entendido"
+          confirmLabel={tr("ui.got_it")}
           onConfirm={() => setSoon(null)}
         />
       )}
@@ -431,8 +437,8 @@ export default function TransactionDetail() {
           <View style={[styles.confirmIconSm, { backgroundColor: colors.brandSecondary + "1F" }]}>
             <Ionicons name="pricetag-outline" size={us(24)} color={colors.brandSecondary} />
           </View>
-          <Text style={styles.catTitle}>Cambiar categoría</Text>
-          <Text style={styles.catSubtitle}>Selecciona una nueva categoría para este movimiento.</Text>
+          <Text style={styles.catTitle}>{tr("ui.change_category")}</Text>
+          <Text style={styles.catSubtitle}>{tr("ui.choose_a_new_category_for_this_transaction")}</Text>
         </View>
         <View style={styles.searchBox}>
           <Ionicons name="search" size={us(16)} color={colors.muted} />
@@ -440,7 +446,7 @@ export default function TransactionDetail() {
             testID="cat-search"
             value={catSearch}
             onChangeText={setCatSearch}
-            placeholder="Buscar categoría…"
+            placeholder={tr("ui.search_categories")}
             placeholderTextColor={colors.muted}
             style={styles.searchInput}
           />
@@ -462,7 +468,7 @@ export default function TransactionDetail() {
             );
           })}
           {catList.length === 0 && (
-            <Text style={{ color: colors.muted, textAlign: "center", padding: us(16) }}>Sin resultados</Text>
+            <Text style={{ color: colors.muted, textAlign: "center", padding: us(16) }}>{tr("ui.no_results")}</Text>
           )}
         </ScrollView>
         <Pressable
@@ -471,7 +477,7 @@ export default function TransactionDetail() {
           disabled={!pickedCat}
           style={[styles.saveBtn, { backgroundColor: colors.brandPrimary, opacity: pickedCat ? 1 : 0.5 }]}
         >
-          <Text style={styles.saveText}>Guardar</Text>
+          <Text style={styles.saveText}>{tr("ui.save")}</Text>
         </Pressable>
       </AppSheet>
 
@@ -481,9 +487,9 @@ export default function TransactionDetail() {
         onClose={() => setConfirmRecur(false)}
         icon="sync-outline"
         accent={colors.incomeGreen}
-        title="¿Hacer este movimiento recurrente?"
-        description="Podrás configurar la frecuencia y una fecha de inicio para automatizarlo."
-        confirmLabel="Continuar"
+        title={tr("ui.make_this_transaction_recurring")}
+        description={tr("ui.choose_a_frequency_and_start_date_to_schedule_this_transaction")}
+        confirmLabel={tr("ui.continue")}
         confirmTestID="confirm-recur"
         onConfirm={openRecurConfig}
       />
@@ -494,11 +500,11 @@ export default function TransactionDetail() {
           <View style={[styles.confirmIconSm, { backgroundColor: colors.incomeGreen + "1F" }]}>
             <Ionicons name="sync-outline" size={us(24)} color={colors.incomeGreen} />
           </View>
-          <Text style={styles.catTitle}>Configurar recurrencia</Text>
-          <Text style={styles.catSubtitle}>Elige la frecuencia y las fechas para automatizar este movimiento.</Text>
+          <Text style={styles.catTitle}>{tr("ui.set_up_recurrence")}</Text>
+          <Text style={styles.catSubtitle}>{tr("ui.choose_the_frequency_and_dates_for_this_transaction")}</Text>
         </View>
 
-        <Text style={styles.recurLabel}>Frecuencia</Text>
+        <Text style={styles.recurLabel}>{tr("ui.frequency")}</Text>
         <View style={styles.freqGrid}>
           {FREQ_OPTIONS.map((f) => {
             const active = recurFreq === f.key;
@@ -518,7 +524,7 @@ export default function TransactionDetail() {
 
         {recurFreq === "custom" && (
           <View style={styles.customRow}>
-            <Text style={styles.customLabel}>Repetir cada</Text>
+            <Text style={styles.customLabel}>{tr("ui.repeat_every")}</Text>
             <TextInput
               testID="recur-interval"
               value={recurInterval}
@@ -527,11 +533,11 @@ export default function TransactionDetail() {
               style={styles.customInput}
               maxLength={3}
             />
-            <Text style={styles.customLabel}>días</Text>
+            <Text style={styles.customLabel}>{tr("ui.days")}</Text>
           </View>
         )}
 
-        <Text style={styles.recurLabel}>Fecha de inicio</Text>
+        <Text style={styles.recurLabel}>{tr("ui.start_date")}</Text>
         <DateStepper
           testID="recur-start"
           value={recurStart}
@@ -544,7 +550,7 @@ export default function TransactionDetail() {
         />
 
         <View style={styles.endHeaderRow}>
-          <Text style={[styles.recurLabel, { marginTop: 0 }]}>Fecha de finalización</Text>
+          <Text style={[styles.recurLabel, { marginTop: 0 }]}>{tr("ui.end_date")}</Text>
           <Pressable
             testID="recur-no-end"
             onPress={() => setRecurNoEnd((v) => !v)}
@@ -554,7 +560,7 @@ export default function TransactionDetail() {
           </Pressable>
         </View>
         {recurNoEnd ? (
-          <Text style={styles.endHint}>Sin fecha de finalización</Text>
+          <Text style={styles.endHint}>{tr("ui.no_end_date")}</Text>
         ) : (
           <DateStepper
             testID="recur-end"
@@ -572,7 +578,7 @@ export default function TransactionDetail() {
           disabled={recurSaving}
           style={[styles.saveBtn, { backgroundColor: colors.incomeGreen, opacity: recurSaving ? 0.6 : 1 }]}
         >
-          <Text style={styles.saveText}>{recurSaving ? "Guardando…" : "Guardar"}</Text>
+          <Text style={styles.saveText}>{recurSaving ? tr("ui.saving") : tr("ui.save")}</Text>
         </Pressable>
       </AppSheet>
     </View>

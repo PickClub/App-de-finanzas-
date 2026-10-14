@@ -1,3 +1,6 @@
+import i18n, { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useState, useCallback } from "react";
 import { View, ScrollView } from "react-native";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
@@ -8,7 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/src/api";
-import i18n from "@/src/i18n";
+
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
 import { LockToggle, useLock } from "@/src/lock";
@@ -28,6 +31,7 @@ function chunk3<T>(arr: T[]): T[][] {
 const EXPAND_MS = 280;
 
 export default function Categories() {
+  useInterfaceLanguage();
   const { colors, scheme } = useTheme();
   const styles = useStyles();
   // Reuse Home's EXACT identity values (app/(tabs)/index.tsx):
@@ -39,10 +43,7 @@ export default function Categories() {
   const router = useRouter();
   const qc = useQueryClient();
   const { guard } = useLock();
-  const isEs = i18n.language.startsWith("es");
-  const l10n = (es: string, en: string) => (isEs ? es : en);
-  const subLabel = (n: number) =>
-    isEs ? `${n} ${n === 1 ? "subcategoría" : "subcategorías"}` : `${n} ${n === 1 ? "subcategory" : "subcategories"}`;
+  const subLabel = (n: number) => tr("ui.subcategories", { count: n });
 
   const q = useQuery({ queryKey: ["categories"], queryFn: api.listCategories });
   const cats: any[] = q.data || [];
@@ -114,7 +115,7 @@ export default function Categories() {
           style={styles.addSub}
         >
           <Ionicons name="add" size={us(16)} color={accentGreen} />
-          <Text style={[styles.addSubText, { color: accentGreen }]}>{l10n("Añadir subcategoría", "Add subcategory")}</Text>
+          <Text style={[styles.addSubText, { color: accentGreen }]}>{tr("ui.add_subcategory")}</Text>
         </Pressable>
       </Animated.View>
     );
@@ -171,7 +172,7 @@ export default function Categories() {
   };
 
   return (
-    <ScrollView
+    <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
       style={{ flex: 1, backgroundColor: pageBg }}
       contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}
     >
@@ -179,22 +180,22 @@ export default function Categories() {
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
         </Pressable>
-        <Text style={styles.title}>{l10n("Categorías", "Categories")}</Text>
+        <Text style={styles.title}>{tr("ui.categories")}</Text>
         <LockToggle testID="lock-cats" compact />
         <Pressable testID="add-category" onPress={() => router.push("/categories/new")} style={[styles.backBtn, { backgroundColor: accentGreen, borderColor: accentGreen }]}>
           <Ionicons name="add" size={us(22)} color="#fff" />
         </Pressable>
       </View>
 
-      {renderSection("expense", colors.expenseRed, l10n("Gastos", "Expenses"))}
+      {renderSection("expense", colors.expenseRed, tr("ui.expenses"))}
       <View style={{ height: us(spacing.md) }} />
-      {renderSection("income", colors.incomeGreen, l10n("Ingresos", "Income"))}
+      {renderSection("income", colors.incomeGreen, tr("ui.income"))}
 
       <Pressable testID="restore-categories" onPress={restore} style={styles.restoreBtn}>
         <Ionicons name="refresh-outline" size={us(18)} color={colors.brandPrimary} />
-        <Text style={styles.restoreText}>{l10n("Restaurar predeterminadas", "Restore defaults")}</Text>
+        <Text style={styles.restoreText}>{tr("ui.restore_defaults")}</Text>
       </Pressable>
-    </ScrollView>
+    </ElasticScrollView>
   );
 }
 

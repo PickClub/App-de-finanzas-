@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import { tr, useTranslation } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import { invalidateObligationPayments } from "@/src/obligation-payments/journal";
 import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Switch } from "react-native";
@@ -9,7 +13,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
-import { useTranslation } from "@/src/i18n";
+
 import { AppSheet } from "@/src/components/sheets";
 import { DateRangeSheet, type DateRangeSheetHandle, type DateRange } from "@/src/components/date-range-sheet";
 import { catLabel } from "@/src/category-labels";
@@ -124,7 +128,7 @@ export default function RecurringForm() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
+        <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
             <Pressable testID="rp-form-back" onPress={() => router.back()} style={styles.backBtn}>
               <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
@@ -148,7 +152,7 @@ export default function RecurringForm() {
           <Text style={styles.label}>{t("rp.amount")}</Text>
           <View style={styles.input}>
             <Text style={[styles.inputText, { color: colors.muted, marginRight: us(4) }]}>$</Text>
-            <TextInput testID="rp-amount-input" value={amount} onChangeText={(v) => { setAmount(v.replace(/[^0-9.,]/g, "")); setError(null); }} placeholder="0" placeholderTextColor={colors.muted} keyboardType="decimal-pad" style={[styles.inputText, { flex: 1, padding: 0 }, mont()]} />
+            <TextInput testID="rp-amount-input" value={amount} onChangeText={(v) => { setAmount(v.replace(/[^0-9.,]/g, "")); setError(null); }} placeholder={tr("ui.0")} placeholderTextColor={colors.muted} keyboardType="decimal-pad" style={[styles.inputText, { flex: 1, padding: 0 }, mont()]} />
           </View>
           <View style={[styles.input, { marginTop: us(10) }]}>
             <Ionicons name="pulse-outline" size={us(18)} color={forest} style={{ marginRight: us(8) }} />
@@ -173,7 +177,7 @@ export default function RecurringForm() {
 
           <Text style={styles.label}>{t("rp.frequency")}</Text>
           <View style={styles.wrapRow}>
-            {RP_FREQS.map((f) => <Chip key={f} testID={`rp-freq-${f}`} sel={freq === f} label={t(`rp.f_${f}`)} onPress={() => setFreq(f)} />)}
+            {RP_FREQS.map((f) => <Chip key={f} testID={`rp-freq-${f}`} sel={freq === f} label={t(`rp.f_${f}`, { defaultValue: t("common.unknown") })} onPress={() => setFreq(f)} />)}
           </View>
 
           <Text style={styles.label}>{t("rp.startDate")}</Text>
@@ -232,7 +236,7 @@ export default function RecurringForm() {
 
           <Text style={styles.label}>{t("rp.reminder")}</Text>
           <View style={styles.wrapRow}>
-            {RP_REMINDERS.map((r) => <Chip key={String(r)} testID={`rp-rem-${r ?? "none"}`} sel={reminder === r} label={t(`rp.r_${r ?? "none"}`)} onPress={() => setReminder(r)} />)}
+            {RP_REMINDERS.map((r) => <Chip key={String(r)} testID={`rp-rem-${r ?? "none"}`} sel={reminder === r} label={t(`rp.r_${r ?? "none"}`, { defaultValue: t("common.unknown") })} onPress={() => setReminder(r)} />)}
           </View>
           <Text style={styles.hint}>{t("rp.pushPending")}</Text>
 
@@ -252,14 +256,14 @@ export default function RecurringForm() {
           {error ? (
             <View style={styles.errorBox} testID="rp-form-error">
               <Ionicons name="alert-circle" size={us(16)} color={colors.expenseRed} />
-              <Text style={styles.errorText}>{error}</Text>
+              <Text style={styles.errorText}>{localizedError(error)}</Text>
             </View>
           ) : null}
 
           <Pressable testID="save-rp" onPress={save} disabled={saving} style={({ pressed }) => [styles.saveBtn, (pressed || saving) && { opacity: 0.75 }]}>
             {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{editing ? t("rp.save") : t("rp.create")}</Text>}
           </Pressable>
-        </ScrollView>
+        </ElasticScrollView>
       </KeyboardAvoidingView>
 
       <AppSheet visible={sheet !== null} onClose={() => setSheet(null)} testID="rp-form-sheet">

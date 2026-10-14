@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
@@ -179,15 +183,16 @@ function makeSeed(): Note[] {
   const now = Date.now();
   const iso = (minsAgo: number) => new Date(now - minsAgo * 60000).toISOString();
   return [
-    { id: genId(), title: "Ideas de ahorro", content: "Revisar suscripciones y cancelar las que ya no uso este mes.\nPreparar más comidas en casa.\nComparar precios antes de comprar.", pinned: true, color: NOTE_COLORS[0], icon: "bulb", categories: ["Finanzas", "Personal"], createdAt: iso(2880), updatedAt: iso(120) },
-    { id: genId(), title: "Lista de compras", content: "Leche\nPan\nHuevos\nCafé\nAlgo de fruta para la semana", pinned: false, color: NOTE_COLORS[1], icon: "cart", categories: ["Compras"], createdAt: iso(1440), updatedAt: iso(300) },
-    { id: genId(), title: "Metas del mes", content: "Reducir gastos en restaurantes.\nSalir a caminar más seguido.\nLeer al menos un libro.\nOrganizar mejor mi tiempo.", pinned: false, color: NOTE_COLORS[2], icon: "radio-button-on", categories: ["Metas", "Personal"], createdAt: iso(600), updatedAt: iso(600) },
-    { id: genId(), title: "Recordatorio", content: "Pagar la tarjeta antes del día 15 para evitar intereses.", pinned: false, color: NOTE_COLORS[3], icon: "alarm", categories: ["Recordatorio"], createdAt: iso(240), updatedAt: iso(90) },
-    { id: genId(), title: "Presupuesto viaje", content: "Estimar transporte, hospedaje y comidas para el fin de semana.", pinned: false, color: NOTE_COLORS[4], icon: "airplane", categories: ["Viaje"], createdAt: iso(60), updatedAt: iso(30) },
+    { id: genId(), title: tr("notes.samples.savingTitle"), content: tr("notes.samples.savingBody"), pinned: true, color: NOTE_COLORS[0], icon: "bulb", categories: [tr("notes.sampleTags.finance"), tr("notes.sampleTags.personal")], createdAt: iso(2880), updatedAt: iso(120) },
+    { id: genId(), title: tr("notes.samples.shoppingTitle"), content: tr("notes.samples.shoppingBody"), pinned: false, color: NOTE_COLORS[1], icon: "cart", categories: [tr("notes.sampleTags.shopping")], createdAt: iso(1440), updatedAt: iso(300) },
+    { id: genId(), title: tr("notes.samples.goalsTitle"), content: tr("notes.samples.goalsBody"), pinned: false, color: NOTE_COLORS[2], icon: "radio-button-on", categories: [tr("notes.sampleTags.goals"), tr("notes.sampleTags.personal")], createdAt: iso(600), updatedAt: iso(600) },
+    { id: genId(), title: tr("notes.samples.reminderTitle"), content: tr("notes.samples.reminderBody"), pinned: false, color: NOTE_COLORS[3], icon: "alarm", categories: [tr("notes.sampleTags.reminder")], createdAt: iso(240), updatedAt: iso(90) },
+    { id: genId(), title: tr("notes.samples.travelTitle"), content: tr("notes.samples.travelBody"), pinned: false, color: NOTE_COLORS[4], icon: "airplane", categories: [tr("notes.sampleTags.travel")], createdAt: iso(60), updatedAt: iso(30) },
   ];
 }
 
 export default function Notes() {
+  useInterfaceLanguage();
   const { colors, scheme } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -243,7 +248,7 @@ export default function Notes() {
         confirmedNotes.current = seed;
         setNotes(seed);
       } catch {
-        Alert.alert("No se pudieron guardar las notas", "El almacenamiento no está disponible. Inténtalo de nuevo.");
+        Alert.alert(tr("ui.could_not_save_notes"), tr("ui.storage_is_unavailable_please_try_again"));
       } finally {
         notesReady.current = true;
       }
@@ -330,7 +335,7 @@ export default function Notes() {
         const color = NOTE_COLORS[current.length % NOTE_COLORS.length];
         const newNote: Note = {
           id: genId(),
-          title: title || "Sin título",
+          title: title || tr("ui.untitled"),
           content,
           pinned: false,
           color,
@@ -344,7 +349,7 @@ export default function Notes() {
       saveComplete.current = true;
       setEditorOpen(false);
     } catch {
-      Alert.alert("No se pudo guardar", "Tu borrador se conserva. Comprueba el almacenamiento y vuelve a pulsar Guardar.");
+      Alert.alert(tr("ui.could_not_save"), tr("ui.your_draft_is_safe_check_storage_and_tap_save_again"));
     } finally {
       noteDeleting.current = false;
       setDeleteBusy(false);
@@ -358,7 +363,7 @@ export default function Notes() {
     try {
       await persist(confirmedNotes.current.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
     } catch {
-      Alert.alert("No se pudo fijar la nota", "No se guardó el cambio. Inténtalo de nuevo.");
+      Alert.alert(tr("ui.could_not_pin_note"), tr("ui.the_change_was_not_saved_please_try_again"));
     } finally {
       noteDeleting.current = false;
       setDeleteBusy(false);
@@ -380,7 +385,7 @@ export default function Notes() {
       setMenuNote(null);
       setConfirmDelete(false);
     } catch (error) {
-      Alert.alert("No se pudo eliminar", error instanceof Error ? error.message : "Inténtalo de nuevo.");
+      Alert.alert(tr("ui.could_not_delete"), localizedError(error instanceof Error ? error.message : tr("ui.please_try_again")));
     } finally {
       noteDeleting.current = false;
       setDeleteBusy(false);
@@ -509,7 +514,7 @@ export default function Notes() {
 
   return (
     <View style={{ flex: 1, backgroundColor: isDark ? colors.surface : "#E8EFE7" }}>
-      <ScrollView
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         testID="notes-scroll"
         style={{ flex: 1, backgroundColor: "transparent" }}
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(132) }}
@@ -521,12 +526,12 @@ export default function Notes() {
             <Ionicons name="document-text" size={us(22)} color={accent} />
           </View>
           <View style={{ flex: 1, marginLeft: us(12) }}>
-            <Text style={styles.title}>Notas</Text>
-            <Text style={styles.subtitle}>Tus ideas, tareas y recuerdos en un solo lugar.</Text>
+            <Text style={styles.title}>{tr("ui.notes")}</Text>
+            <Text style={styles.subtitle}>{tr("ui.your_ideas_tasks_and_reminders_in_one_place")}</Text>
           </View>
           <Pressable testID="notes-new-btn" onPress={() => openEditor(null)} style={styles.newBtn}>
             <Ionicons name="add" size={us(18)} color="#FFFFFF" />
-            <Text style={styles.newBtnText}>Nueva nota</Text>
+            <Text style={styles.newBtnText}>{tr("ui.new_note")}</Text>
           </Pressable>
         </View>
 
@@ -537,7 +542,7 @@ export default function Notes() {
             testID="notes-search"
             value={query}
             onChangeText={setQuery}
-            placeholder="Buscar notas..."
+            placeholder={tr("ui.search_notes")}
             placeholderTextColor={subColor}
             style={styles.searchInput}
           />
@@ -555,11 +560,11 @@ export default function Notes() {
             <View style={styles.emptyIcon}>
               <Ionicons name="document-text-outline" size={us(30)} color={accent} />
             </View>
-            <Text style={styles.emptyTitle}>No tienes notas todavía</Text>
-            <Text style={styles.emptySub}>Crea tu primera nota para empezar.</Text>
+            <Text style={styles.emptyTitle}>{tr("ui.no_notes_yet")}</Text>
+            <Text style={styles.emptySub}>{tr("ui.create_your_first_note_to_get_started")}</Text>
             <Pressable testID="notes-empty-new" onPress={() => openEditor(null)} style={styles.emptyBtn}>
               <Ionicons name="add" size={us(18)} color="#FFFFFF" />
-              <Text style={styles.newBtnText}>Nueva nota</Text>
+              <Text style={styles.newBtnText}>{tr("ui.new_note")}</Text>
             </Pressable>
           </View>
         ) : (
@@ -570,11 +575,11 @@ export default function Notes() {
                   <View style={styles.sectionChip}>
                     <Ionicons name="pin" size={us(13)} color={accent} />
                   </View>
-                  <Text style={styles.sectionTitle}>Notas fijadas</Text>
+                  <Text style={styles.sectionTitle}>{tr("ui.pinned_notes")}</Text>
                   <Text style={styles.sectionCount}>{pinned.length}</Text>
                   <View style={{ flex: 1 }} />
                   <Pressable testID="notes-ver-todas" hitSlop={6} onPress={() => setQuery("")} style={styles.verTodas}>
-                    <Text style={styles.verTodasText}>Ver todas</Text>
+                    <Text style={styles.verTodasText}>{tr("ui.view_all")}</Text>
                     <Ionicons name="chevron-forward" size={us(14)} color={subColor} />
                   </Pressable>
                 </View>
@@ -586,22 +591,22 @@ export default function Notes() {
               <View style={styles.sectionChip}>
                 <Ionicons name="albums-outline" size={us(13)} color={accent} />
               </View>
-              <Text style={styles.sectionTitle}>Todas las notas</Text>
+              <Text style={styles.sectionTitle}>{tr("ui.all_notes")}</Text>
               <Text style={styles.sectionCount}>{others.length}</Text>
               <View style={{ flex: 1 }} />
               <Pressable testID="notes-sort" hitSlop={6} onPress={() => setSortNewest((s) => !s)} style={styles.sortPill}>
-                <Text style={styles.sortText}>{sortNewest ? "Más recientes" : "Más antiguas"}</Text>
+                <Text style={styles.sortText}>{sortNewest ? tr("ui.most_recent") : tr("ui.oldest")}</Text>
                 <Ionicons name={sortNewest ? "chevron-down" : "chevron-up"} size={us(14)} color={subColor} />
               </Pressable>
             </View>
             {others.length > 0 ? (
               <View style={styles.cardWrap}>{others.map(renderCard)}</View>
             ) : (
-              <Text style={styles.mutedRow}>{query.trim() ? "Sin resultados" : "No hay más notas"}</Text>
+              <Text style={styles.mutedRow}>{query.trim() ? tr("ui.no_results") : tr("ui.no_more_notes")}</Text>
             )}
           </>
         )}
-      </ScrollView>
+      </ElasticScrollView>
 
       {/* Card action menu (three-dot) */}
       <Modal visible={!!menuNote} transparent animationType="fade" onRequestClose={() => setMenuNote(null)}>
@@ -614,7 +619,7 @@ export default function Notes() {
             onPress={() => { const n = menuNote; setMenuNote(null); if (n) openEditor(n); }}
           >
             <Ionicons name="create-outline" size={us(20)} color={titleColor} />
-            <Text style={styles.menuItemText}>Editar</Text>
+            <Text style={styles.menuItemText}>{tr("ui.edit")}</Text>
           </Pressable>
           <Pressable
             testID="note-menu-pin"
@@ -622,7 +627,7 @@ export default function Notes() {
             onPress={() => { const n = menuNote; setMenuNote(null); if (n) togglePin(n.id); }}
           >
             <Ionicons name={menuNote?.pinned ? "pin" : "pin-outline"} size={us(20)} color={titleColor} />
-            <Text style={styles.menuItemText}>{menuNote?.pinned ? "Desfijar nota" : "Fijar nota"}</Text>
+            <Text style={styles.menuItemText}>{menuNote?.pinned ? tr("ui.unpin_note") : tr("ui.pin_note")}</Text>
           </Pressable>
           <Pressable
             testID="note-menu-delete"
@@ -631,7 +636,7 @@ export default function Notes() {
             onPress={() => { const n = menuNote; setMenuNote(null); if (n) deleteNote(n.id); }}
           >
             <Ionicons name="trash-outline" size={us(20)} color={colors.expenseRed} />
-            <Text style={[styles.menuItemText, { color: colors.expenseRed }]}>Eliminar</Text>
+            <Text style={[styles.menuItemText, { color: colors.expenseRed }]}>{tr("ui.delete")}</Text>
           </Pressable>
         </View>
       </Modal>
@@ -646,7 +651,7 @@ export default function Notes() {
           <View style={styles.sheet} pointerEvents={deleteBusy ? "none" : "auto"}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHead}>
-              <Text style={styles.sheetTitle}>{editing ? "Editar nota" : "Nueva nota"}</Text>
+              <Text style={styles.sheetTitle}>{editing ? tr("ui.edit_note") : tr("ui.new_note")}</Text>
               <Pressable testID="notes-editor-close" hitSlop={8} onPress={() => setEditorOpen(false)}>
                 <Ionicons name="close" size={us(22)} color={subColor} />
               </Pressable>
@@ -658,25 +663,25 @@ export default function Notes() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <Text style={styles.fieldLabel}>Título</Text>
+              <Text style={styles.fieldLabel}>{tr("ui.title")}</Text>
               <TextInput
                 testID="notes-title-input"
                 editable={!deleteBusy}
                 value={draftTitle}
                 onChangeText={setDraftTitle}
-                placeholder="Título"
+                placeholder={tr("ui.title")}
                 placeholderTextColor={subColor}
                 style={styles.titleInput}
               />
 
-              <Text style={[styles.fieldLabel, { marginTop: us(14) }]}>Contenido</Text>
+              <Text style={[styles.fieldLabel, { marginTop: us(14) }]}>{tr("ui.content")}</Text>
               {draftListMode === "plain" ? (
                 <TextInput
                   testID="notes-content-input"
                   editable={!deleteBusy}
                   value={draftContent}
                   onChangeText={setDraftContent}
-                  placeholder="Escribe tu nota..."
+                  placeholder={tr("ui.write_your_note")}
                   placeholderTextColor={subColor}
                   style={styles.contentInput}
                   multiline
@@ -705,7 +710,7 @@ export default function Notes() {
                         editable={!deleteBusy}
                         value={it.text}
                         onChangeText={(t) => it.id && updateItemText(it.id, t)}
-                        placeholder="Elemento"
+                        placeholder={tr("ui.item")}
                         placeholderTextColor={subColor}
                         style={[styles.editItemInput, draftListMode === "check" && it.checked && styles.editItemDone]}
                         onSubmitEditing={addItem}
@@ -719,12 +724,12 @@ export default function Notes() {
                   ))}
                   <Pressable testID="notes-item-add" onPress={addItem} style={styles.addItemBtn}>
                     <Ionicons name="add" size={us(18)} color={noteGreen} />
-                    <Text style={[styles.addItemText, { color: noteGreen }]}>Agregar elemento</Text>
+                    <Text style={[styles.addItemText, { color: noteGreen }]}>{tr("ui.add_item")}</Text>
                   </Pressable>
                 </View>
               )}
 
-              <Text style={[styles.fieldLabel, { marginTop: us(16) }]}>Herramientas</Text>
+              <Text style={[styles.fieldLabel, { marginTop: us(16) }]}>{tr("ui.tools")}</Text>
               <View style={styles.toolsRow}>
                 <Pressable
                   testID="notes-tool-check"
@@ -732,7 +737,7 @@ export default function Notes() {
                   style={[styles.toolBtn, draftListMode === "check" && { borderColor: noteGreen, backgroundColor: noteGreen + (isDark ? "24" : "14") }]}
                 >
                   <Ionicons name="checkbox-outline" size={us(18)} color={draftListMode === "check" ? noteGreen : subColor} />
-                  <Text style={[styles.toolText, draftListMode === "check" && { color: noteGreen }]}>Lista de checks</Text>
+                  <Text style={[styles.toolText, draftListMode === "check" && { color: noteGreen }]}>{tr("ui.checklist")}</Text>
                 </Pressable>
                 <Pressable
                   testID="notes-tool-ordered"
@@ -740,11 +745,11 @@ export default function Notes() {
                   style={[styles.toolBtn, draftListMode === "ordered" && { borderColor: noteGreen, backgroundColor: noteGreen + (isDark ? "24" : "14") }]}
                 >
                   <OrderedGlyph color={draftListMode === "ordered" ? noteGreen : subColor} />
-                  <Text style={[styles.toolText, draftListMode === "ordered" && { color: noteGreen }]}>Lista ordenada</Text>
+                  <Text style={[styles.toolText, draftListMode === "ordered" && { color: noteGreen }]}>{tr("ui.numbered_list")}</Text>
                 </Pressable>
               </View>
 
-              <Text style={[styles.fieldLabel, { marginTop: us(16) }]}>Color de nota</Text>
+              <Text style={[styles.fieldLabel, { marginTop: us(16) }]}>{tr("ui.note_color")}</Text>
               <View style={styles.colorRow}>
                 {PALETTE_ORDER.map((key) => {
                   const p = NOTE_PALETTES[key];
@@ -765,9 +770,9 @@ export default function Notes() {
 
             {confirmDelete ? (
               <View style={styles.confirmRow}>
-                <Text style={styles.confirmText}>¿Eliminar esta nota?</Text>
+                <Text style={styles.confirmText}>{tr("ui.delete_this_note")}</Text>
                 <Pressable style={styles.confirmCancel} onPress={() => setConfirmDelete(false)}>
-                  <Text style={styles.confirmCancelText}>Cancelar</Text>
+                  <Text style={styles.confirmCancelText}>{tr("ui.cancel")}</Text>
                 </Pressable>
                 <Pressable
                   testID="notes-confirm-delete"
@@ -775,7 +780,7 @@ export default function Notes() {
                   style={styles.confirmDelBtn}
                   onPress={() => editing && deleteNote(editing.id)}
                 >
-                  <Text style={styles.confirmDelText}>Eliminar</Text>
+                  <Text style={styles.confirmDelText}>{tr("ui.delete")}</Text>
                 </Pressable>
               </View>
             ) : (
@@ -783,14 +788,14 @@ export default function Notes() {
                 {editing ? (
                   <Pressable testID="notes-delete-btn" disabled={deleteBusy} style={styles.deleteBtn} onPress={() => setConfirmDelete(true)}>
                     <Ionicons name="trash-outline" size={us(18)} color={colors.expenseRed} />
-                    <Text style={styles.deleteText}>Eliminar</Text>
+                    <Text style={styles.deleteText}>{tr("ui.delete")}</Text>
                   </Pressable>
                 ) : (
                   <View />
                 )}
                 <Pressable testID="notes-save-btn" style={styles.saveBtn} onPress={saveNote}>
                   <Ionicons name="checkmark" size={us(18)} color="#FFFFFF" />
-                  <Text style={styles.saveText}>Guardar</Text>
+                  <Text style={styles.saveText}>{tr("ui.save")}</Text>
                 </Pressable>
               </View>
             )}

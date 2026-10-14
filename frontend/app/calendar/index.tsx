@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, ScrollView, ActivityIndicator, RefreshControl, useWindowDimensions } from "react-native";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { View, ScrollView, ActivityIndicator, useWindowDimensions } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -17,10 +19,23 @@ import {
   parseYmd, rangeTitle, weekStart, weekdayShort, ymd, type CalEvent, type CalKind,
 } from "@/src/calendar/shared";
 import { us } from "@/src/ui-scale";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, { useSharedValue, withTiming, ReduceMotion } from "react-native-reanimated";
 
 type Mode = "month" | "week" | "list";
 const MAX_DOTS = 4;
 const LIST_PAGE = 12;
+const MONTH_SLIDE_MS = 240;
+
+// Navigation only: retain the selected day, clamped to the destination month's
+// last day (31 January -> 28/29 February). Reuse the existing calendar parser.
+function monthSelection(selected: string, delta: number) {
+  const current = parseYmd(selected);
+  const target = new Date(current.getFullYear(), current.getMonth() + delta, 1);
+  const last = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(current.getDate(), last));
+  return ymd(target);
+}
 
 const fetchGrid = (y: number, m: number) => {
   const g = monthGrid(y, m);
@@ -54,6 +69,23 @@ export default function FinancialCalendar() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [upLimit, setUpLimit] = useState(3);
   const [listPages, setListPages] = useState(1);
+  const monthDirection = useSharedValue(1);
+  const changingUntil = useRef(0);
+  const enterMonth = useCallback((values: { targetOriginX: number; targetWidth: number }) => {
+    "worklet";
+    return {
+      initialValues: { originX: values.targetOriginX + monthDirection.value * values.targetWidth },
+      animations: { originX: withTiming(values.targetOriginX, { duration: MONTH_SLIDE_MS, reduceMotion: ReduceMotion.System }) },
+    };
+  }, [monthDirection]);
+  const exitMonth = useCallback((values: { currentOriginX: number; currentWidth: number }) => {
+    "worklet";
+    return {
+      initialValues: { originX: values.currentOriginX },
+      animations: { originX: withTiming(values.currentOriginX - monthDirection.value * values.currentWidth,
+        { duration: MONTH_SLIDE_MS, reduceMotion: ReduceMotion.System }) },
+    };
+  }, [monthDirection]);
 
   const sel = useMemo(() => parseYmd(selected), [selected]);
   const year = sel.getFullYear();
@@ -88,6 +120,7 @@ export default function FinancialCalendar() {
       const d = new Date(year, month - 1 + dm, 1);
       const y = d.getFullYear(), m = d.getMonth() + 1;
       qc.prefetchQuery({ queryKey: ["calendar-events", y, m], queryFn: () => fetchGrid(y, m), staleTime: 30_000 });
+      qc.prefetchQuery({ queryKey: ["calendar-summary", y, m], queryFn: () => api.calendarSummary(y, m), staleTime: 30_000 });
     }
   }, [qc, year, month]);
 
@@ -137,14 +170,29 @@ export default function FinancialCalendar() {
     return real.reduce((s, e) => s + e.sign * (e.amount || 0), 0);
   }, [dayEvents]);
 
-  const onSelect = useCallback((d: string) => setSelected(d), []);
-  const shiftMonth = (dm: number) => {
-    const d = new Date(year, month - 1 + dm, 1);
-    const now = new Date();
-    const sameAsToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    setSelected(sameAsToday ? today : ymd(d));
+  const onSelect = useCallback((d: string) => {
+    if (Date.now() >= changingUntil.current) setSelected(d);
+  }, []);
+  const shiftMonth = useCallback((dm: number) => {
+    if (Date.now() < changingUntil.current) return;
+    changingUntil.current = Date.now() + MONTH_SLIDE_MS;
+    monthDirection.value = dm;
+    setSelected(current => monthSelection(current, dm));
     setListPages(1);
-  };
+  }, [monthDirection]);
+  const monthGesture = useMemo(() => Gesture.Pan()
+    .enabled(mode === "month")
+    .maxPointers(1)
+    .activeOffsetX([-24, 24])
+    .failOffsetY([-12, 12])
+    .runOnJS(true)
+    .onEnd((event, success) => {
+      // Only one change on release; vertical/short/cancelled drags do nothing.
+      if (success && Math.abs(event.translationX) >= 48
+          && Math.abs(event.translationX) > Math.abs(event.translationY) * 1.5) {
+        shiftMonth(event.translationX < 0 ? 1 : -1);
+      }
+    }), [mode, shiftMonth]);
   const shiftWeek = (dw: number) => setSelected(ymd(addDays(sel, dw * 7)));
 
   const openEvent = useCallback((e: CalEvent) => {
@@ -322,7 +370,7 @@ export default function FinancialCalendar() {
           </View>
         ) : null}
       </View>
-      {evQ.isError && !evQ.data ? ErrorBox(evQ) : evQ.isLoading ? (
+      {evQ.isError && !evQ.data ? ErrorBox(evQ) : evQ.isLoading || evQ.isPlaceholderData ? (
         <ActivityIndicator color={forest} style={{ marginVertical: us(20) }} />
       ) : !dayEvents.length ? (
         <View style={styles.emptyDay}>
@@ -347,7 +395,7 @@ export default function FinancialCalendar() {
     </View>
   );
 
-  const s = sumQ.data;
+  const s = sumQ.isPlaceholderData ? undefined : sumQ.data;
   const SummaryCard = ({ testID, color, icon, label, amount, count, note }: any) => (
     <View testID={testID} style={[styles.sumCard, { backgroundColor: isDark ? color + "1F" : color + "12" }]}>
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: us(6) }}>
@@ -356,9 +404,9 @@ export default function FinancialCalendar() {
         </View>
         <Text style={styles.sumLabel} numberOfLines={2}>{label}</Text>
       </View>
-      <Text style={[styles.sumAmount, mont(), { color }]} numberOfLines={1} adjustsFontSizeToFit>{formatCurrencyInt(amount || 0)}</Text>
+      <Text style={[styles.sumAmount, mont(), { color }]} numberOfLines={1} adjustsFontSizeToFit>{sumQ.isPlaceholderData ? "…" : formatCurrencyInt(amount || 0)}</Text>
       <View style={styles.rowBetween}>
-        <Text style={styles.sumCount} numberOfLines={1}>{note || (count === 1 ? t("calendar.eventsOne") : t("calendar.eventsN", { count: count || 0 }))}</Text>
+        <Text style={styles.sumCount} numberOfLines={1}>{sumQ.isPlaceholderData ? "…" : note || (count === 1 ? t("calendar.eventsOne") : t("calendar.eventsN", { count: count || 0 }))}</Text>
         <Ionicons name="stats-chart" size={us(13)} color={color} />
       </View>
     </View>
@@ -470,7 +518,7 @@ export default function FinancialCalendar() {
       <View style={styles.card}>
         <NavHeader title={monthTitle(sel, lang)} onPrev={() => shiftMonth(-1)} onNext={() => shiftMonth(1)} />
       </View>
-      {evQ.isError && !evQ.data ? ErrorBox(evQ) : evQ.isLoading ? (
+      {evQ.isError && !evQ.data ? ErrorBox(evQ) : evQ.isLoading || evQ.isPlaceholderData ? (
         <ActivityIndicator color={forest} style={{ marginVertical: us(24) }} />
       ) : !listGroups.length ? (
         <View style={styles.emptyDay}>
@@ -510,13 +558,12 @@ export default function FinancialCalendar() {
     </View>
   );
 
-  const monthEmpty = !evQ.isLoading && !evQ.isError && events.length === 0;
+  const monthEmpty = !evQ.isLoading && !evQ.isPlaceholderData && !evQ.isError && events.length === 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={refreshAll} tintColor={forest} />}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
@@ -539,11 +586,19 @@ export default function FinancialCalendar() {
               )}
               {WeekdayRow}
               {mode === "month" ? (
-                Array.from({ length: grid.days.length / 7 }, (_, r) => (
-                  <View key={r} style={styles.gridRow}>
-                    {grid.days.slice(r * 7, r * 7 + 7).map((d) => renderCell(d, d.getMonth() + 1 === month))}
+                <GestureDetector gesture={monthGesture}>
+                  <View style={{ overflow: "hidden" }}>
+                    <Animated.View key={`${year}-${month}`} testID="cal-month-page"
+                      entering={enterMonth}
+                      exiting={exitMonth}>
+                      {Array.from({ length: grid.days.length / 7 }, (_, r) => (
+                        <View key={r} style={styles.gridRow}>
+                          {grid.days.slice(r * 7, r * 7 + 7).map((d) => renderCell(d, d.getMonth() + 1 === month))}
+                        </View>
+                      ))}
+                    </Animated.View>
                   </View>
-                ))
+                </GestureDetector>
               ) : (
                 <View style={styles.gridRow}>{weekDays.map((d) => renderCell(d, true, true))}</View>
               )}
@@ -556,7 +611,7 @@ export default function FinancialCalendar() {
 
         {Summary}
         {Upcoming}
-      </ScrollView>
+      </ElasticScrollView>
 
       <AppSheet visible={filterOpen} onClose={() => setFilterOpen(false)} testID="cal-filter-sheet">
         <View style={{ paddingBottom: us(8) }}>
@@ -577,7 +632,7 @@ export default function FinancialCalendar() {
               >
                 <View style={[styles.legendDot, { backgroundColor: KIND_COLOR[k], width: us(10), height: us(10), borderRadius: us(5) }]} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.filterLabel}>{t(`calendar.kinds.${k}`)}</Text>
+                  <Text style={styles.filterLabel}>{t(`calendar.kinds.${k}`, { defaultValue: t("common.unknown") })}</Text>
                 </View>
                 <Ionicons name={on ? "checkbox" : "square-outline"} size={us(22)} color={on ? forest : colors.muted} />
               </Pressable>

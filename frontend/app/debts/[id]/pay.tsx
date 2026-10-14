@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -39,6 +43,7 @@ function payPalette(colors: any, scheme: string) {
 }
 
 export default function PayDebt() {
+  useInterfaceLanguage();
   const { colors, scheme } = useTheme();
   const pal = payPalette(colors, scheme);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -86,24 +91,24 @@ export default function PayDebt() {
     ? "missing" : debtQ.isLoading && !d ? "loading" : debtQ.isError ? "error" : d ? "ready" : "missing";
   if (resourceState !== "ready") return (
     <View style={{ flex: 1, backgroundColor: pal.bg }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
         <View style={styles.headerRow}>
           <Pressable testID="debt-pay-back" onPress={() => router.back()} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, pal.dark ? null : styles.softShadow]}>
             <Ionicons name="chevron-back" size={us(24)} color={pal.forest} />
           </Pressable>
-          <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest }]}>Pago de deuda</Text>
+          <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest }]}>{tr("ui.debt_payment")}</Text>
         </View>
         {resourceState === "loading" ? <ActivityIndicator testID="debt-pay-loading" color={pal.forest} /> : (
           <View style={[styles.card, { backgroundColor: pal.card, borderColor: pal.border }]} testID="debt-pay-query-error">
-            <Text style={[styles.debtName, { color: pal.onSurface }]}>{resourceState === "missing" ? "No se encontró la deuda." : "No se pudo consultar la deuda."}</Text>
-            <Text style={[styles.debtSub, { color: pal.muted }]}>{resourceState === "missing" ? "Puede que ya no exista. Puedes regresar o volver a consultar." : "Comprueba tu conexión y vuelve a intentarlo."}</Text>
-            {operation ? <Text style={[styles.debtSub, { color: pal.muted }]} testID="debt-pay-preserved">El registro del pago se conserva. Esta consulta no confirma ni anula pagos.</Text> : null}
+            <Text style={[styles.debtName, { color: pal.onSurface }]}>{resourceState === "missing" ? tr("ui.debt_not_found") : tr("ui.could_not_load_the_debt")}</Text>
+            <Text style={[styles.debtSub, { color: pal.muted }]}>{resourceState === "missing" ? tr("ui.it_may_no_longer_exist_go_back_or_try_again") : tr("ui.check_your_connection_and_try_again")}</Text>
+            {operation ? <Text style={[styles.debtSub, { color: pal.muted }]} testID="debt-pay-preserved">{tr("ui.the_payment_record_is_preserved_this_query_does_not_confirm_or_cancel_payments")}</Text> : null}
             {params.id ? <Pressable testID="debt-pay-retry" disabled={debtQ.isFetching} onPress={() => { void debtQ.refetch(); }} style={[styles.saveBtn, { backgroundColor: pal.forest }]}>
-              <Text style={[styles.saveText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{debtQ.isFetching ? "Reintentando…" : "Reintentar"}</Text>
+              <Text style={[styles.saveText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{debtQ.isFetching ? tr("ui.retrying") : tr("ui.retry")}</Text>
             </Pressable> : null}
           </View>
         )}
-      </ScrollView>
+      </ElasticScrollView>
     </View>
   );
 
@@ -184,7 +189,7 @@ export default function PayDebt() {
         recoveryError.current = readError;
         setReady(false);
       }
-      Alert.alert("Estado del pago", error instanceof Error ? error.message : "No se pudo verificar el pago.");
+      Alert.alert(tr("ui.payment_status"), localizedError(error instanceof Error ? error.message : tr("ui.could_not_verify_the_payment")));
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -200,7 +205,7 @@ export default function PayDebt() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, backgroundColor: pal.bg }}>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
+      <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
         <View style={styles.headerRow}>
           <Pressable onPress={() => router.back()} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
             <Ionicons name="chevron-back" size={us(24)} color={pal.forest} />
@@ -219,19 +224,19 @@ export default function PayDebt() {
               <Text style={[styles.debtSub, { color: pal.muted }]} numberOfLines={1}>{counterpart}</Text>
             </View>
             <View style={[styles.statusPill, { backgroundColor: isPaid ? pal.mint : pal.coralSoft }]}>
-              <Text style={[styles.statusText, { color: isPaid ? pal.forest : pal.coral }]}>{isPaid ? "PAGADA" : "ACTIVA"}</Text>
+              <Text style={[styles.statusText, { color: isPaid ? pal.forest : pal.coral }]}>{isPaid ? tr("ui.paid_3") : tr("ui.active")}</Text>
             </View>
           </View>
           <View style={[styles.hDivider, { backgroundColor: pal.divider }]} />
           <View style={styles.pendRow}>
-            <Text style={[styles.pendLabel, { color: pal.muted }]}>Pendiente actual</Text>
+            <Text style={[styles.pendLabel, { color: pal.muted }]}>{tr("ui.outstanding_balance")}</Text>
             <Text style={[styles.pendVal, { color: pal.forest }]}>{formatCurrencyInt(d.remaining_amount)}</Text>
           </View>
         </View>
 
         {/* Monto */}
         <View style={cardStyle}>
-          <Text style={[styles.label, { color: pal.muted }]}>Monto del pago</Text>
+          <Text style={[styles.label, { color: pal.muted }]}>{tr("ui.payment_amount")}</Text>
           <View style={[styles.amountBox, { backgroundColor: pal.field, borderColor: pal.border }]}>
             <Text style={[styles.amountText, { color: pal.forest }]}>$</Text>
             <TextInput
@@ -247,16 +252,16 @@ export default function PayDebt() {
           </View>
           {view.preview && amt > 0 && (
             <View style={[styles.preview, { borderTopColor: pal.divider }]}>
-              <View style={styles.pRow}><Text style={[styles.pLabel, { color: pal.muted }]}>Saldo anterior</Text><Text style={[styles.pVal, { color: pal.onSurface }]}>{formatCurrencyInt(d.remaining_amount)}</Text></View>
-              <View style={styles.pRow}><Text style={[styles.pLabel, { color: pal.muted }]}>Pago</Text><Text style={[styles.pVal, { color: pal.coral }]}>-{formatCurrencyInt(amt)}</Text></View>
-              <View style={styles.pRow}><Text style={[styles.pLabel, { color: pal.onSurface, fontWeight: "700" }]}>Nuevo saldo</Text><Text style={[styles.pVal, { color: pal.forest, fontSize: 16 }]}>{formatCurrencyInt(newBalance)}</Text></View>
+              <View style={styles.pRow}><Text style={[styles.pLabel, { color: pal.muted }]}>{tr("ui.previous_balance")}</Text><Text style={[styles.pVal, { color: pal.onSurface }]}>{formatCurrencyInt(d.remaining_amount)}</Text></View>
+              <View style={styles.pRow}><Text style={[styles.pLabel, { color: pal.muted }]}>{tr("ui.payment")}</Text><Text style={[styles.pVal, { color: pal.coral }]}>-{formatCurrencyInt(amt)}</Text></View>
+              <View style={styles.pRow}><Text style={[styles.pLabel, { color: pal.onSurface, fontWeight: "700" }]}>{tr("ui.new_balance")}</Text><Text style={[styles.pVal, { color: pal.forest, fontSize: 16 }]}>{formatCurrencyInt(newBalance)}</Text></View>
             </View>
           )}
         </View>
 
         {/* Cuenta de origen */}
         <View style={cardStyle}>
-          <Text style={[styles.label, { color: pal.muted }]}>Cuenta de origen</Text>
+          <Text style={[styles.label, { color: pal.muted }]}>{tr("ui.source_account")}</Text>
           <Pressable
             testID="pay-account-select"
             onPress={() => { if (view.editable && !saving) setPickerOpen(true); }}
@@ -271,7 +276,7 @@ export default function PayDebt() {
             )}
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[styles.selName, { color: selected ? pal.onSurface : pal.muted }]} numberOfLines={1}>
-                {selected ? selected.name : "Seleccionar cuenta"}
+                {selected ? selected.name : tr("ui.choose_account")}
               </Text>
               {selected && <Text style={[styles.selBal, { color: pal.muted }]}>{formatCurrency(selected.current_balance)}</Text>}
             </View>
@@ -281,13 +286,13 @@ export default function PayDebt() {
 
         {/* Notas */}
         <View style={cardStyle}>
-          <Text style={[styles.label, { color: pal.muted }]}>Notas (opcional)</Text>
+          <Text style={[styles.label, { color: pal.muted }]}>{tr("ui.notes_optional")}</Text>
           <TextInput
             value={notes}
             editable={view.editable && !saving}
             onChangeText={setNotes}
             multiline
-            placeholder="Agregar una descripción del pago..."
+            placeholder={tr("ui.add_a_payment_description")}
             placeholderTextColor={pal.muted}
             style={[styles.notes, { backgroundColor: pal.field, borderColor: pal.border, color: pal.onSurface }]}
           />
@@ -301,13 +306,13 @@ export default function PayDebt() {
         >
           <Text style={[styles.saveText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{view.action}</Text>
         </Pressable>
-      </ScrollView>
+      </ElasticScrollView>
 
       <AppSheet visible={pickerOpen} onClose={() => setPickerOpen(false)} testID="pay-account-sheet">
-        <Text style={[styles.sheetTitle, { color: pal.dark ? pal.onSurface : pal.forest }]}>Cuenta de origen</Text>
+        <Text style={[styles.sheetTitle, { color: pal.dark ? pal.onSurface : pal.forest }]}>{tr("ui.source_account")}</Text>
         <ScrollView style={{ maxHeight: us(420) }} contentContainerStyle={{ paddingHorizontal: us(spacing.lg), gap: us(8), paddingBottom: us(4) }}>
           {accounts.length === 0 ? (
-            <Text style={[styles.sheetEmpty, { color: pal.muted }]}>No hay cuentas disponibles</Text>
+            <Text style={[styles.sheetEmpty, { color: pal.muted }]}>{tr("ui.no_accounts_available")}</Text>
           ) : (
             accounts.map((a: any) => {
               const sel = accountId === a.id;

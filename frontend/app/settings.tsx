@@ -1,3 +1,7 @@
+import { localizedError } from "@/src/i18n/errors";
+import { tr, useTranslation, useLang, type Lang } from "@/src/i18n";
+import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
+import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useEffect, useState } from "react";
 import { Alert, View, ScrollView, StyleSheet } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -8,7 +12,7 @@ import { useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing, type ThemeMode } from "@/src/theme";
-import { useTranslation, useLang, type Lang } from "@/src/i18n";
+
 import { AppSheet } from "@/src/components/sheets";
 
 import { us, ufs } from "@/src/ui-scale";
@@ -34,8 +38,8 @@ export default function Settings() {
     { id: "system", label: t("settings.themeSystem"), icon: "phone-portrait-outline" },
   ];
   const LANGUAGES: { id: Lang; label: string }[] = [
+    { id: "en-US", label: t("settings.english") },
     { id: "es", label: t("settings.spanish") },
-    { id: "en", label: t("settings.english") },
   ];
 
   useEffect(() => {
@@ -49,7 +53,7 @@ export default function Settings() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+    <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
@@ -126,7 +130,7 @@ export default function Settings() {
             await api.seed();
             qc.invalidateQueries();
           } catch (error) {
-            Alert.alert("Error", error instanceof Error ? error.message : String(error));
+            Alert.alert(tr("ui.error"), localizedError(error instanceof Error ? error.message : String(error)));
           }
         }}
         style={[styles.saveBtn, { marginTop: us(12), backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border }]}
@@ -142,7 +146,7 @@ export default function Settings() {
             <Pressable
               key={l.id}
               testID={`language-option-${l.id}`}
-              onPress={() => { setLang(l.id); setLangOpen(false); }}
+              onPress={async () => { try { await setLang(l.id); setLangOpen(false); } catch { Alert.alert(t("common.error"), t("errors.languagePreference")); } }}
               style={styles.langOption}
             >
               <Text style={[styles.langOptionText, active && { color: colors.brandPrimary, fontWeight: "800" }]}>{l.label}</Text>
@@ -151,7 +155,7 @@ export default function Settings() {
           );
         })}
       </AppSheet>
-    </ScrollView>
+    </ElasticScrollView>
   );
 }
 

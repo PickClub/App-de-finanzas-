@@ -1,3 +1,4 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // Prepared v2 journal only; no activation, native storage, HTTP or database.
 const assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
 const ts = require('typescript'), root = path.resolve(__dirname, '..');
@@ -5,7 +6,7 @@ const compile = file => ts.transpileModule(fs.readFileSync(path.join(root, file)
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const exportsV2 = {};
-vm.runInNewContext(compile('src/debt-payments/journal-v2.ts'), { exports: exportsV2, Map, WeakMap, Error, Promise });
+vm.runInNewContext(compile('src/debt-payments/journal-v2.ts'), localeGlobals({ exports: exportsV2, Map, WeakMap, Error, Promise }));
 const A = '11111111-1111-4111-8111-111111111111', B = '22222222-2222-4222-8222-222222222222';
 const context = (environment_id = A, user_id = 'default-user') => ({ version: 1, environment_id, user_id, mode: 'single_user',
   capabilities: { expected_context_headers: true, debt_payment_reconciliation: false, cross_device_recovery: false } });
@@ -80,8 +81,8 @@ async function main() {
   console.log('PASS v2: simultaneous journals cannot replace a pending intention');
 
   const api = {}, requests = [];
-  vm.runInNewContext(compile('src/api.ts'), { exports: api, process: { env: { EXPO_PUBLIC_BACKEND_URL: 'http://synthetic.invalid' } },
-    fetch: async (url, options) => { requests.push({ url, options }); return { ok: true, json: async()=>context() }; } });
+  vm.runInNewContext(compile('src/api.ts'), localeGlobals({ exports: api, process: { env: { EXPO_PUBLIC_BACKEND_URL: 'http://synthetic.invalid' } },
+    fetch: async (url, options) => { requests.push({ url, options }); return { ok: true, json: async()=>context() }; } }));
   await api.api.createDebtPayment({}, 'legacy-r6-key');
   assert(!('MoneyFlow-Environment-ID' in requests[0].options.headers));
   await api.api.createContextProtectedDebtPayment({}, 'protected-key', context());

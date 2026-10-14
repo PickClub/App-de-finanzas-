@@ -1,3 +1,4 @@
+const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
 // C10/R7 Categories: actual form handlers with synthetic API/cache/navigation.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const vm=require('node:vm'),cp=require('node:child_process'),ts=require('typescript');
@@ -29,7 +30,7 @@ function fixture(edit=false){
     updateCategory:async(id,payload)=>{calls.push(['PUT',id,plain(payload)]);return response();},
     deleteCategory:async id=>calls.push(['DELETE',id])};
   ctx.deletion.remove=async operation=>{if(ctx.deletion.locked.current)return;ctx.deletion.locked.current=true;try{return await operation();}finally{ctx.deletion.locked.current=false;}};
-  vm.createContext(ctx);
+  vm.createContext(localeGlobals(ctx));
   const code=Object.entries(functions).map(([n,value])=>`const ${n}=${value};`).join('\n')+'\nglobalThis.run={save,remove};';
   vm.runInContext(ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,ctx);
   return {ctx,run:ctx.run,alerts,calls,counts:()=>({backs,refreshes}),draft:()=>plain({name:ctx.name,type:ctx.type,icon:ctx.icon,color:ctx.color,isGroup:ctx.isGroup,parentId:ctx.parentId}),

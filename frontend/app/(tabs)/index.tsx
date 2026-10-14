@@ -540,7 +540,7 @@ export default function Home() {
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const applyDateRange = useCallback((range: DateRange | null) => setDateRange(range), []);
 
-  const summaryQ = useQuery({ queryKey: ["summary"], queryFn: api.summary });
+  const summaryQ = useQuery({ queryKey: ["summary"], queryFn: api.summary, retry: false });
   const userQ = useQuery({ queryKey: ["user"], queryFn: api.getUser });
   const txQ = useQuery({ queryKey: ["transactions"], queryFn: api.listTransactions });
   const catQ = useQuery({ queryKey: ["categories"], queryFn: api.listCategories });
@@ -549,17 +549,22 @@ export default function Home() {
   // Used ONLY to derive the REAL per-direction debt count for the Deudas cards.
   const debtsListQ = useQuery({ queryKey: ["debts"], queryFn: api.listDebts });
 
-  const summary = summaryQ.data;
+  const summaryReady = summaryQ.isSuccess && !summaryQ.isError;
+  const summary = summaryReady ? summaryQ.data : undefined;
+  const summaryPlaceholder = summaryQ.isError ? "—" : "…";
   // Display-only proportions of the existing summary, without new requests.
   const debtTotal = (summary?.debts?.i_owe || 0) + (summary?.debts?.they_owe || 0);
   const debtShare = (amount: number) => debtTotal > 0 ? Math.max(0, Math.min(100, amount / debtTotal * 100)) : 0;
-  // Real counts derived from existing data (no new API, no backend change).
-  const iOweCount = (debtsListQ.data || []).filter((d: any) => d?.direction === "i_owe").length;
-  const theyOweCount = (debtsListQ.data || []).filter((d: any) => d?.direction === "they_owe").length;
+  // The legacy catalog stops at 500. At that boundary, show the existing
+  // percentage-only label instead of presenting a partial count as complete.
+  const debtCountsComplete = debtsListQ.isSuccess && !debtsListQ.isError && (debtsListQ.data?.length || 0) < 500;
+  const iOweCount = debtCountsComplete ? (debtsListQ.data || []).filter((d: any) => d?.direction === "i_owe").length : 0;
+  const theyOweCount = debtCountsComplete ? (debtsListQ.data || []).filter((d: any) => d?.direction === "they_owe").length : 0;
   // "N deudas · X% del total" — falls back to just the percentage when the count
   // is not yet available / is zero, so no wrong count ever flashes during load.
   const debtCountShareLabel = (amount: number, count: number) => {
     if (hidden) return "••••";
+    if (!summaryReady) return summaryPlaceholder;
     const isEs = i18n.language.startsWith("es");
     const pct = `${Math.round(debtShare(amount))}% ${isEs ? "del total" : "of total"}`;
     if (!count) return pct;
@@ -612,8 +617,8 @@ export default function Home() {
     }
   };
 
-  const money = (n: number) => (hidden ? "••••" : formatCurrency(n));
-  const debtMoney = (n: number) => (hidden ? "••••" : formatCurrencyInt(n));
+  const money = (n: number) => (hidden ? "••••" : summaryReady ? formatCurrency(n) : summaryPlaceholder);
+  const debtMoney = (n: number) => (hidden ? "••••" : summaryReady ? formatCurrencyInt(n) : summaryPlaceholder);
 
   // Split the existing currency formatting into { symbol, amount } so the
   // account-card balance can show the "$" inside a small circle and the number
@@ -721,11 +726,14 @@ export default function Home() {
           <Text
             style={styles.balanceNumber}
             testID="total-balance"
+            onPress={summaryQ.isError && !summaryQ.isFetching ? () => summaryQ.refetch() : undefined}
+            accessibilityRole={summaryQ.isError ? "button" : undefined}
+            accessibilityLabel={summaryQ.isError ? l10n("No se pudo cargar el resumen. Toca para reintentar.", "Summary unavailable. Tap to retry.") : undefined}
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.6}
           >
-            {hidden ? "••••" : formatCurrencyInt(summary?.total_balance || 0)}
+            {summaryQ.isError ? l10n("Reintentar", "Retry") : hidden ? "••••" : summaryReady ? formatCurrencyInt(summary.total_balance) : summaryPlaceholder}
           </Text>
           <View style={styles.growthRow}>
             <Ionicons
@@ -734,7 +742,7 @@ export default function Home() {
               color={growthPositive ? colors.incomeGreen : colors.expenseRed}
             />
             <Text style={[styles.growthText, { color: growthPositive ? colors.incomeGreen : colors.expenseRed }]}>
-              {Math.abs(growthPct).toFixed(1)}%
+              {summaryReady ? `${Math.abs(growthPct).toFixed(1)}%` : summaryPlaceholder}
             </Text>
           </View>
         </View>
@@ -1213,7 +1221,7 @@ export default function Home() {
                   </Text>
                   <Text style={styles.debtQuadFoot}>{debtCountShareLabel(summary?.debts?.i_owe || 0, iOweCount)}</Text>
                 </View>
-                <DebtRing pct={hidden ? 0 : debtShare(summary?.debts?.i_owe || 0)} color={colors.expenseRed} track={ringTrack} display={hidden ? "••" : undefined} />
+                <DebtRing pct={hidden ? 0 : debtShare(summary?.debts?.i_owe || 0)} color={colors.expenseRed} track={ringTrack} display={hidden ? "••" : !summaryReady ? summaryPlaceholder : undefined} />
               </View>
             </View>
             <View style={[styles.debtQuadTile, styles.debtOwedTint]}>
@@ -1234,7 +1242,7 @@ export default function Home() {
                   </Text>
                   <Text style={styles.debtQuadFoot}>{debtCountShareLabel(summary?.debts?.they_owe || 0, theyOweCount)}</Text>
                 </View>
-                <DebtRing pct={hidden ? 0 : debtShare(summary?.debts?.they_owe || 0)} color={colors.incomeGreen} track={ringTrack} display={hidden ? "••" : undefined} />
+                <DebtRing pct={hidden ? 0 : debtShare(summary?.debts?.they_owe || 0)} color={colors.incomeGreen} track={ringTrack} display={hidden ? "••" : !summaryReady ? summaryPlaceholder : undefined} />
               </View>
             </View>
           </View>
@@ -1255,9 +1263,9 @@ export default function Home() {
                   <Text style={[styles.debtQuadValue, { color: colors.statsPurple }]} numberOfLines={1} adjustsFontSizeToFit>
                     {debtMoney(summary?.debts?.paid_this_month || 0)}
                   </Text>
-                  <Text style={styles.debtQuadFoot}>{t("home.goodProgress")}</Text>
+                  <Text style={styles.debtQuadFoot}>{summaryReady ? t("home.goodProgress") : summaryPlaceholder}</Text>
                 </View>
-                <DebtRing pct={monthProgress} color={colors.statsPurple} track={ringTrack} />
+                <DebtRing pct={monthProgress} color={colors.statsPurple} track={ringTrack} display={!summaryReady ? summaryPlaceholder : undefined} />
               </View>
             </View>
             <View style={[styles.debtQuadTile, styles.debtNextTint]}>
@@ -1284,7 +1292,7 @@ export default function Home() {
                       <Text style={styles.debtQuadFoot}>{t("home.keepPaymentsUpToDate")}</Text>
                     </>
                   ) : (
-                    <Text style={styles.debtQuadFoot}>{t("home.noUpcomingPayments")}</Text>
+                    <Text style={styles.debtQuadFoot}>{summaryReady ? t("home.noUpcomingPayments") : summaryPlaceholder}</Text>
                   )}
                 </View>
                 <View style={{ width: us(38), height: us(38), borderRadius: us(19), flexShrink: 0, marginVertical: us(2), marginLeft: us(2), marginRight: us(5), alignItems: "center", justifyContent: "center", backgroundColor: colors.brandSecondary + "1F" }}>

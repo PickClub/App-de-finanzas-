@@ -192,11 +192,10 @@ class CurrentDefects(unittest.TestCase):
             self.observed = len([r for r in returned if r["account_id"] == "target"])
             self.required = 1
         elif self._testMethodName == "test_summary_must_include_current_expense_after_2000":
+            from backend.tests.test_summary_totals import FakeDB, load_summary
             rows = [dict(row(i), date="2000-01-01T00:00:00Z", amount=1) for i in range(2000)]
             rows.append(dict(row(2001), date=datetime.now(timezone.utc).isoformat(), amount=70))
-            ns["db"] = SimpleNamespace(transactions=Collection(rows), accounts=Collection([]),
-                                       debts=Collection([]), debt_payments=Collection([]))
-            self.observed = asyncio.run(ns["summary"]())["month_expense"]
+            self.observed = asyncio.run(load_summary(FakeDB(transactions=rows))())["month_expense"]
             self.required = 70
         else:
             start, _ = ns["_month_bounds"](2026, 3, ns["_local_tz"](300))
@@ -207,7 +206,6 @@ class CurrentDefects(unittest.TestCase):
     def test_account_history_must_not_be_truncated_before_filter(self):
         self.assertEqual(self.observed, self.required)
 
-    @unittest.expectedFailure
     def test_summary_must_include_current_expense_after_2000(self):
         self.assertEqual(self.observed, self.required)
 

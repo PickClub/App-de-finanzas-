@@ -36,6 +36,51 @@ function pipeline(sourceInfo,accountId,transactions=data,type='all',sort='recent
   execute(`const PAGE_SIZE=${sourceInfo.variables.PAGE_SIZE};\n`+variables.map(n=>`const ${n}=${sourceInfo.variables[n]};`).join('\n')+`\nglobalThis.result={${variables.join(',')}};`,ctx);
   return plain(ctx.result);
 }
+async function runPaged(){
+  const {createFixture,syntheticBackend,find,text}=require('./test-transaction-history-page.cjs');
+  const before=JSON.stringify(data);
+  const f=createFixture(syntheticBackend(data),{accountId:'A'});
+  function dateSheet(tree){if(!tree||typeof tree!=='object')return;return tree.type==='DateRangeSheet'?tree:(tree.children||[]).flat(Infinity).map(dateSheet).find(Boolean);}
+  let tree=f.render();dateSheet(tree).props.onApply(allRange);f.render();tree=await f.settle();
+  assert.deepEqual(f.query().data.items.map(t=>t.id).sort(),['a-0','a-1','a-2','a-3','a-4','incoming','outgoing','same-ends-legacy'].sort());
+  assert.equal(f.query().data.items.filter(t=>t.id==='same-ends-legacy').length,1);
+  for(const [type,ids] of [['income',['a-0','a-4']],['expense',['a-1','a-2']],['transfer',['incoming','outgoing','same-ends-legacy']]]){
+    find(tree,`all-tx-type-${type}`).props.onPress();f.render();tree=await f.settle();
+    assert.deepEqual(f.query().data.items.map(t=>t.id).sort(),ids.sort());
+  }
+  f.navigate({accountId:'B'});tree=await f.settle();assert.deepEqual(f.query().data.items.map(t=>t.id).sort(),['incoming','outgoing','unrelated-transfer'].sort());
+  find(tree,'all-tx-back').props.onPress();assert.equal(f.backs(),1);assert.equal(JSON.stringify(data),before);f.close();
+  console.log('PASS: paged account scope, six types, incoming/outgoing transfers, legacy self-transfer and unchanged data.');
+  let pushes=[];
+  execute(`const run=${d.press['acc-see-all']};run();`,{router:{push:r=>pushes.push(r)},account:{id:'A / special?'}});
+  assert.deepEqual(plain(pushes),[{pathname:'/transactions/all',params:{accountId:'A / special?'}}]);
+  const many=Array.from({length:45},(_,n)=>transaction('row-'+n,'expense','A',null,'2026-10-15T12:00:00Z',n+1));
+  many.push(transaction('other','expense','B',null));
+  const p=createFixture(syntheticBackend(many),{accountId:'A'});tree=p.render();tree=await p.settle();
+  find(tree,'all-tx-sort-high').props.onPress();p.render();tree=await p.settle();
+  find(tree,'all-tx-page-next').props.onPress();p.render();tree=await p.settle();
+  assert.equal(p.query().data.total,45);assert.equal(p.query().data.items.length,20);assert.equal(p.query().data.items[0].amount,25);
+  assert(text(find(tree,'all-tx-range')).includes('21–40 de 45'));
+  find(tree,'all-tx-page-next').props.onPress();p.render();tree=await p.settle();assert.equal(p.query().data.items.length,5);
+  p.navigate({accountId:'missing'});tree=await p.settle();assert.equal(p.calls.at(-1).cursor,undefined);
+  assert.equal(p.query().data.total,0);assert(find(tree,'all-tx-empty'));p.close();
+  console.log('PASS: count/ranges, subsequent pages, empty scope and account reset; direct account navigation preserved.');
+  // No account means no account predicate, with the same type groups/order.
+  const q=createFixture(syntheticBackend(data));tree=q.render();dateSheet(tree).props.onApply(allRange);q.render();tree=await q.settle();
+  for(const type of ['all','income','expense','transfer'])for(const order of ['recent','oldest','high','low']){
+    find(tree,`all-tx-type-${type}`).props.onPress();find(tree,`all-tx-sort-${order}`).props.onPress();q.render();tree=await q.settle();
+    assert.equal(q.calls.at(-1).filters.account_id,undefined);assert.equal(q.calls.at(-1).filters.order,order);
+    const expected=data.filter(x=>new Date(x.date).getTime()>=allRange.start && new Date(x.date).getTime()<=allRange.end
+      && (type==='all'||(type==='income'?['income','loan_received']:type==='expense'?['expense','debt_payment']:['transfer']).includes(x.type)));
+    assert.deepEqual(q.query().data.items.map(x=>x.id).sort(),expected.map(x=>x.id).sort());
+  }
+  q.close();
+  for(const [file,source] of [[detailFile,detail],[listFile,list]]){
+    const base=cp.execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),marker='const useStyles =';
+    assert.equal(source.slice(source.indexOf(marker)),base.slice(base.indexOf(marker)));
+  }
+  console.log('PASS: absent account, all type/order combinations, identical style definitions and no financial handlers.');
+}
 function run(){
   let pushes=[],backs=0;
   const router={push:r=>pushes.push(r),back:()=>backs++};
@@ -85,4 +130,5 @@ function run(){
   assert(list.includes('queryKey: ["transactions"], queryFn: api.listTransactions'));
   console.log('PASS: identical styles, TSX syntax and unchanged read-only API/query cache; no journal/backend changes.');
 }
-try{run();}catch(error){console.error(error);process.exitCode=1;}
+if(list.includes('api.getTransactionPage'))runPaged().catch(error=>{console.error(error);process.exitCode=1;});
+else try{run();}catch(error){console.error(error);process.exitCode=1;}

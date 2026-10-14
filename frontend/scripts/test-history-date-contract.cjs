@@ -67,10 +67,15 @@ function main() {
       {id:'b',type:'transfer',account_id:'B',to_account_id:'A',amount:70,date:'2026-10-01T12:00:00Z'},
       {id:'c',type:'expense',account_id:'B',to_account_id:'A',amount:70,date:'2026-10-01T12:00:00Z'},
     ];
-    const context = { useMemo:f=>f(), txQ:{data:rows}, accountId:'A', type:'all', sort:'recent',
-      range:{start:0,end:Infinity}, Date };
-    run('globalThis.result=' + all.filtered, context);
-    assert.deepEqual(Array.from(context.result, x=>x.id).sort(), ['a','b']);
+    const context = { useMemo:f=>f(), accountId:'A', categoryId:undefined, type:'all', sort:'recent',
+      range:{start:0,end:Date.parse('2026-10-31T23:59:59.999Z')}, Date };
+    run('globalThis.result=' + all.filters, context);
+    assert.equal(context.result.account_id,'A');
+    assert.equal(context.result.types,undefined);
+    assert.equal(context.result.end,'2026-11-01T00:00:00.000Z');
+    // Transfer participation is now evaluated by the paged backend. This
+    // contract sends the account once, without narrowing to origin-only IDs.
+    assert.deepEqual(rows.filter(x=>x.account_id===context.result.account_id || (x.type==='transfer'&&x.to_account_id===context.result.account_id)).map(x=>x.id).sort(), ['a','b']);
     assert.equal(rows.length,3);
   });
   if (zone === 'America/Chicago') {

@@ -1,5 +1,20 @@
 import type { FinancialContext } from "./debt-payments/journal-v2";
 
+export type TransactionPageFilters = {
+  account_id?: string;
+  category_id?: string;
+  types?: string[];
+  start?: string;
+  end?: string;
+  order: "recent" | "oldest" | "high" | "low";
+};
+export type TransactionPage = {
+  items: any[]; // Decimal128 amounts arrive as exact strings; do not coerce them here.
+  total: number;
+  has_more: boolean;
+  next_cursor: string | null;
+};
+
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "";
 export const debtPaymentBackend = () => BASE || (typeof location !== "undefined" ? location.origin : "");
 
@@ -88,6 +103,15 @@ export const api = {
   deleteCategory: (id: string) => request<any>(`/categories/${id}`, { method: "DELETE" }),
   // Transactions
   listTransactions: () => request<any[]>("/transactions"),
+  getTransactionPage: (filters: TransactionPageFilters, cursor?: string, signal?: AbortSignal) => {
+    const query = new URLSearchParams({ order: filters.order, limit: "20" });
+    for (const name of ["account_id", "category_id", "start", "end"] as const) {
+      if (filters[name] !== undefined) query.set(name, filters[name]);
+    }
+    filters.types?.forEach(type => query.append("type", type));
+    if (cursor !== undefined) query.set("cursor", cursor);
+    return request<TransactionPage>(`/transactions/page?${query}`, { signal });
+  },
   getTransaction: (id: string) => request<any>(`/transactions/${encodeURIComponent(id)}`),
   createTransaction: (d: any) => request<any>("/transactions", { method: "POST", body: JSON.stringify(d) }),
   updateTransaction: (id: string, d: any) => request<any>(`/transactions/${id}`, { method: "PUT", body: JSON.stringify(d) }),

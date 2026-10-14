@@ -10,11 +10,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Annotated, List, Literal, Optional
 import unittest
+import asyncio
+from unittest.mock import patch
+from decimal import Decimal
+from bson import BSON, Binary, Int64, ObjectId
+from bson.decimal128 import Decimal128
 
 from fastapi import APIRouter, FastAPI, Query
 import httpx
 from pymongo.errors import OperationFailure
-from backend.transaction_history import read_page, read_detail
+from backend.transaction_history import read_page, read_detail, ReadBudget, exact_amount, parse_instant
 from backend.shared_obligations import public_financial_document
 
 
@@ -33,6 +38,9 @@ class Cursor:
     def sort(self, field, direction):
         self.rows.sort(key=lambda r:r[field], reverse=direction < 0); return self
     async def to_list(self, limit): return self.rows[:limit]
+    def max_time_ms(self, value): self.milliseconds=value;return self
+    def batch_size(self, value): self.batch=value;return self
+    async def close(self): self.closed=True
     def __aiter__(self): self.iterator = iter(self.rows); return self
     async def __anext__(self):
         try: return next(self.iterator)
@@ -40,11 +48,30 @@ class Cursor:
 
 
 class Collection:
-    def __init__(self): self.rows = []; self.fail = False; self.queries = []
+    def __init__(self): self.rows = []; self.fail = False; self.queries = []; self.aggregations=[];self.cursors=[];self.delay=0
     def find(self, query, projection):
         self.queries.append(copy.deepcopy(query))
         if self.fail: raise OperationFailure("synthetic read failure")
-        return Cursor([r for r in self.rows if matches(r, query)])
+        cursor=Cursor([r for r in self.rows if matches(r, query)]);self.cursors.append(cursor);return cursor
+    def aggregate(self, pipeline, **options):
+        self.aggregations.append((copy.deepcopy(pipeline),options))
+        if self.fail:raise OperationFailure('synthetic aggregate failure')
+        self.assert_pipeline(pipeline,options)
+        counts={}
+        for r in self.rows:
+            if matches(r,pipeline[0]['$match']):counts[r.get('id')]=counts.get(r.get('id'),0)+1
+        rows=[{'duplicate':True}] if any(n>1 for n in counts.values()) else []
+        collection=self
+        class AggregateCursor(Cursor):
+            async def to_list(self,limit):
+                if collection.delay:await asyncio.sleep(collection.delay)
+                return await super().to_list(limit)
+        cursor=AggregateCursor(rows);self.cursors.append(cursor);return cursor
+    @staticmethod
+    def assert_pipeline(pipeline,options):
+        assert pipeline[1]=={'$group':{'_id':'$id','n':{'$sum':1}}}
+        assert pipeline[2]=={'$match':{'n':{'$gt':1}}} and pipeline[3]=={'$limit':1}
+        assert options['allowDiskUse'] is False and 0<options['maxTimeMS']<=10000
     # No mutation methods: an accidental write fails immediately.
 
 
@@ -78,7 +105,7 @@ class TransactionHistoryTests(unittest.IsolatedAsyncioTestCase):
         response = await self.request(params=params)
         self.assertEqual(response.status_code,200,response.text)
         result = response.json()
-        self.assertEqual(set(result), {"items","has_more","next_cursor"})
+        self.assertEqual(set(result), {"items","has_more","next_cursor","total"})
         self.assertEqual(result["has_more"], result["next_cursor"] is not None)
         return result
 
@@ -122,7 +149,7 @@ class TransactionHistoryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_invalid_parameters_and_cursors(self):
         self.collection.rows=[row(i) for i in range(3)]
-        for params in ({"limit":0},{"limit":101},{"limit":"x"},{"order":"high"},
+        for params in ({"limit":0},{"limit":101},{"limit":"x"},{"order":"unknown"},
                        {"type":"unknown"},{"account_id":""},{"category_id":" "},
                        {"start":"2026-01-01"},{"start":"2026-01-01T00:00:00"},
                        {"start":"bad"},{"start":"2026-02-01T00:00:00Z","end":"2026-01-01T00:00:00Z"},
@@ -217,6 +244,117 @@ class TransactionHistoryTests(unittest.IsolatedAsyncioTestCase):
         for path in ("/transactions/page","/transactions/x"):
             response=await self.request(path);self.assertEqual(response.status_code,503)
             self.assertNotIn("synthetic",response.text)
+
+    async def test_four_orders_full_histories_and_exact_counts(self):
+        for count in (501,2001,10001):
+            self.collection.rows=[row(i,amount=str(i%17),date=f'2026-10-{1+i%4:02d}T12:00:00Z') for i in range(count)]
+            before=copy.deepcopy(self.collection.rows)
+            for order in ('recent','oldest','high','low'):
+                expected=sorted(before,key=lambda r:(parse_instant(r['date'],stored=True),r['id']),reverse=order!='oldest')
+                if order in ('high','low'):
+                    expected.sort(key=lambda r:exact_amount(r['amount']),reverse=order=='high')
+                ids=[];params={'order':order,'limit':100}
+                while True:
+                    result=await self.page(params);self.assertEqual(result['total'],count)
+                    ids.extend(r['id'] for r in result['items'])
+                    if not result['has_more']:break
+                    params['cursor']=result['next_cursor']
+                self.assertEqual(ids,[r['id'] for r in expected]);self.assertEqual(len(set(ids)),count)
+            self.assertEqual(self.collection.rows,before)
+
+    async def test_exact_decimal128_http_and_cursor_ties(self):
+        self.collection.rows=[row(1,amount=Decimal128('1.000000000000000000000000000001')),
+            row(2,amount=Decimal128('1.000000000000000000000000000002')),
+            row(3,amount='1.000000000000000000000000000002'),
+            row(4,amount=Decimal128('1.000000000000000000000000000002'),date='2026-10-02T00:00:00Z')]
+        original=[BSON.encode(r) for r in self.collection.rows]
+        for order,wanted in [('high',[4,3,2,1]),('low',[1,4,3,2])]:
+            params={'order':order,'limit':1};ids=[]
+            while True:
+                result=await self.page(params);self.assertEqual(result['total'],4)
+                ids.extend(x['id'] for x in result['items'])
+                self.assertIsInstance(result['items'][0]['amount'],str)
+                if not result['has_more']:break
+                value=json.loads(base64.urlsafe_b64decode(result['next_cursor']+'='*(-len(result['next_cursor'])%4)))
+                self.assertEqual(value['v'],2);params['cursor']=result['next_cursor']
+            self.assertEqual(ids,[row(i)['id'] for i in wanted])
+        self.assertEqual(original,[BSON.encode(r) for r in self.collection.rows])
+
+    async def test_global_duplicate_ids_outside_filters_and_pages(self):
+        self.collection.rows=[row(i) for i in range(501)]
+        self.collection.rows.append(row(0,date='2000-01-01T00:00:00Z',account_id='other',category_id='other'))
+        for params in ({'limit':1},{'order':'low'},{'account_id':'A','start':'2026-10-01T00:00:00Z'}):
+            self.assertEqual((await self.request(params=params)).status_code,409)
+        self.collection.rows[-1]['user_id']='other-user'
+        result=await self.page({'limit':1});self.assertEqual(result['total'],501)
+
+    async def test_filtered_total_independent_of_cursor_all_orders(self):
+        self.collection.rows=[row(1,type='transfer',account_id='B',to_account_id='A'),
+            row(2),row(3,category_id='X'),row(4,account_id='B'),row(5,date='2026-10-02T00:00:00Z')]
+        for order in ('recent','oldest','high','low'):
+            p={'order':order,'account_id':'A','category_id':'C','end':'2026-10-02T00:00:00Z','limit':1}
+            a=await self.page(p);b=await self.page(dict(p,cursor=a['next_cursor']))
+            self.assertEqual(a['total'],2);self.assertEqual(b['total'],2)
+            self.assertFalse(b['has_more']);self.assertIsNone(b['next_cursor'])
+
+    async def test_bson_physical_ids_do_not_change_logical_order(self):
+        physical=[1,Int64(2147483648),'mongo',Binary(b'physical',0),ObjectId()]
+        self.collection.rows=[row(i,_id=physical[i]) for i in range(5)]
+        for order in ('recent','oldest','high','low'):
+            result=await self.page({'order':order,'limit':10});self.assertEqual(result['total'],5)
+            self.assertTrue(all('_id' not in r for r in result['items']))
+
+    async def test_v1_cursor_bytes_unchanged_and_v2_isolated(self):
+        from backend.transaction_history import encode_cursor,scope_hash,iso
+        self.collection.rows=[row(i) for i in range(4)]
+        context=[self.settings.mongo_url,self.settings.db_name,None]
+        filters={'user':'default-user','account':None,'category':None,'types':[],'start':None,'end':None,'order':'recent'}
+        token=encode_cursor(scope_hash(context,filters),(parse_instant(row(2)['date'],stored=True),row(2)['id']))
+        first=await self.page({'limit':2});self.assertEqual(first['next_cursor'],token)
+        self.assertEqual((await self.page({'cursor':token}))['total'],4)
+        self.assertEqual((await self.request(params={'order':'high','cursor':token})).status_code,422)
+        high=await self.page({'order':'high','limit':1})
+        self.assertEqual((await self.request(params={'order':'low','cursor':high['next_cursor']})).status_code,422)
+        self.assertEqual((await self.request(params={'cursor':high['next_cursor']})).status_code,422)
+
+    async def test_budgets_fail_without_partial_results_and_close_cursors(self):
+        from fastapi import HTTPException
+        self.collection.rows=[row(i) for i in range(4)]
+        for budget in (ReadBudget(documents=2),ReadBudget(bytes=1)):
+            with self.assertRaises(HTTPException) as e:
+                await read_page(SimpleNamespace(transactions=self.collection),'default-user',{},lambda x:x,context=[],budget=budget)
+            self.assertEqual(e.exception.status_code,503)
+            self.assertTrue(all(getattr(c,'closed',False) for c in self.collection.cursors))
+        self.collection.delay=.02
+        with self.assertRaises(HTTPException) as e:
+            await read_page(SimpleNamespace(transactions=self.collection),'default-user',{},lambda x:x,context=[],budget=ReadBudget(seconds=.001))
+        self.assertEqual(e.exception.status_code,503)
+
+    async def test_nonfinite_amounts_fail_safely_only_amount_orders(self):
+        for value in ('NaN','Infinity','not-money',True):
+            self.collection.rows=[row(1,amount=value)]
+            self.assertEqual((await self.request(params={'order':'high'})).status_code,409)
+        self.collection.rows=[row(1,amount='not-money')]
+        self.assertEqual((await self.page())['total'],1)
+
+    async def test_amount_cursor_invalid_values_and_empty_page_total(self):
+        self.collection.rows=[row(i) for i in range(3)]
+        first=await self.page({'order':'high','limit':1})
+        value=json.loads(base64.urlsafe_b64decode(first['next_cursor']+'='*(-len(first['next_cursor'])%4)))
+        for change in ({'amount':'NaN'},{'amount':1},{'v':True},{'id':None},{'date':'bad'},{'extra':1}):
+            bad=base64.urlsafe_b64encode(json.dumps(dict(value,**change)).encode()).decode().rstrip('=')
+            self.assertEqual((await self.request(params={'order':'high','cursor':bad})).status_code,422)
+        self.collection.rows=[]
+        self.assertEqual((await self.page({'order':'high'}))['total'],0)
+
+    async def test_cpu_deadline_is_checked_without_waiting_for_io(self):
+        from fastapi import HTTPException
+        self.collection.rows=[row(i) for i in range(10)]
+        ticks=iter([0,.1,.2,.3,.4,.6,.7,.8,.9,1])
+        with patch('backend.transaction_history.time.monotonic',side_effect=lambda:next(ticks)):
+            with self.assertRaises(HTTPException) as e:
+                await read_page(SimpleNamespace(transactions=self.collection),'default-user',{},lambda x:x,context=[],budget=ReadBudget(seconds=.5))
+        self.assertEqual(e.exception.status_code,503)
 
 
 if __name__ == "__main__":unittest.main()

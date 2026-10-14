@@ -209,3 +209,68 @@ memoria; no importan el arranque de FastAPI ni abren MongoDB. Incluyen 501, 2.00
 lectura directa, saneado y errores. Inserciones/ediciones se intercalan entre peticiones
 sintéticas: no constituyen evidencia de concurrencia real o rendimiento en MongoDB.
 Las pruebas financieras existentes se ejecutan aparte, sin cambiar sus flujos.
+
+
+## Ampliación funcional del lector: importe, total y duplicados globales
+
+GET /api/transactions/page acepta recent, oldest, high y low. recent/oldest
+conservan el cursor v1 y su codificación exacta. high/low usan cursor v2, ligado
+a filtros, contexto y orden, con importe Decimal textual, fecha normalizada e ID.
+Se rechazan cursores cruzados entre órdenes o versiones sin reiniciar en silencio.
+
+El orden global high es importe DESC, fecha DESC, ID DESC. low es importe ASC,
+fecha DESC, ID DESC. Se compara Decimal sin convertir a float ni normalizar bajo
+un contexto decimal que redondee. Decimal128 se lee mediante to_decimal. Valores
+null/ausentes/vacíos conservan el fallback de orden cero; bool/no finitos/importe
+ilegible producen 409 solo para high/low. Las lecturas cronológicas no introducen
+rechazos nuevos por importe. No se cambian fuentes, fechas, tipos ni saldos.
+
+La respuesta añade total: conteo de TODOS los candidatos que cumplen filtros,
+antes del cursor, incluso en páginas posteriores o vacías. items/has_more/
+next_cursor conservan sus nombres y significado. Decimal128 en amount se representa
+como cadena decimal exacta en esta respuesta JSON; int, float y cadenas existentes
+conservan su representación. No se cambia el listado legado ni lectura por ID.
+
+Usuario/cuenta/categoría/tipo se filtran en find; fecha se compara con el parser
+canónico antes de contar o seleccionar. Se recorre el conjunto candidato completo,
+reteniendo como máximo limit+1 documentos, sin materializar un historial completo.
+IDs físicos BSON heredados no se usan como identidad pública: el desempate y cursor
+continúan usando id lógico string único por usuario. No se exige un _id string.
+
+Se comprueba duplicación GLOBAL de id por user_id antes y después del recorrido
+mediante match/group/match/limit/project; no se limita la entrada de group ni se
+mantiene un conjunto ilimitado de IDs en Python. Fechas/cuentas/categorías distintas
+no ocultan duplicados; otros usuarios no interfieren. La agregación no permite
+disk spill y tiene maxTimeMS. Un duplicado produce 409, nunca deduplicación silenciosa.
+
+Presupuestos por petición: 10 segundos de consulta completa, 100.000 documentos
+candidatos recorridos y 32 MiB BSON procesados acumulados; find tiene batch_size=100
+y max_time_ms, la agregación batchSize=1 y maxTimeMS. La selección nunca supera
+limit+1 (limit máximo 100). El cierre de cada cursor se intenta con hasta 1 segundo
+adicional. Agotamiento, timeout, error PyMongo/BSON o memoria de agregación excedida
+produce 503 sin página parcial ni total etiquetado como completo. No se crean índices.
+El group consume memoria del servidor sujeta al límite MongoDB sin spill; estos
+presupuestos no equivalen a un límite exacto de RSS del proceso/driver ni de CPU.
+
+Compleción y conteos son exactos para datos estables. Son lecturas de vista viva,
+NO snapshot único: modificaciones durante o entre consultas pueden cambiar conteos,
+orden o pertenencia; dos comprobaciones de duplicados no prueban ausencia de ABA.
+No se promete recorrer una fotografía inmutable con los cursores. Reiniciar al
+refrescar o cambiar filtros. El coste sigue siendo proporcional a candidatos por
+petición, más agrupaciones globales; no se midió rendimiento MongoDB en esta etapa.
+
+Quedan fuera páginas numeradas/salto arbitrario, integración frontend, totales de
+Inicio/Informes/Presupuestos, índices, claves históricas persistidas y R9. No se
+presentan sumas de páginas descargadas como totales financieros globales.
+
+Validación offline:
+
+```sh
+python3 -B -m unittest backend.tests.test_transaction_history -q
+```
+
+Casos de cuatro órdenes y conteos con 501/2.001/10.001 movimientos, Decimal128 y
+precisión más allá de float, empates, transferencias, filtros, IDs BSON físicos,
+duplicados fuera de ventana/página, v1 exacto y v2 inválido, vacío y presupuestos.
+El almacenamiento falso carece de métodos de escritura. No demuestra rendimiento
+ni concurrencia real MongoDB; no se conecta a ninguna base para estas pruebas.

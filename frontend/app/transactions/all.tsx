@@ -4,10 +4,10 @@ import Animated, { FadeIn } from "react-native-reanimated";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/src/api";
+import { api, ApiError, type TransactionPageFilters } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatCurrency, formatDateTime, translateCategoryName } from "@/src/format";
 import i18n, { useTranslation } from "@/src/i18n";
@@ -20,8 +20,8 @@ import { us } from "@/src/ui-scale";
 /**
  * «Todas las transacciones» — independent route opened from Home → Movimientos
  * recientes → «Ver todo». Shows ONLY real transactions (no placeholders).
- * Reuses the existing ["transactions"] query cache (same data Home already
- * loads) and paginates 20 per page on the client.
+ * Reads 20 records per request. Only page-start cursors are retained locally;
+ * the backend owns filters, global ordering and the complete filtered count.
  */
 
 const PAGE_SIZE = 20;
@@ -73,13 +73,12 @@ export default function AllTransactions() {
   const styles = useStyles();
   const { t } = useTranslation();
   const router = useRouter();
-  const { accountId } = useLocalSearchParams<{ accountId?: string }>();
+  const { accountId, categoryId } = useLocalSearchParams<{ accountId?: string; categoryId?: string }>();
   const insets = useSafeAreaInsets();
   const { guard } = useLock();
   const en = (i18n.language || "es").startsWith("en");
   const MONTHS = en ? MONTHS_EN : MONTHS_ES;
 
-  const txQ = useQuery({ queryKey: ["transactions"], queryFn: api.listTransactions });
   const catQ = useQuery({ queryKey: ["categories"], queryFn: api.listCategories });
 
   const [period, setPeriod] = useState<Period>("30d");
@@ -87,12 +86,13 @@ export default function AllTransactions() {
   const [custom, setCustom] = useState<DateRange | null>(null);
   const [type, setType] = useState<TypeFilter>("all");
   const [sort, setSort] = useState<SortKey>("recent");
-  const [page, setPage] = useState(1);
-  useEffect(() => { setPage(1); }, [accountId]);
+  const [navigation, setNavigation] = useState<{ scope: string; page: number; cursors: (string | undefined)[] }>({ scope: "", page: 1, cursors: [undefined] });
+  const [refreshKey, setRefreshKey] = useState(0);
   const [sortOpen, setSortOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const listY = useRef(0);
   const dateSheetRef = useRef<DateRangeSheetHandle>(null);
+  const firstFocus = useRef(true);
 
   const catById = useMemo(() => Object.fromEntries((catQ.data || []).map((c: any) => [c.id, c])), [catQ.data]);
 
@@ -118,30 +118,50 @@ export default function AllTransactions() {
     return s.getFullYear() === e.getFullYear() ? `${sm} – ${em} ${e.getFullYear()}` : `${sm} ${s.getFullYear()} – ${em} ${e.getFullYear()}`;
   }, [range, MONTHS]);
 
-  const filtered = useMemo(() => {
-    let items: any[] = txQ.data || [];
-    if (accountId) items = items.filter((x) => x.account_id === accountId || (x.type === "transfer" && x.to_account_id === accountId));
-    if (type === "income") items = items.filter((x) => x.type === "income" || x.type === "loan_received");
-    else if (type === "expense") items = items.filter((x) => x.type === "expense" || x.type === "debt_payment");
-    else if (type === "transfer") items = items.filter((x) => x.type === "transfer");
-    items = items.filter((x) => { const ts = new Date(x.date).getTime(); return ts >= range.start && ts <= range.end; });
-    const sorted = [...items];
-    if (sort === "recent") sorted.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    else if (sort === "oldest") sorted.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    else if (sort === "high") sorted.sort((a, b) => (b.amount || 0) - (a.amount || 0));
-    else sorted.sort((a, b) => (a.amount || 0) - (b.amount || 0));
-    return sorted;
-  }, [txQ.data, accountId, type, range, sort]);
-
-  const total = filtered.length;
+  const filters = useMemo<TransactionPageFilters>(() => ({
+    account_id: accountId || undefined,
+    category_id: categoryId || undefined,
+    types: type === "income" ? ["income", "loan_received"] : type === "expense" ? ["expense", "debt_payment"] : type === "transfer" ? ["transfer"] : undefined,
+    start: new Date(range.start).toISOString(),
+    // UI ranges include the final millisecond; the backend uses an exclusive end.
+    end: new Date(range.end + 1).toISOString(),
+    order: sort,
+  }), [accountId, categoryId, type, range, sort]);
+  const scope = JSON.stringify(filters);
+  // Resolve a new scope synchronously: never send an old cursor with new filters.
+  const active = navigation.scope === scope ? navigation : { scope, page: 1, cursors: [undefined] };
+  useEffect(() => { setNavigation({ scope, page: 1, cursors: [undefined] }); }, [scope]);
+  const safePage = active.page;
+  const txQ = useQuery({
+    queryKey: ["transactions", "page", scope, refreshKey, active.cursors[safePage - 1]],
+    queryFn: ({ signal }) => api.getTransactionPage(filters, active.cursors[safePage - 1], signal),
+    retry: false,
+    gcTime: 0, // Discard inactive page payloads; keep only the cursor history.
+    refetchOnWindowFocus: false,
+  });
+  const resetPage = useCallback(() => setNavigation({ scope: "", page: 1, cursors: [undefined] }), []);
+  const refresh = useCallback(() => {
+    resetPage();
+    setRefreshKey(key => key + 1);
+  }, [resetPage]);
+  // Returning from detail/edit starts a fresh traversal after existing invalidations.
+  useFocusEffect(useCallback(() => {
+    if (firstFocus.current) firstFocus.current = false;
+    else refresh();
+  }, [refresh]));
+  const ready = txQ.isSuccess && !txQ.isFetching;
+  const total = ready ? txQ.data.total : 0;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const safePage = Math.min(page, pages);
-  const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-  const from = total === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
-  const to = Math.min(total, safePage * PAGE_SIZE);
+  const pageItems = ready ? txQ.data.items : [];
+  const from = pageItems.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const to = pageItems.length === 0 ? 0 : from + pageItems.length - 1;
+  const hasMore = ready && txQ.data.has_more;
+  const canVisit = (p: number) => !txQ.isFetching && p >= 1 && p !== safePage && (p <= active.cursors.length || (p === safePage + 1 && hasMore));
+  const pageError = txQ.error instanceof ApiError && txQ.error.status === 409
+    ? (en ? "The history contains unverifiable or duplicated data. Retry or review the records." : "El historial contiene datos no verificables o duplicados. Reintenta o revisa los registros.")
+    : (en ? "The history could not be loaded. Try again." : "No se pudo cargar el historial. Reintenta.");
 
   // Any filter / period / sort change returns to page 1.
-  const resetPage = () => setPage(1);
   const choosePeriod = (p: Period) => { setPeriod(p); resetPage(); };
   const shiftMonth = (delta: number) => {
     const base = new Date(range.end);
@@ -154,15 +174,22 @@ export default function AllTransactions() {
   const canNext = labelEnd.getFullYear() < now.getFullYear() || (labelEnd.getFullYear() === now.getFullYear() && labelEnd.getMonth() < now.getMonth());
 
   const goPage = (p: number) => {
-    if (p < 1 || p > pages || p === safePage) return;
-    setPage(p);
+    if (!canVisit(p)) return;
+    const cursors = active.cursors.slice();
+    if (p === safePage + 1) {
+      if (!txQ.data?.next_cursor) return;
+      // If live data changed, discard successors derived from the old boundary.
+      if (cursors[p - 1] !== txQ.data.next_cursor) cursors.length = p - 1;
+      cursors[p - 1] = txQ.data.next_cursor;
+    }
+    setNavigation({ scope, page: p, cursors });
     scrollRef.current?.scrollTo({ y: Math.max(0, listY.current - us(8)), animated: true });
   };
 
   const onApplyRange = useCallback((r: DateRange | null) => {
     if (r) { setCustom(r); setPeriod("custom"); } else { setCustom(null); setPeriod("30d"); }
-    setPage(1);
-  }, []);
+    resetPage();
+  }, [resetPage]);
 
   const SORTS: { id: SortKey; label: string }[] = [
     { id: "recent", label: en ? "Most recent" : "Más recientes" },
@@ -191,7 +218,7 @@ export default function AllTransactions() {
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(32), paddingHorizontal: us(spacing.lg) }}
-        refreshControl={<RefreshControl refreshing={txQ.isRefetching} onRefresh={() => txQ.refetch()} tintColor={pal.forest} />}
+        refreshControl={<RefreshControl refreshing={txQ.isFetching} onRefresh={refresh} tintColor={pal.forest} />}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -257,7 +284,7 @@ export default function AllTransactions() {
         {/* Count + sort */}
         <View style={styles.infoRow}>
           <Text testID="all-tx-count" style={[styles.infoText, { color: pal.muted }]} numberOfLines={1}>
-            {en ? `${total} ${total === 1 ? "transaction" : "transactions"} found` : `${total} ${total === 1 ? "transacción encontrada" : "transacciones encontradas"}`}
+            {ready ? (en ? `${total} ${total === 1 ? "transaction" : "transactions"} found` : `${total} ${total === 1 ? "transacción encontrada" : "transacciones encontradas"}`) : (en ? "Count unavailable" : "Conteo no disponible")}
           </Text>
           <Pressable testID="all-tx-sort" onPress={() => setSortOpen(true)} style={styles.sortBtn} hitSlop={8}>
             <Ionicons name="filter-outline" size={us(14)} color={pal.muted} />
@@ -266,19 +293,39 @@ export default function AllTransactions() {
           </Pressable>
         </View>
 
+        {(accountId || categoryId) && <Text testID="all-tx-active-filters" style={[styles.infoText, { color: pal.muted }]}>
+          {[accountId && (en ? "Account filter active" : "Filtro de cuenta activo"), categoryId && (en ? "Category filter active" : "Filtro de categoría activo")].filter(Boolean).join(" · ")}
+        </Text>}
+
         {/* List */}
         <View onLayout={(e) => { listY.current = e.nativeEvent.layout.y; }} style={[cardStyle, styles.listCard]}>
           <Animated.View key={`${period}|${range.start}|${type}|${sort}|${safePage}`} entering={FadeIn.duration(180)}>
-            {txQ.isLoading ? (
+            {txQ.isPending || txQ.isFetching ? (
               <Text style={[styles.empty, { color: pal.muted }]}>{en ? "Loading…" : "Cargando…"}</Text>
+            ) : txQ.isError ? (
+              <View style={styles.emptyWrap}>
+                <Text testID="all-tx-error" style={[styles.empty, { color: pal.muted }]}>{pageError}</Text>
+                <Pressable testID="all-tx-retry" onPress={() => txQ.refetch()} style={styles.sortBtn}>
+                  <Text style={[styles.infoText, { color: pal.forest }]}>{en ? "Retry" : "Reintentar"}</Text>
+                </Pressable>
+                {safePage > 1 && <Pressable testID="all-tx-error-prev" onPress={() => goPage(safePage - 1)} style={styles.sortBtn}>
+                  <Text style={[styles.infoText, { color: pal.forest }]}>{en ? "Previous page" : "Página anterior"}</Text>
+                </Pressable>}
+                <Pressable testID="all-tx-error-refresh" onPress={refresh} style={styles.sortBtn}>
+                  <Text style={[styles.infoText, { color: pal.forest }]}>{en ? "Restart history" : "Reiniciar historial"}</Text>
+                </Pressable>
+              </View>
             ) : pageItems.length === 0 ? (
               <View style={styles.emptyWrap}>
                 <View style={[styles.calIcon, { backgroundColor: pal.mint }]}>
                   <Ionicons name="receipt-outline" size={us(20)} color={pal.forest} />
                 </View>
                 <Text testID="all-tx-empty" style={[styles.empty, { color: pal.muted }]}>
-                  {en ? "No transactions in this period" : "No hay transacciones en este período"}
+                  {total === 0 ? (en ? "No transactions in this period" : "No hay transacciones en este período") : (en ? "No transactions on this page. Refresh to restart." : "No hay transacciones en esta página. Actualiza para comenzar de nuevo.")}
                 </Text>
+                {total > 0 && <Pressable testID="all-tx-restart" onPress={refresh} style={styles.sortBtn}>
+                  <Text style={[styles.infoText, { color: pal.forest }]}>{en ? "Refresh" : "Actualizar"}</Text>
+                </Pressable>}
               </View>
             ) : (
               pageItems.map((item: any, idx: number) => {
@@ -323,7 +370,7 @@ export default function AllTransactions() {
         {total > 0 && (
           <>
             <View style={styles.pager}>
-              <Pressable testID="all-tx-page-prev" onPress={() => goPage(safePage - 1)} disabled={safePage <= 1} style={[styles.pageBtn, { backgroundColor: pal.card, borderColor: pal.border, opacity: safePage <= 1 ? 0.4 : 1 }, shadow]}>
+              <Pressable testID="all-tx-page-prev" onPress={() => goPage(safePage - 1)} disabled={!canVisit(safePage - 1)} style={[styles.pageBtn, { backgroundColor: pal.card, borderColor: pal.border, opacity: !canVisit(safePage - 1) ? 0.4 : 1 }, shadow]}>
                 <Ionicons name="chevron-back" size={us(18)} color={pal.text} />
               </Pressable>
               {pageWindow(safePage, pages).map((p, i) =>
@@ -334,18 +381,24 @@ export default function AllTransactions() {
                     key={p}
                     testID={`all-tx-page-${p}`}
                     onPress={() => goPage(p)}
-                    style={[styles.pageBtn, p === safePage ? { backgroundColor: pal.forest, borderColor: pal.forest } : { backgroundColor: pal.card, borderColor: pal.border }, shadow]}
+                    disabled={!canVisit(p)}
+                    accessibilityHint={!canVisit(p) && p !== safePage ? (en ? "Visit preceding pages first" : "Visita primero las páginas anteriores") : undefined}
+                    style={[styles.pageBtn, p === safePage ? { backgroundColor: pal.forest, borderColor: pal.forest } : { backgroundColor: pal.card, borderColor: pal.border, opacity: canVisit(p) ? 1 : 0.4 }, shadow]}
                   >
                     <Text style={[styles.pageText, { color: p === safePage ? pal.onForest : pal.text }]}>{p}</Text>
                   </Pressable>
                 ),
               )}
-              <Pressable testID="all-tx-page-next" onPress={() => goPage(safePage + 1)} disabled={safePage >= pages} style={[styles.pageBtn, { backgroundColor: pal.card, borderColor: pal.border, opacity: safePage >= pages ? 0.4 : 1 }, shadow]}>
+              <Pressable testID="all-tx-page-next" onPress={() => goPage(safePage + 1)} disabled={!hasMore} style={[styles.pageBtn, { backgroundColor: pal.card, borderColor: pal.border, opacity: !hasMore ? 0.4 : 1 }, shadow]}>
                 <Ionicons name="chevron-forward" size={us(18)} color={pal.text} />
               </Pressable>
             </View>
             <Text testID="all-tx-range" style={[styles.showing, { color: pal.muted }]}>
               {en ? `Showing ${from}–${to} of ${total} transactions` : `Mostrando ${from}–${to} de ${total} transacciones`}
+            </Text>
+            <Text testID="all-tx-navigation-info" style={[styles.showing, { color: pal.muted }]}>
+              {en ? "Jump only to visited pages; use Next to advance." : "Solo puedes saltar a páginas visitadas; usa Siguiente para avanzar."}
+              {!hasMore ? (en ? " End of history." : " Fin del historial.") : ""}
             </Text>
           </>
         )}

@@ -154,9 +154,22 @@ async function main() {
   assert(client.getQueryState(['transactions','detail','B']).isInvalidated);stop();observer.destroy();client.clear();
   if(!process.env.C3_DIRECT_TEST_REF){
     const oldApi=cp.execFileSync('git',['show','HEAD:frontend/src/api.ts'],{cwd:root,encoding:'utf8'});
-    const withoutDirectRead = source => source.replace(/^  getTransaction:.*\n/m,'');
+    // Both approved C3 read methods are additive. Compare every other API
+    // method symmetrically, regardless of whether either is already in HEAD.
+    const withoutDirectRead = source => {
+      const tree=ts.createSourceFile('api.ts',source,ts.ScriptTarget.Latest,true);
+      let methods;
+      function visit(node){
+        if(ts.isVariableDeclaration(node)&&node.name.getText(tree)==='api')
+          methods=Object.fromEntries(node.initializer.properties
+            .filter(p=>!['getTransaction','getTransactionPage'].includes(p.name.getText(tree)))
+            .map(p=>[p.name.getText(tree),p.initializer.getText(tree)]));
+        ts.forEachChild(node,visit);
+      }
+      visit(tree);return methods;
+    };
     const currentApi = read('frontend/src/api.ts');
-    assert.equal(withoutDirectRead(currentApi),withoutDirectRead(oldApi));
+    assert.deepEqual(withoutDirectRead(currentApi),withoutDirectRead(oldApi));
     for(const file of Object.values(files)){
       const old=cp.execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),current=read(file);
       assert.equal(current.slice(current.indexOf('const useStyles =')),old.slice(old.indexOf('const useStyles =')));

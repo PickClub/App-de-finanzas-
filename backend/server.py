@@ -792,7 +792,7 @@ async def transaction_page(
     types: Annotated[Optional[List[str]], Query(alias="type")] = None,
     start: Optional[str] = None, end: Optional[str] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    order: Literal["recent", "oldest"] = "recent",
+    order: Literal["recent", "oldest", "high", "low"] = "recent",
     cursor: Annotated[Optional[str], Query(min_length=1, max_length=2048)] = None,
 ):
     return await read_transaction_page(
@@ -1764,56 +1764,174 @@ async def delete_debt_payment(pid: str):
 # Reports summary
 @api.get("/summary")
 async def summary():
-    accounts = await db.accounts.find({"user_id": DEFAULT_USER_ID}, PROJ).to_list(500)
-    total_balance = sum(a["current_balance"] for a in accounts)
+    # A short read-only snapshot covers all four sources. No financial writes,
+    # historical metadata provisioning or unbounded document lists.
+    import asyncio
+    import time
+    from bson import BSON, Decimal128
+    from contextlib import aclosing
+    from bson.errors import BSONError
+    from decimal import InvalidOperation, ROUND_HALF_EVEN, localcontext
 
-    txs = await db.transactions.find({"user_id": DEFAULT_USER_ID}, PROJ).to_list(2000)
+    timeout, max_docs, max_bytes, max_digits = 10, 100000, 32 * 1024 * 1024, 10000
+    deadline = time.monotonic() + timeout
+    visited = used = 0
+    session = None
     now = datetime.now(timezone.utc)
-    month_income = 0.0
-    month_expense = 0.0
-    for t in txs:
+
+    def milliseconds():
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise HTTPException(503, "Se agotó el tiempo del resumen. No se devolvieron totales parciales.")
+        return max(1, int(remaining * 1000))
+
+    def money(row, field):
+        value = row.get(field)
+        if value is None or isinstance(value, bool) or not isinstance(value, (int, float, str, Decimal, Decimal128)):
+            raise HTTPException(409, "El resumen contiene un importe no verificable.")
         try:
-            d = datetime.fromisoformat(t["date"].replace("Z", "+00:00"))
-        except Exception:
-            continue
-        if d.year == now.year and d.month == now.month:
-            if t["type"] == "income":
-                month_income += t["amount"]
-            elif t["type"] in ("expense", "debt_payment"):
-                month_expense += t["amount"]
+            result = value.to_decimal() if isinstance(value, Decimal128) else Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            raise HTTPException(409, "El resumen contiene un importe no verificable.") from None
+        if not result.is_finite():
+            raise HTTPException(409, "El resumen contiene un importe no verificable.")
+        return result
 
-    debts = await db.debts.find({"user_id": DEFAULT_USER_ID}, PROJ).to_list(500)
-    i_owe = sum(d["remaining_amount"] for d in debts if d["direction"] == "i_owe")
-    they_owe = sum(d["remaining_amount"] for d in debts if d["direction"] == "they_owe")
-    paid_this_month = 0.0
-    async for p in db.debt_payments.find({"user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ):
+    def precision(*values):
+        digits = max(0, *(v.adjusted() for v in values)) - min(-2, *(v.as_tuple().exponent for v in values)) + 2
+        if digits > max_digits:
+            raise HTTPException(503, "El resumen excede el presupuesto de precisión. No se devolvieron totales parciales.")
+        return max(28, digits)
+
+    def add(total, value):
+        with localcontext() as ctx:
+            ctx.prec = precision(total, value)
+            return total + value
+
+    def number(value, rounded=True):
+        with localcontext() as ctx:
+            ctx.prec = precision(value)
+            result = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_EVEN) if rounded else value
+        output = float(result)  # Only at the existing JSON-number boundary.
+        # Large valid values are not corruption. If the numeric API cannot
+        # preserve the result, fail explicitly rather than silently lose cents.
+        if not math.isfinite(output) or Decimal(str(output)) != result:
+            raise HTTPException(503, "El total no puede representarse con precisión en la respuesta numérica actual.")
+        return output
+
+    def this_month(row):
         try:
-            d = datetime.fromisoformat(p["date"].replace("Z", "+00:00"))
-            if d.year == now.year and d.month == now.month:
-                paid_this_month += p["amount"]
-        except Exception:
-            continue
+            d = datetime.fromisoformat(row["date"].replace("Z", "+00:00"))
+        except (KeyError, AttributeError, TypeError, ValueError):
+            raise HTTPException(409, "El resumen contiene una fecha no verificable.") from None
+        # Preserve the original stored-calendar month/offset convention (R9).
+        return d.year == now.year and d.month == now.month
 
-    next_pay = None
-    upcoming = sorted(
-        [d for d in debts if d["direction"] == "i_owe" and d.get("due_date") and d["status"] == "active"],
-        key=lambda x: x["due_date"],
-    )
-    if upcoming:
-        next_pay = {"date": upcoming[0]["due_date"], "amount": upcoming[0]["minimum_payment"], "name": upcoming[0]["name"]}
+    async def duplicates(collection, query):
+        cursor = collection.aggregate([
+            {"$match": query}, {"$group": {"_id": "$id", "n": {"$sum": 1}}},
+            {"$match": {"n": {"$gt": 1}}}, {"$limit": 1},
+            {"$project": {"_id": 0, "duplicate": {"$literal": True}}},
+        ], session=session, allowDiskUse=False, maxTimeMS=milliseconds(), batchSize=1,
+           collation={"locale": "simple"})
+        try:
+            if await cursor.to_list(1):
+                raise HTTPException(409, "El resumen contiene identificadores duplicados; no se pueden verificar los totales.")
+        finally:
+            await asyncio.wait_for(cursor.close(), 1)
 
-    return {
-        "total_balance": round(total_balance, 2),
-        "month_income": round(month_income, 2),
-        "month_expense": round(month_expense, 2),
-        "debts": {
-            "i_owe": round(i_owe, 2),
-            "they_owe": round(they_owe, 2),
-            "paid_this_month": round(paid_this_month, 2),
-            "next_payment": next_pay,
-        },
-        "accounts_count": len(accounts),
-    }
+    async def rows(collection, query, fields):
+        nonlocal visited, used
+        cursor = collection.find(query, {"_id": 0, "id": 1, **{field: 1 for field in fields}}, session=session)
+        cursor = cursor.max_time_ms(milliseconds()).batch_size(100)
+        try:
+            async for row in cursor:
+                milliseconds()
+                visited += 1
+                used += len(BSON.encode(row))
+                if visited > max_docs or used > max_bytes:
+                    raise HTTPException(503, "El resumen excede el presupuesto de lectura. No se devolvieron totales parciales.")
+                if not isinstance(row.get("id"), str) or not row["id"] or len(row["id"]) > 256:
+                    raise HTTPException(409, "El resumen contiene una identidad no verificable.")
+                yield row
+        finally:
+            await asyncio.wait_for(cursor.close(), 1)
+
+    async def collect():
+        nonlocal session
+        session = await client.start_session()
+        async with session.start_transaction(read_concern=ReadConcern("snapshot"),
+                                             write_concern=WriteConcern("majority"),
+                                             max_commit_time_ms=milliseconds()):
+            query = {"user_id": DEFAULT_USER_ID}
+            payments_query = {**query, "deleted": {"$ne": True}}
+            for collection, scope in ((db.accounts, query), (db.transactions, query),
+                                      (db.debts, query), (db.debt_payments, payments_query)):
+                await duplicates(collection, scope)
+            total_balance = Decimal(0)
+            accounts_count = 0
+            async with aclosing(rows(db.accounts, query, ("current_balance",))) as source:
+                async for row in source:
+                    total_balance = add(total_balance, money(row, "current_balance"))
+                    accounts_count += 1
+            month_income = month_expense = Decimal(0)
+            tx_query = {**query, "type": {"$in": ["income", "expense", "debt_payment"]}}
+            async with aclosing(rows(db.transactions, tx_query, ("type", "date", "amount"))) as source:
+                async for row in source:
+                    if this_month(row):
+                        amount = money(row, "amount")
+                        if row["type"] == "income":
+                            month_income = add(month_income, amount)
+                        else:
+                            month_expense = add(month_expense, amount)
+            i_owe = they_owe = Decimal(0)
+            next_pay = None
+            async with aclosing(rows(db.debts, query, ("direction", "remaining_amount", "due_date", "status", "minimum_payment", "name"))) as source:
+                async for row in source:
+                    direction = row.get("direction")
+                    if direction not in ("i_owe", "they_owe"):
+                        raise HTTPException(409, "El resumen contiene una dirección de deuda no verificable.")
+                    if direction == "i_owe":
+                        i_owe = add(i_owe, money(row, "remaining_amount"))
+                    else:
+                        they_owe = add(they_owe, money(row, "remaining_amount"))
+                    if direction == "i_owe" and row.get("due_date") and row.get("status") == "active":
+                        if not isinstance(row["due_date"], str):
+                            raise HTTPException(409, "El resumen contiene una fecha de deuda no verificable.")
+                        try:
+                            datetime.fromisoformat(row["due_date"].replace("Z", "+00:00"))
+                        except ValueError:
+                            raise HTTPException(409, "El resumen contiene una fecha de deuda no verificable.") from None
+                        if next_pay is None or row["due_date"] < next_pay["date"]:
+                            next_pay = {"date": row["due_date"], "amount": money(row, "minimum_payment"), "name": row.get("name", "")}
+            paid_this_month = Decimal(0)
+            async with aclosing(rows(db.debt_payments, payments_query, ("date", "amount"))) as source:
+                async for row in source:
+                    if this_month(row):
+                        paid_this_month = add(paid_this_month, money(row, "amount"))
+            result = {
+                "total_balance": number(total_balance),
+                "month_income": number(month_income),
+                "month_expense": number(month_expense),
+                "debts": {"i_owe": number(i_owe), "they_owe": number(they_owe),
+                          "paid_this_month": number(paid_this_month),
+                          "next_payment": {**next_pay, "amount": number(next_pay["amount"], rounded=False)} if next_pay else None},
+                "accounts_count": accounts_count,
+            }
+            milliseconds()
+        milliseconds()
+        return result
+
+    try:
+        return await asyncio.wait_for(collect(), timeout)
+    except (PyMongoError, TimeoutError, BSONError, InvalidOperation):
+        raise HTTPException(503, "No se pudo completar el resumen. Reintenta; no se devolvieron totales parciales.") from None
+    finally:
+        if session is not None:
+            try:
+                await asyncio.wait_for(session.end_session(), 1)
+            except (PyMongoError, TimeoutError):
+                logger.warning("Could not close read-only summary session")
 
 
 # Demo loading stays disabled until it has an isolated data store.

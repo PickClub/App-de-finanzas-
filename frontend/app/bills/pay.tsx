@@ -119,7 +119,7 @@ export default function BillPay() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+    <View style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
@@ -243,7 +243,7 @@ const useStyles = makeStyles((colors) => ({
   inputText: { fontSize: 15, color: colors.onSurface },
   errorBox: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16, padding: 12, borderRadius: radius.lg, backgroundColor: colors.expenseRed + "14" },
   errorText: { flex: 1, color: colors.expenseRed, fontSize: 13, fontWeight: "600" },
-  saveBtn: { marginTop: 22, backgroundColor: colors.brandPrimary, padding: 16, minHeight: 54, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  saveBtn: { marginTop: 22, backgroundColor: colors.primaryAction, padding: 16, minHeight: 54, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   sheetTitle: { fontSize: 16, color: colors.onSurface, textAlign: "center", marginTop: 4, marginBottom: 8 },
   sheetRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.divider },

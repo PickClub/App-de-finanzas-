@@ -85,7 +85,7 @@ export default function More() {
   ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+    <View style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         style={{ flex: 1 }}
         contentContainerStyle={[

@@ -51,4 +51,11 @@ function visualContract(source){
  function visit(node){if(ts.isJsxOpeningElement(node)||ts.isJsxSelfClosingElement(node))for(const prop of node.attributes.properties)if(prop.name&&attributes.has(prop.name.getText(tree)))result.push(prop.getText(tree));ts.forEachChild(node,visit);}
  visit(tree);const marker='const useStyles =';if(source.includes(marker))result.push(source.slice(source.indexOf(marker)));return result.sort();
 }
-module.exports={localeGlobals,localeMocks,normalizeUI,visualContract,setTestLocale,tr,localizedError};
+// Permit only the reviewed Home token aliases in presentation-style comparisons.
+// Financial colors, handler bodies, dimensions and arbitrary colors remain exact.
+function normalizeHomeColors(source){
+ return source.replace(/\bcolors\.pageBackground\b/g,'colors.surface')
+  .replace(/\bcolors\.primaryAction\b/g,'colors.brandPrimary')
+  .replace(/\bcolors\.identityAccent\b/g,'colors.brandPrimary');
+}
+module.exports={localeGlobals,localeMocks,normalizeUI,visualContract,normalizeHomeColors,setTestLocale,tr,localizedError};

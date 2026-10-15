@@ -128,7 +128,7 @@ export default function BillsScreen() {
 
       <View style={[styles.rowBetween, { marginTop: us(spacing.lg) }]}>
         <Text style={[styles.section, mont()]}>{t("bills.myBills")}</Text>
-        <Pressable testID="bills-new" onPress={() => router.push("/bills/new" as any)} style={({ pressed }) => [styles.newBtn, { backgroundColor: forest }, pressed && { opacity: 0.85 }]}>
+        <Pressable testID="bills-new" onPress={() => router.push("/bills/new" as any)} style={({ pressed }) => [styles.newBtn, { backgroundColor: scheme === "dark" ? forest : colors.primaryAction }, pressed && { opacity: 0.85 }]}>
           <Ionicons name="add" size={us(20)} color="#fff" />
           <Text style={[styles.newText, mont()]}>{t("bills.newBill")}</Text>
         </Pressable>
@@ -171,7 +171,7 @@ export default function BillsScreen() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+    <View style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <ElasticFlatList {...NATIVE_VERTICAL_SCROLL}
         data={items}
         keyExtractor={(b) => b.id}

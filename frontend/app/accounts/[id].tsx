@@ -98,7 +98,7 @@ export default function AccountDetail() {
 
   if (!account || deletion.deleted.current) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.surface, paddingTop: insets.top + us(8) }}>
+      <View style={{ flex: 1, backgroundColor: colors.pageBackground, paddingTop: insets.top + us(8) }}>
         <View style={styles.headerRow}>
           <Pressable testID="acc-detail-back" onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
@@ -118,7 +118,7 @@ export default function AccountDetail() {
   const iconName = account.icon || ACCOUNT_ICON[account.type] || "wallet-outline";
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+    <View style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         contentContainerStyle={{
           paddingTop: insets.top + us(8),
@@ -197,7 +197,7 @@ export default function AccountDetail() {
             <Pressable
               testID="acc-see-all"
               onPress={() => router.push({ pathname: "/transactions/all", params: { accountId: account.id } })}
-              style={[styles.seePill, { backgroundColor: forest + "14" }]}
+              style={[styles.seePill, { backgroundColor: scheme === "dark" ? forest + "14" : colors.secondaryActionBackground }]}
               hitSlop={8}
             >
               <Text style={[styles.seeText, { color: forest }]}>{t("common.seeAll")}</Text>

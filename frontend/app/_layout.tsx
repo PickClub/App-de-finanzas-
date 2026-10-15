@@ -49,16 +49,16 @@ export default function RootLayout() {
 function ThemedApp() {
   const { scheme, colors } = useTheme();
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.surface }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <BottomSheetModalProvider>
             <LockProvider>
-              <StatusBar barStyle={scheme === "dark" ? "light-content" : "dark-content"} backgroundColor={colors.surface} />
+              <StatusBar barStyle={scheme === "dark" ? "light-content" : "dark-content"} backgroundColor={colors.pageBackground} />
               <Stack
                 screenOptions={{
                   headerShown: false,
-                  contentStyle: { backgroundColor: colors.surface },
+                  contentStyle: { backgroundColor: colors.pageBackground },
                   // Keep the DEFAULT transition style; only shorten its
                   // duration for snappier navigation. animationDuration is an
                   // officially supported native-stack prop (honored on Android;

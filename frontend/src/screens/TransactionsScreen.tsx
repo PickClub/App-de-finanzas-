@@ -85,7 +85,7 @@ export default function Transactions() {
   const rangeLabel = DATE_RANGES.find((r) => r.id === dateRange)?.label;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+    <View style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <View style={[styles.header, { paddingTop: insets.top + us(12) }]}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(10) }}>
           <Text style={styles.title}>{tr("ui.transactions")}</Text>
@@ -171,7 +171,7 @@ export default function Transactions() {
               />
             )}
             <Pressable testID="clear-filters" onPress={clearAll} style={styles.clearBtn}>
-              <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: ufs(12) }}>{tr("ui.clear")}</Text>
+              <Text style={{ color: colors.identityAccent, fontWeight: "700", fontSize: ufs(12) }}>{tr("ui.clear")}</Text>
             </Pressable>
           </ScrollView>
         )}
@@ -324,7 +324,7 @@ function FilterPill({
 }: { label: string; active?: boolean; onPress: () => void; color?: string; icon?: string; testID?: string }) {
   const { colors } = useTheme();
   const styles = useStyles();
-  const bg = active ? (color || colors.brandPrimary) : colors.surfaceSecondary;
+  const bg = active ? (color || colors.identityAccent) : colors.surfaceSecondary;
   const fg = active ? "#fff" : colors.onSurface;
   return (
     <Pressable
@@ -344,7 +344,7 @@ const useStyles = makeStyles((colors) => ({
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.pageBackground,
   },
   title: { fontSize: 24, fontWeight: "800", color: colors.onSurface, flex: 1 },
   filterBtn: {
@@ -355,7 +355,7 @@ const useStyles = makeStyles((colors) => ({
   badge: {
     position: "absolute", top: -2, right: -2,
     minWidth: 18, height: 18, borderRadius: 9,
-    backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center",
+    backgroundColor: colors.primaryAction, alignItems: "center", justifyContent: "center",
     paddingHorizontal: 5,
   },
   badgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
@@ -399,7 +399,7 @@ const useStyles = makeStyles((colors) => ({
   },
   modalWrap: { flex: 1, justifyContent: "flex-end", backgroundColor: "#00000055" },
   sheet: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.pageBackground,
     borderTopLeftRadius: radius.cardLg,
     borderTopRightRadius: radius.cardLg,
     padding: spacing.lg,
@@ -431,6 +431,6 @@ const useStyles = makeStyles((colors) => ({
   },
   footerApply: {
     flex: 2, padding: 14, borderRadius: radius.pill,
-    backgroundColor: colors.brandPrimary, alignItems: "center",
+    backgroundColor: colors.primaryAction, alignItems: "center",
   },
 }));

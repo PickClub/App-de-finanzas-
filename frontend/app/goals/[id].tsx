@@ -87,7 +87,7 @@ export default function GoalDetail() {
     : g.monthly_recommended ? t("goals.recommendedVal", { amount: formatCurrencyInt(g.monthly_recommended) }) : "—";
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+    <View style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(60), paddingHorizontal: us(spacing.lg) }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
           <Pressable testID="goal-detail-back" onPress={() => router.back()} style={styles.backBtn}>

@@ -25,5 +25,5 @@ export default function Index() {
 }
 
 const useStyles = makeStyles((colors) => ({
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.pageBackground },
 }));

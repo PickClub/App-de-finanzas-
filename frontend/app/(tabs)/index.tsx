@@ -746,7 +746,7 @@ export default function Home() {
         <Pressable testID="notifications-btn" style={styles.roundIcon}>
           <Ionicons name="notifications-outline" size={us(22)} color={colors.onSurface} />
         </Pressable>
-        <Pressable testID="profile-more-btn" onPress={() => router.push("/more")} style={styles.avatar}>
+        <Pressable testID="profile-more-btn" accessibilityRole="button" accessibilityLabel={t("more.settings")} onPress={() => router.push("/settings")} style={styles.avatar}>
           <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>
             {(user?.name || "U").slice(0, 1)}
           </Text>

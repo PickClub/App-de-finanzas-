@@ -12,7 +12,7 @@ const source = process.env.NOTES_TEST_REF
   ? cp.execFileSync('git', ['show', `${process.env.NOTES_TEST_REF}:${file}`], { cwd: root, encoding: 'utf8' })
   : fs.readFileSync(path.join(root, file), 'utf8');
 const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const names = ['persist', 'saveNote', 'togglePin', 'deleteNote', 'openEditor'];
+const names = ['editorDraftSignature', 'persist', 'saveNote', 'togglePin', 'deleteNote', 'openEditor', 'closeEditor', 'validateDraft', 'changeTitle', 'changeContent', 'toggleListMode', 'updateItemText', 'addItem', 'submitItem', 'revealItem', 'itemInputReady', 'togglePreviewItem', 'requestPreviewDelete'];
 const handlers = {};
 let load;
 function visit(n) {
@@ -23,15 +23,24 @@ function visit(n) {
 visit(tree);
 assert.equal(Object.keys(handlers).length, names.length);
 assert(load);
+const limitModule = { exports: {} };
+vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'frontend/src/notes/limits.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,limitModule);
+const checklistModule={exports:{}};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'frontend/src/notes/checklist.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,checklistModule);
 const clone = value => JSON.parse(JSON.stringify(value));
 const note = (id = 'n') => ({ id, title: 'Confirmed', content: 'Original', pinned: false, color: 'green', palette: 'cream', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' });
 function fixture(initial = [], editing = null) {
   let stored = JSON.stringify(initial), writes = 0, sequence = 0;
   const alerts = [];
   const ctx = {
-    notes: clone(initial), confirmedNotes: { current: clone(initial) }, notesReady: { current: true }, saveComplete: { current: false },
+    notes: clone(initial), confirmedNotes: { current: clone(initial) }, notesReady: { current: true }, saveComplete: { current: false }, editorSnapshot: {current:{signature:'',revision:0,active:true}}, discardPrompt: {current:false},
     noteDeleting: { current: false }, deletedNotes: { current: new Set() },
-    editing, editorOpen: true, draftTitle: 'Draft title', draftContent: 'Draft text', draftListMode: 'plain', draftItems: [], draftPalette: 'green',
+    ...limitModule.exports, ...checklistModule.exports,
+    pendingItemFocus:{current:null},focusedItem:{current:null},submittedItem:{current:null},
+    itemInputs:{current:new Map()},itemLayouts:{current:new Map()},scrollLayout:{current:{origin:0,height:0,offset:0,ready:false}},
+    editorScroll:{current:{scrollTo:()=>{}}},us:x=>x,
+    lastLimitNotice: {current:0},
+    editing, editorOpen: true, draftTitle: 'Draft title', draftContent: 'Draft text', draftListMode: 'plain', draftItems: [], draftPalette: 'green', previewNote: editing,
     deleteBusy: false, STORAGE_KEY: 'synthetic', NOTE_COLORS: ['green'],
     useCallback: f => f, genId: () => `new-${++sequence}`,
     serializeItems: items => JSON.stringify(items), parseListItems: () => [],
@@ -41,14 +50,15 @@ function fixture(initial = [], editing = null) {
     getItem: async () => stored,
     setItem: async (key, value) => { writes++; stored = value; return true; },
   };
-  for (const k of ['Notes','EditorOpen','Editing','MenuNote','ConfirmDelete','DeleteBusy','DraftTitle','DraftContent','DraftListMode','DraftItems','DraftPalette']) {
+  for (const k of ['Notes','PreviewNote','EditorOpen','Editing','MenuNote','ConfirmDelete','DeleteBusy','DraftTitle','DraftContent','DraftListMode','DraftItems','DraftPalette']) {
     const property = k[0].toLowerCase()+k.slice(1);
-    ctx['set'+k] = value => { ctx[property] = value; };
+    ctx['set'+k] = value => { ctx[property] = typeof value==='function'?value(ctx[property]):value; };
   }
   vm.createContext(localeGlobals(ctx));
   const code = names.map(n => `const ${n} = ${handlers[n]};`).join('\n') +
     `\nglobalThis.run = {${names.join(',')}, load:${load}};`;
   vm.runInContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText, ctx);
+  ctx.editorSnapshot.current.signature=ctx.run.editorDraftSignature({title:editing?.title||'',content:editing?.content||'',mode:editing?.listMode||'plain',items:[],palette:editing?.palette??null});
   return { ctx, alerts, run: ctx.run, snapshot: () => JSON.parse(stored), get writes() { return writes; } };
 }
 function delay(f) {
@@ -179,16 +189,51 @@ async function main() {
   assert.equal(f.ctx.notesReady.current, true);
   console.log('PASS: first-run seed cannot race with saving or appear persisted before confirmation.');
 
+  for(const outside of [false,true]){
+    f=fixture();f.ctx.draftListMode='check';f.ctx.draftItems=[{text:'Do not save',checked:true}];
+    f.run.closeEditor(outside);
+    assert.equal(f.ctx.editorOpen,false);assert.equal(f.ctx.draftTitle,'');assert.equal(f.ctx.draftContent,'');
+    assert.equal(f.ctx.draftListMode,'plain');assert.equal(f.ctx.draftItems.length,0);assert.equal(f.ctx.draftPalette,null);assert.equal(f.writes,0);
+    f.run.openEditor(null);assert.equal(f.ctx.draftTitle,'');assert.equal(f.ctx.draftContent,'');
+  }
+  f=fixture([note()],note());f.run.closeEditor();
+  assert.equal(f.ctx.editorOpen,true);assert.equal(f.ctx.draftTitle,'Draft title');assert.equal(f.writes,0);
+  assert.equal(f.alerts.length,1);f.run.closeEditor();assert.equal(f.alerts.length,1);
+  await f.run.saveNote();assert.equal(f.writes,0); // A discard dialog owns this visit.
+  f.alerts[0][2][0].onPress();assert.equal(f.ctx.editorOpen,true);assert.equal(f.ctx.draftTitle,'Draft title');
+  f.run.closeEditor();f.alerts[1][2][1].onPress();
+  assert.equal(f.ctx.editorOpen,false);assert.equal(f.ctx.draftTitle,'');assert.equal(f.ctx.editing,null);assert.equal(f.writes,0);
+  assert.equal(f.snapshot()[0].content,'Original');
+  f.ctx.editing=note();f.ctx.draftTitle='Queued stale title';f.ctx.draftContent='Queued stale body';await f.run.saveNote();assert.equal(f.writes,0);
+  f=fixture([note()],note());f.run.openEditor(note());f.run.closeEditor();assert.equal(f.ctx.editorOpen,false);assert.equal(f.alerts.length,0);
+  f=fixture([note()],note());f.run.closeEditor();const oldDiscard=f.alerts[0][2][1].onPress;
+  f.run.openEditor(note('other'));oldDiscard();assert.equal(f.ctx.editorOpen,true);assert.equal(f.ctx.editing.id,'other');
+  f=fixture();f.ctx.noteDeleting.current=true;f.run.closeEditor();assert.equal(f.ctx.editorOpen,true);
+  console.log('PASS: new drafts discard without writes; existing dirty edits confirm once, Cancel retains drafts, Discard clears without writes, unchanged edits close directly, stale dialogs cannot close another editor and pending saves are protected.');
+
   const compiled = ts.transpileModule(source,{ fileName:file,reportDiagnostics:true,compilerOptions:{jsx:ts.JsxEmit.React,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020} });
   assert.equal((compiled.diagnostics||[]).filter(d=>d.category===ts.DiagnosticCategory.Error).length,0);
   if (!process.env.NOTES_TEST_REF) {
     assert(source.includes('editable={!deleteBusy}'));
     assert(source.includes('pointerEvents={deleteBusy ? "none" : "auto"}'));
-    assert(source.includes('if (!noteDeleting.current) setEditorOpen(false);'));
+    assert(source.includes('if (noteDeleting.current || discardPrompt.current) return;'));
     const old = cp.execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'});
-    const marker = 'const useStyles =';
-    assert.equal(source.slice(source.indexOf(marker)),old.slice(old.indexOf(marker)));
+    const styleEntries = text => {
+      const ast=ts.createSourceFile(file,text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+      const result={};
+      function visit(n){
+        if(ts.isVariableDeclaration(n)&&n.name.getText(ast)==='useStyles'){
+          const body=n.initializer.arguments[0].body;
+          const value=body.statements.find(ts.isReturnStatement).expression;
+          for(const p of value.properties)result[p.name.getText(ast)]=p.initializer.getText(ast);
+        }else ts.forEachChild(n,visit);
+      }visit(ast);return result;
+    };
+    const before=styleEntries(old),after=styleEntries(source);
+    const editorChanges=new Set(['toolsRow','toolBtn','sheetActions']);
+    for(const key of Object.keys(before))if(!editorChanges.has(key))assert.equal(after[key],before[key],`Unrelated style changed: ${key}`);
   }
-  console.log('PASS: TSX syntax; editor input/close guards; identical style definitions.');
+  console.log('PASS: TSX syntax; editor input/close guards; unchanged non-editor style definitions.');
 }
-main().catch(error => { console.error(error); process.exitCode=1; });
+module.exports={fixture,note};
+if(require.main===module) main().catch(error => { console.error(error); process.exitCode=1; });

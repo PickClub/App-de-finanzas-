@@ -227,7 +227,7 @@ export default function AccountForm() {
         </View>
       </View>
 
-      <Pressable testID="save-account" onPress={save} disabled={saving} style={[styles.saveBtn, { backgroundColor: pal.forest, opacity: saving ? 0.7 : 1 }, shadow]}>
+      <Pressable testID="save-account" onPress={save} disabled={saving} style={[styles.saveBtn, { backgroundColor: scheme === "dark" ? pal.forest : colors.primaryAction, opacity: saving ? 0.7 : 1 }, shadow]}>
         <Text style={[styles.saveText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{tr("ui.save_account")}</Text>
       </Pressable>
     </ElasticScrollView>

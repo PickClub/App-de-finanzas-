@@ -1,4 +1,4 @@
-const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
+const {localeGlobals,localeMocks,normalizeHomeColors,normalizeUI}=require('./i18n-test-support.cjs');
 // C10/R7 Categories: actual form handlers with synthetic API/cache/navigation.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const vm=require('node:vm'),cp=require('node:child_process'),ts=require('typescript');
@@ -96,11 +96,11 @@ async function main(){
   console.log('PASS: confirmed save plus refresh error is not reported as a failed POST; no duplicate retry or navigation after unmount.');
 
   const base=cp.execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),marker='const useStyles =';
-  assert.equal(source.slice(source.indexOf(marker)),base.slice(base.indexOf(marker)));
+  assert.equal(normalizeHomeColors(source.slice(source.indexOf(marker))),normalizeHomeColors(base.slice(base.indexOf(marker))));
   assert(source.includes('editable={!saving && !deletion.busy}'));
   assert(source.includes('pointerEvents={deletion.busy || saving ? "none" : "auto"}'));
   const compiled=ts.transpileModule(source,{fileName:file,reportDiagnostics:true,compilerOptions:{jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2020}});
   assert.equal((compiled.diagnostics||[]).filter(d=>d.category===ts.DiagnosticCategory.Error).length,0);
-  console.log('PASS: input/button guards, identical styles and TSX syntax; no backend/database calls.');
+  console.log('PASS: input/button guards, unchanged non-color styles, approved Home color aliases and TSX syntax; no backend/database calls.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

@@ -103,7 +103,7 @@ export default function PayDebt() {
             <Text style={[styles.debtName, { color: pal.onSurface }]}>{resourceState === "missing" ? tr("ui.debt_not_found") : tr("ui.could_not_load_the_debt")}</Text>
             <Text style={[styles.debtSub, { color: pal.muted }]}>{resourceState === "missing" ? tr("ui.it_may_no_longer_exist_go_back_or_try_again") : tr("ui.check_your_connection_and_try_again")}</Text>
             {operation ? <Text style={[styles.debtSub, { color: pal.muted }]} testID="debt-pay-preserved">{tr("ui.the_payment_record_is_preserved_this_query_does_not_confirm_or_cancel_payments")}</Text> : null}
-            {params.id ? <Pressable testID="debt-pay-retry" disabled={debtQ.isFetching} onPress={() => { void debtQ.refetch(); }} style={[styles.saveBtn, { backgroundColor: pal.forest }]}>
+            {params.id ? <Pressable testID="debt-pay-retry" disabled={debtQ.isFetching} onPress={() => { void debtQ.refetch(); }} style={[styles.saveBtn, { backgroundColor: scheme === "dark" ? pal.forest : colors.primaryAction }]}>
               <Text style={[styles.saveText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{debtQ.isFetching ? tr("ui.retrying") : tr("ui.retry")}</Text>
             </Pressable> : null}
           </View>
@@ -302,7 +302,7 @@ export default function PayDebt() {
           testID="confirm-pay"
           onPress={save}
           disabled={saving}
-          style={[styles.saveBtn, { backgroundColor: pal.forest, opacity: saving ? 0.7 : 1 }, shadow]}
+          style={[styles.saveBtn, { backgroundColor: scheme === "dark" ? pal.forest : colors.primaryAction, opacity: saving ? 0.7 : 1 }, shadow]}
         >
           <Text style={[styles.saveText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{view.action}</Text>
         </Pressable>

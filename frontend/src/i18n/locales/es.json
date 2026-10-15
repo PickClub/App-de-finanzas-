@@ -259,7 +259,21 @@
     "empty": "Aún no tienes deudas ni préstamos",
     "noPayments": "Aún no hay pagos",
     "paidFull": "Pagado",
-    "active": "Activo"
+    "active": "Activo",
+    "peopleOweYou": "Me deben",
+    "collected": "Cobrado",
+    "tapToFlip": "Toca para girar",
+    "summaryProgress": "<paid>{{paid}}</paid> de {{total}}",
+    "flipToDebts": "Girar tarjeta para ver lo que debes",
+    "flipToReceivables": "Girar tarjeta para ver lo que te deben",
+    "editDebt": "Editar deuda",
+    "editConflict": "Esta deuda cambió mientras la editabas. Vuelve a abrirla para cargar los datos actuales.",
+    "editLoadFailed": "No se pudo cargar la deuda y su historial de pagos. Inténtalo de nuevo.",
+    "paymentProtected": "El importe original está bloqueado porque esta deuda tiene pagos registrados. Se conservan su dirección y su cuenta vinculada.",
+    "deleteConfirmation": "¿Eliminar «{{name}}»? Esta acción no se puede deshacer.",
+    "deleteLinked": "No se puede eliminar esta deuda mientras tenga pagos o movimientos vinculados. Su historial no se ha modificado.",
+    "deleteRefreshFailed": "La deuda se eliminó, pero algunos totales no pudieron actualizarse. Vuelve a abrir la lista para reintentar.",
+    "deleteCompleted": "La deuda se eliminó."
   },
   "reports": {
     "title": "Informes",
@@ -1180,6 +1194,22 @@
       "goals": "Metas",
       "reminder": "Recordatorio",
       "travel": "Viaje"
+    },
+    "limits": {
+      "heading": "Límite de la nota alcanzado",
+      "title": "Usa hasta 80 caracteres en el título. Puedes corregir títulos antiguos más largos sin ampliarlos.",
+      "content": "Usa hasta 5.000 caracteres en la nota. Puedes corregir notas antiguas más largas sin ampliarlas.",
+      "items": "Usa hasta 50 elementos. Puedes editar listas antiguas más largas sin añadir más elementos.",
+      "item": "Usa hasta 200 caracteres por elemento. Puedes corregir elementos antiguos más largos sin ampliarlos."
+    },
+    "preview": {
+      "deleteMessage": "Esta nota se eliminará permanentemente.",
+      "checkSaveFailed": "No se guardó la casilla. Se conserva el último estado guardado. Inténtalo de nuevo."
+    },
+    "editor": {
+      "discardTitle": "¿Descartar cambios?",
+      "discardMessage": "Tus cambios no se han guardado.",
+      "discardAction": "Descartar"
     }
   },
   "navigation": {},

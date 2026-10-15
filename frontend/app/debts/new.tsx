@@ -11,6 +11,7 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { debtUpdatePayload, debtSnapshotMatches } from "@/src/debts/editor";
 import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
@@ -156,7 +157,13 @@ export default function NewDebt() {
   useInterfaceLanguage();
   const { colors, scheme } = useTheme();
   const styles = useStyles();
-  const params = useLocalSearchParams<{ direction?: string }>();
+  const params = useLocalSearchParams<{ direction?: string; id?: string }>();
+  const editing = params.id !== undefined;
+  const editId = typeof params.id === "string" && params.id.length > 0 ? params.id : undefined;
+  const [loadedDebt, setLoadedDebt] = useState<any>(null);
+  const [hasPayments, setHasPayments] = useState(false);
+  const debtQ = useQuery({ queryKey: ["debt", editId], queryFn: () => api.getDebt(editId!), enabled: !!editId, refetchOnMount: "always" });
+  const paymentsQ = useQuery({ queryKey: ["debt-payments", editId], queryFn: () => api.listDebtPayments(editId!), enabled: !!editId, refetchOnMount: "always" });
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
@@ -173,7 +180,7 @@ export default function NewDebt() {
   const [minPay, setMinPay] = useState("");
   const [frequency, setFrequency] = useState("monthly");
   const [interest, setInterest] = useState("");
-  const [notes] = useState("");
+  const [notes, setNotes] = useState("");
   const [color, setColor] = useState(DEFAULT_COLOR);
   const [icon, setIcon] = useState(ICONS[0]);
   // Optional category (existing Debt.category_id field). Notes are no longer
@@ -187,14 +194,27 @@ export default function NewDebt() {
   const cats = (catQ.data || []).filter((c: any) => c.type === "expense" && !c.is_group);
   const selCat = cats.find((c: any) => c.id === categoryId);
 
+  // Initialize once per fetched identity; background refetches never overwrite a draft.
+  if (editing && editId && loadedDebt?.id !== editId && !debtQ.isFetching && !paymentsQ.isFetching
+    && debtQ.isSuccess && paymentsQ.isSuccess && debtQ.data?.id === editId && Array.isArray(paymentsQ.data)) {
+    const debt = debtQ.data;
+    setLoadedDebt({ ...debt });
+    setHasPayments(paymentsQ.data.length > 0 || Number(debt.total_paid) !== 0);
+    setDirection(debt.direction); setStep2(true);
+    setName(debt.name); setPerson(debt.person ?? ""); setAmount(String(debt.original_amount));
+    setMinPay(String(debt.minimum_payment ?? 0)); setFrequency(debt.payment_frequency);
+    setInterest(String(debt.interest_rate ?? 0)); setNotes(debt.notes ?? "");
+    setColor(debt.color); setIcon(debt.icon); setCategoryId(debt.category_id ?? undefined);
+  }
+
   const save = async () => {
-    if (savingRef.current) return;
-    const amt = parseFloat(amount);
-    if (!name.trim() || !amt) return Alert.alert(tr("ui.enter_a_name_and_amount"));
+    if (savingRef.current || (editing && loadedDebt?.id !== editId)) return;
+    const amt = editing ? Number(amount) : parseFloat(amount);
+    if (!name.trim() || !amount.trim() || !Number.isFinite(amt) || (editing ? amt < 0 : !amt)) return Alert.alert(tr("ui.enter_a_name_and_amount"));
     savingRef.current = true;
     setSaving(true);
     try {
-      await api.createDebt({
+      const fields = {
         name,
         direction,
         person,
@@ -206,8 +226,21 @@ export default function NewDebt() {
         color,
         icon,
         category_id: categoryId,
-      });
-      qc.invalidateQueries();
+      };
+      if (editing) {
+        const current = await api.getDebt(editId!);
+        const currentPayments = await api.listDebtPayments(editId!);
+        if (!Array.isArray(currentPayments)) throw new Error(tr("errors.requestFailed"));
+        const protectedAmount = hasPayments || currentPayments.length > 0 || Number(current.total_paid) !== 0;
+        if ((protectedAmount && amt !== loadedDebt.original_amount) || !debtSnapshotMatches(loadedDebt, current)) throw new Error(tr("debts.editConflict"));
+        const updated = await api.updateDebt(editId!, debtUpdatePayload(loadedDebt, fields, protectedAmount));
+        if (updated?.id !== editId) throw new Error(tr("errors.requestFailed"));
+        qc.setQueryData(["debt", editId], updated);
+        qc.setQueryData(["debts"], (rows: any[] | undefined) => rows?.map(row => row.id === editId ? updated : row));
+      } else {
+        await api.createDebt(fields);
+      }
+      void qc.invalidateQueries();
       // Reuse the existing list; replace only when opened directly from Home.
       router.dismissTo("/debts");
     } catch (e: any) {
@@ -217,9 +250,18 @@ export default function NewDebt() {
     }
   };
 
+  if (editing && loadedDebt?.id !== editId) {
+    const failed = !editId || debtQ.isError || paymentsQ.isError || (debtQ.isSuccess && debtQ.data?.id !== editId) || (paymentsQ.isSuccess && !Array.isArray(paymentsQ.data));
+    return <View style={{ flex: 1, backgroundColor: pal.bg, padding: us(spacing.lg), paddingTop: insets.top + us(16) }}>
+      <Pressable testID="debt-edit-back" onPress={() => router.back()}><Text>{tr("common.cancel")}</Text></Pressable>
+      <Text testID="debt-edit-status">{failed ? tr("debts.editLoadFailed") : tr("ui.loading")}</Text>
+      {failed && !!editId && <Pressable testID="debt-edit-retry" onPress={() => { void debtQ.refetch(); void paymentsQ.refetch(); }}><Text>{tr("ui.retry")}</Text></Pressable>}
+    </View>;
+  }
+
   if (!step2) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.surface, paddingTop: insets.top + us(8) }}>
+      <View style={{ flex: 1, backgroundColor: colors.pageBackground, paddingTop: insets.top + us(8) }}>
         <View style={styles.headerRow}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
@@ -278,7 +320,7 @@ export default function NewDebt() {
           <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: pal.card, borderColor: pal.border }]}>
             <Ionicons name="chevron-back" size={us(24)} color={pal.onSurface} />
           </Pressable>
-          <Text style={[styles.title, { color: pal.onSurface }]}>{iOwe ? tr("ui.i_owe") : tr("ui.owed_to_me")}</Text>
+          <Text style={[styles.title, { color: pal.onSurface }]}>{editing ? tr("debts.editDebt") : iOwe ? tr("ui.i_owe") : tr("ui.owed_to_me")}</Text>
           <View style={{ width: us(40) }} />
         </View>
 
@@ -315,6 +357,7 @@ export default function NewDebt() {
               <TextInput
                 testID="debt-amount"
                 value={amount}
+                editable={!(editing && hasPayments)}
                 onChangeText={setAmount}
                 keyboardType="decimal-pad"
                 placeholder="0.00"
@@ -344,6 +387,8 @@ export default function NewDebt() {
             </View>
           </Pressable>
         </View>
+
+        {editing && hasPayments && <Text testID="debt-edit-payment-protection" style={{ color: pal.muted, fontSize: ufs(12) }}>{tr("debts.paymentProtected")}</Text>}
 
         {/* Optional sections (closed by default) */}
         <Collapsible testID="toggle-min-pay" icon="cash-outline" title={tr("ui.minimum_payment")} summary={minSummary} pal={pal} styles={styles}>
@@ -422,7 +467,7 @@ export default function NewDebt() {
           testID="save-debt"
           onPress={save}
           disabled={saving}
-          style={({ pressed }) => [styles.saveBtn, { backgroundColor: pal.forest }, (pressed || saving) && { opacity: 0.85 }]}
+          style={({ pressed }) => [styles.saveBtn, { backgroundColor: scheme === "dark" ? pal.forest : colors.primaryAction }, (pressed || saving) && { opacity: 0.85 }]}
         >
           <Text style={styles.saveText}>{saving ? tr("ui.saving") : tr("ui.save_debt")}</Text>
         </Pressable>
@@ -511,7 +556,7 @@ const useStyles = makeStyles((colors, scheme) => {
   input: { fontSize: 15, color: colors.onSurface, backgroundColor: colors.surfaceSecondary, padding: 14, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border },
   freqChip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
   iconOpt: { padding: 4, borderRadius: 14, borderWidth: 1, borderColor: p.border, backgroundColor: p.field },
-  saveBtn: { backgroundColor: colors.brandPrimary, padding: 16, borderRadius: radius.pill, alignItems: "center" },
+  saveBtn: { backgroundColor: colors.primaryAction, padding: 16, borderRadius: radius.pill, alignItems: "center" },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   // --- Step 2: redesigned form ---
   card: {

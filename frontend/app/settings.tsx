@@ -53,7 +53,7 @@ export default function Settings() {
   };
 
   return (
-    <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+    <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} style={{ flex: 1, backgroundColor: colors.pageBackground }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
@@ -67,7 +67,7 @@ export default function Settings() {
       <Text style={styles.label}>{t("settings.currency")}</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: us(8) }}>
         {CURRENCIES.map((c) => (
-          <Pressable key={c} onPress={() => setCurrency(c)} style={[styles.currency, currency === c && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
+          <Pressable key={c} onPress={() => setCurrency(c)} style={[styles.currency, currency === c && { backgroundColor: colors.identityAccent, borderColor: colors.identityAccent }]}>
             <Text style={{ color: currency === c ? "#fff" : colors.onSurface, fontWeight: "700" }}>{c}</Text>
           </Pressable>
         ))}
@@ -84,7 +84,7 @@ export default function Settings() {
               onPress={() => setMode(t.id)}
               style={[
                 styles.themeBtn,
-                active && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+                active && { backgroundColor: colors.identityAccent, borderColor: colors.identityAccent },
               ]}
             >
               <Ionicons
@@ -149,8 +149,8 @@ export default function Settings() {
               onPress={async () => { try { await setLang(l.id); setLangOpen(false); } catch { Alert.alert(t("common.error"), t("errors.languagePreference")); } }}
               style={styles.langOption}
             >
-              <Text style={[styles.langOptionText, active && { color: colors.brandPrimary, fontWeight: "800" }]}>{l.label}</Text>
-              {active && <Ionicons name="checkmark" size={us(20)} color={colors.brandPrimary} />}
+              <Text style={[styles.langOptionText, active && { color: colors.identityAccent, fontWeight: "800" }]}>{l.label}</Text>
+              {active && <Ionicons name="checkmark" size={us(20)} color={colors.identityAccent} />}
             </Pressable>
           );
         })}
@@ -175,7 +175,7 @@ const useStyles = makeStyles((colors) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  saveBtn: { marginTop: 28, backgroundColor: colors.brandPrimary, padding: 16, borderRadius: radius.pill, alignItems: "center" },
+  saveBtn: { marginTop: 28, backgroundColor: colors.primaryAction, padding: 16, borderRadius: radius.pill, alignItems: "center" },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   langRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",

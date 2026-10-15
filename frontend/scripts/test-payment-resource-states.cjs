@@ -1,4 +1,4 @@
-const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
+const {localeGlobals,localeMocks,normalizeHomeColors,normalizeUI}=require('./i18n-test-support.cjs');
 // C7: render the actual screens against synthetic React Query/API responses.
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const vm = require('node:vm'), cp = require('node:child_process'), ts = require('typescript');
@@ -105,12 +105,12 @@ async function run() {
   }
   if(!process.env.C7_TEST_REF)for(const file of Object.values(files)){
     const previous=cp.execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),current=source(file);
-    const marker='const useStyles =';assert.equal(current.slice(current.indexOf(marker)),previous.slice(previous.indexOf(marker)));
+    const marker='const useStyles =';assert.equal(normalizeHomeColors(current.slice(current.indexOf(marker))),normalizeHomeColors(previous.slice(previous.indexOf(marker))));
     function protectedCode(text){const tree=ts.createSourceFile(file,text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),blocks=[];
       function visit(n){if(ts.isVariableDeclaration(n)&&['save','ask'].includes(n.name.getText(tree)))blocks.push(n.initializer.getText(tree));
         if(ts.isCallExpression(n)&&['useEffect','useFocusEffect'].includes(n.expression.getText(tree)))blocks.push(n.getText(tree));ts.forEachChild(n,visit);}visit(tree);return blocks;}
     assert.deepEqual(protectedCode(current).map(normalizeUI),protectedCode(previous).map(normalizeUI));
   }
-  console.log('PASS: financial handlers, journal recovery effects and style definitions are identical to HEAD.');
+  console.log('PASS: financial handlers and journal recovery effects are identical to HEAD; styles differ only by reviewed Home color aliases.');
 }
 run().catch(error=>{console.error(error);process.exitCode=1;});

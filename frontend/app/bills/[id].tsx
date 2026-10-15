@@ -85,11 +85,11 @@ export default function BillDetail() {
   };
 
   if (q.isLoading) {
-    return <View style={[styles.center, { backgroundColor: colors.surface }]}><ActivityIndicator color={forest} /></View>;
+    return <View style={[styles.center, { backgroundColor: colors.pageBackground }]}><ActivityIndicator color={forest} /></View>;
   }
   if (!b) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.surface, paddingTop: insets.top }]}>
+      <View style={[styles.center, { backgroundColor: colors.pageBackground, paddingTop: insets.top }]}>
         <Text style={styles.muted}>{t("bills.notFound")}</Text>
         <Pressable onPress={() => router.back()} style={[styles.secondaryBtn, { marginTop: us(12) }]}><Text style={styles.secondaryText}>{t("common.back", { defaultValue: "Volver" })}</Text></Pressable>
       </View>
@@ -109,7 +109,7 @@ export default function BillDetail() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+    <View style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}
       >
@@ -175,7 +175,7 @@ export default function BillDetail() {
         ) : null}
 
         {b.status !== "paid" ? (
-          <Pressable testID="bill-register-pay" onPress={() => router.push({ pathname: "/bills/pay", params: { id: b.id } } as any)} style={({ pressed }) => [styles.primaryBtn, { backgroundColor: forest }, pressed && { opacity: 0.85 }]}>
+          <Pressable testID="bill-register-pay" onPress={() => router.push({ pathname: "/bills/pay", params: { id: b.id } } as any)} style={({ pressed }) => [styles.primaryBtn, { backgroundColor: scheme === "dark" ? forest : colors.primaryAction }, pressed && { opacity: 0.85 }]}>
             <Ionicons name="card-outline" size={us(20)} color="#fff" />
             <Text style={[styles.primaryText, mont()]}>{t("bills.registerPay")}</Text>
           </Pressable>

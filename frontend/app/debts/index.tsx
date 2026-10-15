@@ -2,7 +2,9 @@ import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { View, ScrollView, StyleSheet, Animated, Easing, Platform } from "react-native";
+import { View, StyleSheet, Animated, Easing, Platform, useWindowDimensions } from "react-native";
+import Reanimated, { cancelAnimation, Easing as FlipEasing, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, ReduceMotion } from "react-native-reanimated";
+import { Trans } from "react-i18next";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -108,10 +110,6 @@ export default function Debts() {
   const q = useQuery({ queryKey: ["debts"], queryFn: api.listDebts });
   const debts: any[] = q.data || [];
 
-  // ONE aggregate summary across all debts — real data only.
-  const summary = useMemo(() => buildStat(debts), [debts]);
-  const summaryPct = Math.round(summary.pct * 100);
-
   // --- One-time screen-entry progress animation (VISUAL ONLY) --------------
   // A single factor 0..1 that all progress indicators (main ring, card rings,
   // horizontal bars) multiply their REAL percentage by, so they sweep from 0
@@ -166,52 +164,8 @@ export default function Debts() {
   // Back-side data (presentation only) — derived from the SAME real debt data.
   const oweList = useMemo(() => debts.filter((d) => d.direction === "i_owe"), [debts]);
   const lentList = useMemo(() => debts.filter((d) => d.direction === "they_owe"), [debts]);
-  const oweTotal = useMemo(() => oweList.reduce((s, d) => s + d.remaining_amount, 0), [oweList]);
-  const lentTotal = useMemo(() => lentList.reduce((s, d) => s + d.remaining_amount, 0), [lentList]);
-
-  // Safe in-place flip: ONE container. A single Animated value drives scaleX
-  // (1 -> ~0.04 -> 1) plus a subtle scaleY / translateX / opacity for a premium
-  // "card turning" feel. Content is swapped ONLY at the edge-on midpoint (no
-  // flash, never two contents at once). Transforms never affect layout, and the
-  // card height is locked to the front's measured height so nothing below drifts.
-  const [showBack, setShowBack] = useState(false);
-  const [lockH, setLockH] = useState<number | null>(null);
-  const anim = useRef(new Animated.Value(1)).current; // 1 = flat, 0 = edge-on
-  const animating = useRef(false);
-  const onCardLayout = (e: any) => {
-    if (lockH == null && !showBack) {
-      const h = e?.nativeEvent?.layout?.height;
-      if (h && h > 0) setLockH(h);
-    }
-  };
-  const flipCard = () => {
-    if (animating.current) return; // reject taps while a flip is running
-    animating.current = true;
-    Animated.timing(anim, {
-      toValue: 0,
-      duration: 230,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: Platform.OS !== "web",
-    }).start(({ finished }) => {
-      if (!finished) {
-        animating.current = false;
-        return;
-      }
-      setShowBack((b) => !b); // swap while edge-on
-      Animated.timing(anim, {
-        toValue: 1,
-        duration: 230,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: Platform.OS !== "web",
-      }).start(() => {
-        animating.current = false;
-      });
-    });
-  };
-  const cardScaleX = anim.interpolate({ inputRange: [0, 1], outputRange: [0.04, 1] });
-  const cardScaleY = anim.interpolate({ inputRange: [0, 1], outputRange: [0.985, 1] });
-  const cardTranslateX = anim.interpolate({ inputRange: [0, 1], outputRange: [6, 0] });
-  const cardOpacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] });
+  const oweSummary = useMemo(() => buildStat(oweList), [oweList]);
+  const lentSummary = useMemo(() => buildStat(lentList), [lentList]);
 
   const filtered = useMemo(() => {
     if (tab === "all") return debts;
@@ -246,71 +200,9 @@ export default function Debts() {
           </Pressable>
         </View>
 
-        {/* Summary card — tap to flip. SINGLE container, scaleX flip, height
-            locked to the front's measured height so nothing below can drift.
-            Front is unchanged; back shows "A quién debo" / "Quién me debe". */}
-        <Pressable testID="debt-summary-flip" onPress={flipCard}>
-          <Animated.View
-            onLayout={onCardLayout}
-            style={[
-              styles.summaryCard,
-              lockH ? { height: lockH } : null,
-              { opacity: cardOpacity, transform: [{ translateX: cardTranslateX }, { scaleX: cardScaleX }, { scaleY: cardScaleY }] },
-            ]}
-          >
-            {showBack ? (
-              <>
-                <BackBlock
-                  icon="arrow-up"
-                  accent={P.red}
-                  title={tr("ui.i_owe")}
-                  total={formatCurrencyInt(oweTotal)}
-                  list={oweList}
-                  emptyText={tr("ui.no_debts")}
-                />
-                <View style={styles.summaryDivider} />
-                <BackBlock
-                  icon="arrow-down"
-                  accent={P.incomeGreen}
-                  title={tr("ui.owed_to_me")}
-                  total={formatCurrencyInt(lentTotal)}
-                  list={lentList}
-                  emptyText={tr("ui.nothing_owed_to_you")}
-                />
-              </>
-            ) : (
-              <>
-                <View style={styles.summaryLeft}>
-                  <ProgressRing size={us(116)} stroke={us(11)} progress={summary.pct * entryT} color={P.ring} trackColor={P.ringTrack}>
-                    <Text style={styles.sumPct}>{summaryPct}%</Text>
-                    <Text style={styles.sumPctSub}>{tr("ui.paid")}</Text>
-                  </ProgressRing>
-                  <Text style={styles.sumCaption}>
-                    <Text style={{ color: P.green, fontWeight: "800" }}>{formatCurrencyInt(summary.paid)}</Text>
-                    <Text style={{ color: P.muted }}> {tr("ui.of")}{formatCurrencyInt(summary.original)}</Text>
-                  </Text>
-                </View>
-
-                <View style={styles.summaryDivider} />
-
-                <View style={styles.summaryRight}>
-                  <MetricRow icon="people" tint={P.green} label={tr("ui.total_debt")} value={String(summary.count)} valueColor={P.text} last={false} />
-                  <View style={styles.metricDivider} />
-                  <MetricRow icon="document-text" tint={P.red} label={tr("ui.pending")} value={formatCurrencyInt(summary.remaining)} valueColor={P.red} last={false} />
-                  <View style={styles.metricDivider} />
-                  <MetricRow icon="server" tint={P.green} label={tr("ui.total")} value={formatCurrencyInt(summary.original)} valueColor={P.text} last={false} />
-                  <View style={styles.metricDivider} />
-                  <MetricRow icon="checkmark-circle" tint={P.incomeGreen} label={tr("ui.paid")} value={formatCurrencyInt(summary.paid)} valueColor={P.incomeGreen} last />
-                </View>
-              </>
-            )}
-
-            {/* Flip indicator — subtle swap icon, both faces, inside card bounds */}
-            <View pointerEvents="none" style={styles.flipHint}>
-              <Ionicons name="swap-horizontal" size={us(15)} color={P.muted} />
-            </View>
-          </Animated.View>
-        </Pressable>
+        <View style={styles.summarySpacing}>
+          <DebtSummaryCard front={oweSummary} back={lentSummary} entryT={entryT} />
+        </View>
 
         {/* Filters — fixed row (no horizontal scroll); 4 buttons evenly span
             the same width as the debt cards below */}
@@ -488,6 +380,7 @@ function MetricRow({
   value,
   valueColor,
   last,
+  scale,
 }: {
   icon: any;
   tint: string;
@@ -495,60 +388,127 @@ function MetricRow({
   value: string;
   valueColor: string;
   last: boolean;
+  scale: number;
 }) {
   const styles = useStyles();
   return (
-    <View style={[styles.metricRow, last && { paddingBottom: 0 }]}>
-      <View style={[styles.metricIcon, { backgroundColor: tint + "22" }]}>
-        <Ionicons name={icon} size={us(13)} color={tint} />
+    <View style={[styles.metricRow, { paddingVertical: us(7) * scale }, last && { paddingBottom: 0 }]}>
+      <View style={[styles.metricIcon, { width: us(26) * scale, height: us(26) * scale, backgroundColor: tint + "22" }]}>
+        <Ionicons name={icon} size={us(13) * scale} color={tint} />
       </View>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={[styles.metricValue, { color: valueColor }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+      <Text style={[styles.metricLabel, { fontSize: ufs(12.5) * scale, marginLeft: us(10) * scale }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={Math.min(0.85, 1 / scale)}>{label}</Text>
+      <Text style={[styles.metricValue, { color: valueColor, fontSize: ufs(15) * scale }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
     </View>
   );
 }
 
-// Back-face block — ONE template used identically for both "A quién debo" and
-// "Quién me debe" (same icon/title/total/row structure; only data + accent
-// differ). Max 2 rows fit safely inside the locked card height; extras show
-// "+ N más". Real debt data only.
-function BackBlock({
-  icon,
-  accent,
-  title,
-  total,
-  list,
-  emptyText,
-}: {
-  icon: any;
-  accent: string;
-  title: string;
-  total: string;
-  list: any[];
-  emptyText: string;
+// Both faces stay mounted. Only the UI-thread rotation changes during a flip.
+const DebtSummaryCard = React.memo(function DebtSummaryCard({ front, back, entryT }: {
+  front: Stat; back: Stat; entryT: number;
 }) {
   useInterfaceLanguage();
+  const styles = useStyles();
+  const progress = useSharedValue(0);
+  const reducedMotion = useReducedMotion();
+  const busy = useRef(false);
+  const showingBack = useRef(false);
+  const mounted = useRef(true);
+  const [showBack, setShowBack] = useState(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; cancelAnimation(progress); };
+  }, [progress]);
+
+  const finishFlip = useCallback((back: boolean) => {
+    if (!mounted.current) return;
+    showingBack.current = back;
+    busy.current = false;
+    setShowBack(back);
+  }, []);
+
+  const flipCard = useCallback(() => {
+    if (busy.current) return;
+    busy.current = true;
+    const nextBack = !showingBack.current;
+    if (reducedMotion) {
+      progress.set(nextBack ? 1 : 0);
+      finishFlip(nextBack);
+      return;
+    }
+    progress.set(withTiming(nextBack ? 1 : 0, {
+      duration: 440, easing: FlipEasing.inOut(FlipEasing.cubic), reduceMotion: ReduceMotion.System,
+    }, (finished) => {
+      if (finished) runOnJS(finishFlip)(nextBack);
+    }));
+  }, [progress, reducedMotion, finishFlip]);
+
+  const frontStyle = useAnimatedStyle(() => ({
+    transform: [{ perspective: 1000 }, { rotateY: `${progress.value * 180}deg` }],
+    // Android compositing can expose the reverse of a complex SVG face.
+    // These complementary gates change only at the edge-on midpoint, not a fade.
+    opacity: progress.value < 0.5 ? 1 : 0,
+  }));
+  const backStyle = useAnimatedStyle(() => ({
+    transform: [{ perspective: 1000 }, { rotateY: `${(progress.value - 1) * 180}deg` }],
+    opacity: progress.value >= 0.5 ? 1 : 0,
+  }));
+
+  return (
+    <Pressable testID="debt-summary-flip" onPress={flipCard} accessibilityRole="button"
+      accessibilityLabel={tr(showBack ? "debts.flipToDebts" : "debts.flipToReceivables")}>
+      <Reanimated.View testID="debt-summary-front" pointerEvents="none"
+        accessibilityElementsHidden={showBack} importantForAccessibility={showBack ? "no-hide-descendants" : "auto"}
+        style={[styles.summaryCard, styles.summaryFace, frontStyle]}>
+        <SummaryFace summary={front} back={false} entryT={entryT} />
+      </Reanimated.View>
+      <Reanimated.View testID="debt-summary-back" pointerEvents="none"
+        accessibilityElementsHidden={!showBack} importantForAccessibility={!showBack ? "no-hide-descendants" : "auto"}
+        style={[styles.summaryCard, styles.summaryFace, styles.summaryBack, backStyle]}>
+        <SummaryFace summary={back} back entryT={entryT} />
+      </Reanimated.View>
+    </Pressable>
+  );
+});
+
+function SummaryFace({ summary, back, entryT }: { summary: Stat; back: boolean; entryT: number }) {
   const { scheme } = useTheme();
   const P = palette(scheme);
   const styles = useStyles();
-  const rows = list.slice(0, 2);
-  const more = list.length - rows.length;
+  const { width } = useWindowDimensions();
+  // Keep the original two-column proportions on narrow windows; grow up to 20%.
+  const scale = Math.min(1.2, Math.max(1, (width - us(64) - 2) / us(300)));
+  const accent = back ? P.purple : P.green;
+  const paidLabel = tr(back ? "debts.collected" : "ui.paid");
   return (
-    <View style={styles.backBlock}>
-      <View style={[styles.backIcon, { backgroundColor: accent + "22" }]}>
-        <Ionicons name={icon} size={us(15)} color={accent} />
+    <>
+      <View style={[styles.summaryLeft, { width: us(132) * scale }]}>
+        <ProgressRing size={us(116) * scale} stroke={us(11) * scale} progress={summary.pct * entryT}
+          color={P.ring} trackColor={P.ringTrack}>
+          <Text style={[styles.sumPct, { fontSize: ufs(26) * scale }]} numberOfLines={1} adjustsFontSizeToFit>{Math.round(summary.pct * 100)}%</Text>
+          <Text style={[styles.sumPctSub, { fontSize: ufs(12) * scale }]}>{paidLabel}</Text>
+        </ProgressRing>
+        <Text style={[styles.sumCaption, { color: P.muted, fontSize: ufs(12.5) * scale, marginTop: us(12) * scale }]} numberOfLines={2} adjustsFontSizeToFit>
+          <Trans i18nKey="debts.summaryProgress"
+            values={{ paid: formatCurrencyInt(summary.paid), total: formatCurrencyInt(summary.original) }}
+            components={{ paid: <Text style={{ color: P.green, fontWeight: "800" }} /> }} />
+        </Text>
       </View>
-      <Text style={styles.backBlockTitle}>{title}</Text>
-      <Text style={[styles.backBlockTotal, { color: accent }]} numberOfLines={1} adjustsFontSizeToFit>{total}</Text>
-      {rows.map((d) => (
-        <View key={d.id} style={styles.backRow}>
-          <Text style={styles.backRowLabel}>{d.person || d.name}</Text>
-          <Text style={[styles.backRowValue, { color: P.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatCurrencyInt(d.remaining_amount)}</Text>
-        </View>
-      ))}
-      {more > 0 && <Text style={styles.backMore}>{tr("ui.more_items", { count: more })}</Text>}
-      {list.length === 0 && <Text style={styles.backEmpty}>{emptyText}</Text>}
-    </View>
+      <View style={[styles.summaryDivider, { marginHorizontal: us(12) * scale }]} />
+      <View style={styles.summaryRight}>
+        <MetricRow scale={scale} icon="people" tint={accent} label={tr(back ? "debts.peopleOweYou" : "ui.total_debt")} value={String(summary.count)} valueColor={P.text} last={false} />
+        <View style={styles.metricDivider} />
+        <MetricRow scale={scale} icon="document-text" tint={P.red} label={tr("ui.pending")} value={formatCurrencyInt(summary.remaining)} valueColor={P.red} last={false} />
+        <View style={styles.metricDivider} />
+        <MetricRow scale={scale} icon="server" tint={accent} label={tr("ui.total")} value={formatCurrencyInt(summary.original)} valueColor={P.text} last={false} />
+        <View style={styles.metricDivider} />
+        <MetricRow scale={scale} icon="checkmark-circle" tint={P.incomeGreen} label={paidLabel} value={formatCurrencyInt(summary.paid)} valueColor={P.incomeGreen} last />
+      </View>
+      <View pointerEvents="none" style={styles.flipHint}>
+        <Ionicons name="sync-outline" size={us(11)} color={P.muted} />
+        <Text style={styles.flipHintText}>{tr("debts.tapToFlip")}</Text>
+      </View>
+    </>
   );
 }
 
@@ -586,7 +546,8 @@ const useStyles = makeStyles((_c, scheme) => {
       ...shadow,
     },
 
-    /* summary */
+    /* Extra exterior space preserves internal sizes and recovers part of the header gap. */
+    summarySpacing: { marginTop: -9 },
     summaryCard: {
       flexDirection: "row",
       alignItems: "center",
@@ -594,6 +555,8 @@ const useStyles = makeStyles((_c, scheme) => {
       backgroundColor: P.card,
       borderRadius: radius.cardLg,
       padding: spacing.lg,
+      paddingVertical: 30,
+      minHeight: 250,
       borderWidth: 1,
       borderColor: P.border,
       ...shadow,
@@ -616,17 +579,11 @@ const useStyles = makeStyles((_c, scheme) => {
     metricValue: { fontSize: 15, fontWeight: "800", letterSpacing: -0.3 },
     metricDivider: { height: 1, backgroundColor: P.divider, opacity: 0.7 },
 
-    /* summary back face (flip) — ONE template reused for both blocks */
-    backBlock: { flex: 1, alignSelf: "stretch" },
-    backIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 8 },
-    backBlockTitle: { fontSize: 12.5, fontWeight: "700", color: P.muted, marginBottom: 4 },
-    backBlockTotal: { fontSize: 19, fontWeight: "800", letterSpacing: -0.4, marginBottom: 10 },
-    backRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingVertical: 3.5 },
-    backRowLabel: { flex: 1, fontSize: 11.5, color: P.muted },
-    backRowValue: { fontSize: 12, fontWeight: "700", letterSpacing: -0.2 },
-    backMore: { fontSize: 11, color: P.muted, fontWeight: "600", marginTop: 5 },
-    backEmpty: { fontSize: 12, color: P.muted, marginTop: 2 },
-    flipHint: { position: "absolute", top: 8, right: 8 },
+    /* Matched face bounds: the front owns layout, the back overlays it. */
+    summaryFace: { backfaceVisibility: "hidden" },
+    summaryBack: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+    flipHint: { position: "absolute", bottom: 2, right: 16, flexDirection: "row", alignItems: "center", gap: 3 },
+    flipHintText: { fontSize: 9, lineHeight: 12, color: P.muted },
 
     /* filters */
     filterRow: { flexDirection: "row", paddingHorizontal: spacing.lg, gap: 8, paddingVertical: spacing.sm },

@@ -1,10 +1,11 @@
 import { tr, useTranslation as useInterfaceLanguage, useTranslation } from "@/src/i18n";
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Tabs, useRouter } from "expo-router";
+import { Tabs, useRouter, usePathname, useFocusEffect } from "expo-router";
 import { View, BackHandler } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Animated, {
+  cancelAnimation,
   useSharedValue,
   runOnJS,
   type SharedValue,
@@ -33,13 +34,13 @@ const FAN_MAX = us(160);
 const FAN_MARGIN = us(45);
 const ACTION_SLOP = touchSlop(us(52)); // keeps each quick action >= 44
 // Bottom-bar tab definitions (icons keep the app's existing solid Ionicons
-// language). Order is fixed: Cuentas · IA · (centro) · Informes · Más.
+// language). Order is fixed: Accounts · AI · (center) · Reports · Tools.
 // `labelKey` points at the i18n key; the visible label is translated at render.
 const TAB_CONFIG: Record<string, { labelKey: string; icon: string }> = {
   index: { labelKey: "tabs.accounts", icon: "home" },
   transactions: { labelKey: "tabs.ai", icon: "mic" },
   reports: { labelKey: "tabs.reports", icon: "stats-chart" },
-  notes: { labelKey: "tabs.notes", icon: "document-text" },
+  more: { labelKey: "ui.tools", icon: "grid" },
 };
 
 // Custom bottom navigation bar. Keeps every existing route/action; only the
@@ -90,6 +91,7 @@ function TabButton({
     <Pressable
       testID={`tab-${routeName}`}
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={isFocused ? { selected: true } : {}}
       onPress={onPress}
       onLayout={onLayout}
@@ -107,7 +109,7 @@ function TabButton({
   );
 }
 
-function CustomTabBar({ state, navigation, centerSlot, barRef, measureCenter }: any) {
+function CustomTabBar({ state, navigation, centerSlot, barRef, measureCenter, dismissMenu }: any) {
   const { colors, scheme } = useTheme();
   const { t } = useTranslation();
   const styles = useStyles();
@@ -134,7 +136,7 @@ function CustomTabBar({ state, navigation, centerSlot, barRef, measureCenter }: 
   const moveIndicator = useCallback(
     (animated: boolean) => {
       const cx = centers.current[activeName];
-      // No dot for routes without a bottom-bar button (e.g. "more").
+      // No dot for routes without a bottom-bar button (e.g. "notes").
       if (cx == null || !TAB_CONFIG[activeName]) {
         indicatorOpacity.value = withTiming(0, { duration: 140 });
         return;
@@ -191,11 +193,12 @@ function CustomTabBar({ state, navigation, centerSlot, barRef, measureCenter }: 
         }
 
         const cfg = TAB_CONFIG[route.name];
-        // `more` is intentionally NOT in TAB_CONFIG: it stays a registered
+        // `notes` stays registered for the quick action but is not in TAB_CONFIG:
         // route but is hidden from the bottom bar (returns null → no button).
         if (!cfg) return null;
 
         const onPress = () => {
+          dismissMenu();
           // Single, strong yet DRY impact (existing haptic — not duplicated).
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid).catch(() => {});
           const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
@@ -289,11 +292,14 @@ const RadialAction = React.memo(function RadialAction({
   );
 });
 
-function QuickMenu({ geometry }: { geometry: CenterGeometry | null }) {
+type QuickMenuHandle = { close: () => void };
+
+const QuickMenu = React.forwardRef<QuickMenuHandle, { geometry: CenterGeometry | null }>(function QuickMenu({ geometry }, ref) {
   const { colors, scheme } = useTheme();
   const { t } = useTranslation();
   const styles = useStyles();
   const router = useRouter();
+  const pathname = usePathname();
   const progress = useSharedValue(0);
   const [active, setActive] = useState(false);
   const [actionsEnabled, setActionsEnabled] = useState(false);
@@ -305,8 +311,8 @@ function QuickMenu({ geometry }: { geometry: CenterGeometry | null }) {
 
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
-  }, []);
+    return () => { mounted.current = false; cancelAnimation(progress); };
+  }, [progress]);
 
   const finishTransition = useCallback((id: number, open: boolean) => {
     if (!mounted.current || id !== transition.current) return;
@@ -335,8 +341,15 @@ function QuickMenu({ geometry }: { geometry: CenterGeometry | null }) {
   }, [progress, finishTransition]);
 
   const close = useCallback(() => {
+    pendingRoute.current = null;
     if (targetOpen.current) animateTo(false);
   }, [animateTo]);
+
+  React.useImperativeHandle(ref, () => ({ close }), [close]);
+
+  // Navigation and focus loss dismiss the fan without opening it on return.
+  useEffect(() => { close(); }, [pathname, close]);
+  useFocusEffect(useCallback(() => () => close(), [close]));
 
   const toggle = useCallback(() => {
     if (!geometry || pendingRoute.current) return;
@@ -372,16 +385,23 @@ function QuickMenu({ geometry }: { geometry: CenterGeometry | null }) {
     { icon: "trending-up", label: t("quickAdd.income"), color: colors.incomeGreen, route: "/transactions/new?type=income" },
     { icon: "swap-horizontal", label: t("quickAdd.transfer"), color: colors.accountsBlue, route: "/transactions/new?type=transfer" },
     { icon: "card", label: t("quickAdd.createDebt"), color: colors.statsPurple, route: "/debts/new?direction=i_owe" },
-    { icon: "cash", label: t("quickAdd.registerLoan"), color: colors.loansYellow, route: "/debts/new?direction=they_owe" },
+    { icon: "document-text", label: t("tabs.notes"), color: colors.loansYellow, route: "/(tabs)/notes" },
   ];
 
   return (
     <View style={styles.overlay} pointerEvents="box-none">
+      {/* Capture outside touches above the entire tab screen, including the bar.
+          Keep this shield until contraction finishes; fan actions remain above it.
+          The separate visual backdrop keeps its original height and opacity. */}
+      <Pressable testID="fab-dismiss-overlay" style={styles.backdropPress}
+        pointerEvents={active ? "auto" : "none"}
+        accessible={active} accessibilityRole="button" accessibilityLabel={t("common.close")}
+        accessibilityElementsHidden={!active}
+        importantForAccessibility={active ? "auto" : "no-hide-descendants"}
+        onPress={() => { if (targetOpen.current) close(); }} />
       <Animated.View style={[styles.backdrop, { height: geometry?.barTop ?? 0 }, backdropStyle]}
-        pointerEvents={active ? "auto" : "none"} accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants">
-        <Pressable style={styles.backdropPress} onPress={close} />
-      </Animated.View>
+        pointerEvents="none" accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants" />
       {items.map((item, index) => (
         <RadialAction key={item.route} item={item} index={index} progress={progress}
           geometry={geometry} enabled={actionsEnabled} onSelect={select} />
@@ -412,11 +432,12 @@ function QuickMenu({ geometry }: { geometry: CenterGeometry | null }) {
       </Animated.View>
     </View>
   );
-}
+});
 
 export default function TabsLayout() {
   useInterfaceLanguage();
   const { colors } = useTheme();
+  const quickMenu = useRef<QuickMenuHandle>(null);
   const rootRef = useRef<View>(null);
   const centerSlot = useRef<View>(null);
   const barRef = useRef<View>(null);
@@ -437,21 +458,23 @@ export default function TabsLayout() {
     });
   }, []);
 
+  const dismissMenu = useCallback(() => quickMenu.current?.close(), []);
+
   const renderTabBar = useCallback((props: React.ComponentProps<typeof CustomTabBar>) => (
-    <CustomTabBar {...props} centerSlot={centerSlot} barRef={barRef} measureCenter={measureCenter} />
-  ), [measureCenter]);
+    <CustomTabBar {...props} centerSlot={centerSlot} barRef={barRef} measureCenter={measureCenter} dismissMenu={dismissMenu} />
+  ), [measureCenter, dismissMenu]);
 
   return (
-    <View ref={rootRef} collapsable={false} onLayout={measureCenter} style={{ flex: 1, backgroundColor: colors.surface }}>
+    <View ref={rootRef} collapsable={false} onLayout={measureCenter} style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <Tabs tabBar={renderTabBar} screenOptions={{ headerShown: false, animation: "none" }}>
         <Tabs.Screen name="index" options={{ get title() { return tr("ui.accounts"); } }} />
         <Tabs.Screen name="transactions" options={{ get title() { return tr("ui.ai"); } }} />
         <Tabs.Screen name="fab" options={{ title: "" }} />
         <Tabs.Screen name="reports" options={{ get title() { return tr("ui.reports"); } }} />
         <Tabs.Screen name="notes" options={{ get title() { return tr("ui.notes"); }, lazy: false }} />
-        <Tabs.Screen name="more" options={{ get title() { return tr("ui.more"); } }} />
+        <Tabs.Screen name="more" options={{ get title() { return tr("ui.tools"); } }} />
       </Tabs>
-      <QuickMenu geometry={geometry} />
+      <QuickMenu ref={quickMenu} geometry={geometry} />
     </View>
   );
 }
@@ -507,7 +530,7 @@ const useStyles = makeStyles((colors, scheme) => ({
   // A stable full-screen parent permits elevated Android hit testing.
   overlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, elevation: 10 },
   backdrop: { position: "absolute", top: 0, left: 0, right: 0, backgroundColor: "#000" },
-  backdropPress: { flex: 1 },
+  backdropPress: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   centerAnchor: { position: "absolute", width: 52, height: 52, zIndex: 2 },
   centerVisual: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" },
   actionAnchor: { position: "absolute", width: 52, height: 52, zIndex: 1 },

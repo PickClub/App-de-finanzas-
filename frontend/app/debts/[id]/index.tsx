@@ -1,3 +1,4 @@
+import { DebtActions } from "@/src/components/debt-actions";
 import { localizedError } from "@/src/i18n/errors";
 import i18n, { tr, useTranslation as useInterfaceLanguage, localeTag } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
@@ -67,6 +68,7 @@ export default function DebtDetail() {
   const processing = useRef(false);
   const deleted = useRef(false);
   const [busy, setBusy] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
   const debtQ = useQuery({ queryKey: ["debt", params.id], queryFn: () => api.getDebt(params.id as string), enabled: !!params.id });
   const paysQ = useQuery({ queryKey: ["debt-payments", params.id], queryFn: () => api.listDebtPayments(params.id as string), enabled: !!params.id });
   const missing = debtQ.error instanceof ApiError && debtQ.error.status === 404;
@@ -126,18 +128,6 @@ export default function DebtDetail() {
       { text: tr("ui.cancel_payment"), style: "destructive", onPress: () => { void executeDeletion(paymentId); } },
     ]);
   };
-  const remove = () => {
-    if (processing.current) return;
-    Alert.alert(tr("ui.delete_debt"), tr("ui.are_you_sure"), [
-      { text: tr("ui.cancel"), style: "cancel" },
-      {
-        text: tr("ui.delete"),
-        style: "destructive",
-        onPress: () => { void executeDeletion(); },
-      },
-    ]);
-  };
-
   const isPaid = d.status === "paid";
   const pct = Math.round(progress * 100);
   const shadow = pal.dark ? null : styles.softShadow;
@@ -158,14 +148,15 @@ export default function DebtDetail() {
   ];
 
   return (
+    <>
     <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} style={{ flex: 1, backgroundColor: pal.bg }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
       <View style={styles.headerRow}>
         <Pressable onPress={() => router.back()} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
           <Ionicons name="chevron-back" size={us(24)} color={pal.forest} />
         </Pressable>
         <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest }]} numberOfLines={1}>{d.name}</Text>
-        <Pressable onPress={remove} disabled={busy} accessibilityState={{ disabled: busy, busy }} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
-          <Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} />
+        <Pressable testID="debt-detail-options" accessibilityRole="button" accessibilityLabel={tr("ui.more_options")} onPress={() => setShowOptions(true)} disabled={busy} accessibilityState={{ disabled: busy, busy }} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
+          <Ionicons name="ellipsis-horizontal" size={us(22)} color={pal.forest} />
         </Pressable>
       </View>
 
@@ -241,7 +232,7 @@ export default function DebtDetail() {
         }}
         disabled={busy || d.status === "paid"}
         accessibilityState={{ disabled: busy || d.status === "paid", busy }}
-        style={[styles.payBtn, { backgroundColor: pal.forest }, shadow, d.status === "paid" && { opacity: 0.5 }]}
+        style={[styles.payBtn, { backgroundColor: scheme === "dark" ? pal.forest : colors.primaryAction }, shadow, d.status === "paid" && { opacity: 0.5 }]}
       >
         <Ionicons name="add-circle-outline" size={us(26)} color={pal.dark ? colors.onSuccess : "#fff"} />
         <Text style={[styles.payText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{tr("ui.record_payment")}</Text>
@@ -287,6 +278,13 @@ export default function DebtDetail() {
         </View>
       )}
     </ElasticScrollView>
+    {showOptions && <DebtActions key={d.id} debt={d} onClose={() => setShowOptions(false)} onDeleted={() => {
+      deleted.current = true;
+      processing.current = true;
+      setShowOptions(false);
+      router.dismissTo("/debts");
+    }} />}
+    </>
   );
 }
 

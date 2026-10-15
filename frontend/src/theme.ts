@@ -21,6 +21,11 @@ export type ColorScheme = "light" | "dark";
 export type ThemeMode = "light" | "dark" | "system";
 
 const light = {
+  // Existing Home identity, separate from card surfaces and financial colors.
+  pageBackground: "#E8EFE7",
+  primaryAction: "#146448",
+  identityAccent: "#126046",
+  secondaryActionBackground: "#DFEBDD",
   // Surfaces
   surface: "#FFF8F2",
   onSurface: "#27221F",
@@ -67,6 +72,11 @@ const light = {
 };
 
 const dark: typeof light = {
+  // Preserve Home's current dark-mode values and contrast.
+  pageBackground: "#141210",
+  primaryAction: "#FF7A63",
+  identityAccent: "#FF7A63",
+  secondaryActionBackground: "#FF7A6314",
   // Surfaces — warm near-black background, slightly lighter cards
   surface: "#141210",
   onSurface: "#F5F1EC",

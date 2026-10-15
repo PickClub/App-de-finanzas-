@@ -561,7 +561,7 @@ export default function FinancialCalendar() {
   const monthEmpty = !evQ.isLoading && !evQ.isPlaceholderData && !evQ.isError && events.length === 0;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+    <View style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}
         showsVerticalScrollIndicator={false}

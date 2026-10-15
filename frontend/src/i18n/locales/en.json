@@ -259,7 +259,21 @@
     "empty": "You don't have any debts or loans yet",
     "noPayments": "No payments yet",
     "paidFull": "Paid",
-    "active": "Active"
+    "active": "Active",
+    "peopleOweYou": "People owe you",
+    "collected": "Collected",
+    "tapToFlip": "Tap to flip",
+    "summaryProgress": "<paid>{{paid}}</paid> of {{total}}",
+    "flipToDebts": "Flip card to view debts you owe",
+    "flipToReceivables": "Flip card to view money owed to you",
+    "editDebt": "Edit debt",
+    "editConflict": "This debt changed while you were editing. Reopen it to load its current details.",
+    "editLoadFailed": "Could not load this debt and its payment history. Try again.",
+    "paymentProtected": "The original amount is locked because this debt has recorded payments. Its direction and linked account are preserved.",
+    "deleteConfirmation": "Delete “{{name}}”? This cannot be undone.",
+    "deleteLinked": "This debt cannot be deleted while it has linked payments or transactions. Its history has not been changed.",
+    "deleteRefreshFailed": "The debt was deleted, but some totals could not refresh. Reopen the list to retry.",
+    "deleteCompleted": "The debt was deleted."
   },
   "reports": {
     "title": "Reports",
@@ -1180,6 +1194,22 @@
       "goals": "Goals",
       "reminder": "Reminder",
       "travel": "Travel"
+    },
+    "limits": {
+      "heading": "Note limit reached",
+      "title": "Keep the title within 80 characters. Existing longer titles may be corrected without making them longer.",
+      "content": "Keep the note within 5,000 characters. Existing longer notes may be corrected without making them longer.",
+      "items": "Use up to 50 list items. Existing longer lists may be edited without adding more items.",
+      "item": "Keep each item within 200 characters. Existing longer items may be corrected without making them longer."
+    },
+    "preview": {
+      "deleteMessage": "This note will be permanently deleted.",
+      "checkSaveFailed": "The checklist was not saved. Its last saved state is unchanged. Please try again."
+    },
+    "editor": {
+      "discardTitle": "Discard changes?",
+      "discardMessage": "Your changes have not been saved.",
+      "discardAction": "Discard"
     }
   },
   "navigation": {},

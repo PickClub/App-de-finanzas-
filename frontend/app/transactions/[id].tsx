@@ -475,7 +475,7 @@ export default function TransactionDetail() {
           testID="save-category"
           onPress={saveCategory}
           disabled={!pickedCat}
-          style={[styles.saveBtn, { backgroundColor: colors.brandPrimary, opacity: pickedCat ? 1 : 0.5 }]}
+          style={[styles.saveBtn, { backgroundColor: colors.primaryAction, opacity: pickedCat ? 1 : 0.5 }]}
         >
           <Text style={styles.saveText}>{tr("ui.save")}</Text>
         </Pressable>
@@ -639,7 +639,7 @@ function InfoRow({
 }
 
 const useStyles = makeStyles((colors) => ({
-  screen: { flex: 1, backgroundColor: colors.surface },
+  screen: { flex: 1, backgroundColor: colors.pageBackground },
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, gap: 12 },
   circleBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
   headerTitle: { flex: 1, fontSize: 17, fontWeight: "800", color: colors.onSurface },

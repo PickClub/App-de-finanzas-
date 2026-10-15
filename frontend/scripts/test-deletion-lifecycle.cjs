@@ -107,7 +107,7 @@ async function main() {
     const context = { noteDeleting, confirmedNotes: { current: [{ id: 'n' }] }, deletedNotes: { current: new Set() }, notes: [{ id: 'n' }], STORAGE_KEY: 'synthetic',
       storage: { setItem: () => { writes++; return new Promise(r => finish = r); } },
       Alert: { alert: (...args) => alerts.push(args) } };
-    for (const key of ['DeleteBusy', 'Notes', 'EditorOpen', 'Editing', 'MenuNote', 'ConfirmDelete']) context['set' + key] = v => states[key] = v;
+    for (const key of ['DeleteBusy', 'Notes', 'EditorOpen', 'Editing', 'MenuNote', 'PreviewNote', 'ConfirmDelete']) context['set' + key] = v => states[key] = v;
     const code = ts.transpileModule(`const handler = ${handler};`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
     vm.runInNewContext(code + '\nglobalThis.run = handler;', localeGlobals(context));
     const pending = context.run('n'); await context.run('n'); assert.equal(writes, 1);

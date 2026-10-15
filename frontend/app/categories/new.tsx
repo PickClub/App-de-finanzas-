@@ -109,7 +109,7 @@ export default function CategoryForm() {
   if (params.id && (!resourceLoaded || deletion.deleted.current)) return <View />;
 
   return (
-    <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} pointerEvents={deletion.busy || saving ? "none" : "auto"} style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
+    <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} pointerEvents={deletion.busy || saving ? "none" : "auto"} style={{ flex: 1, backgroundColor: colors.pageBackground }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
@@ -124,7 +124,7 @@ export default function CategoryForm() {
       <Text style={styles.label}>{tr("ui.type")}</Text>
       <View style={{ flexDirection: "row", gap: us(10) }}>
         {(["expense", "income"] as const).map((t) => (
-          <Pressable key={t} onPress={() => { setType(t); setParentId(null); }} style={[styles.typeBtn, type === t && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
+          <Pressable key={t} onPress={() => { setType(t); setParentId(null); }} style={[styles.typeBtn, type === t && { backgroundColor: colors.identityAccent, borderColor: colors.identityAccent }]}>
             <Text style={{ color: type === t ? "#fff" : colors.onSurface, fontWeight: "700" }}>{t === "expense" ? tr("ui.expense") : tr("ui.income")}</Text>
           </Pressable>
         ))}
@@ -132,10 +132,10 @@ export default function CategoryForm() {
 
       <Text style={styles.label}>{tr("ui.kind")}</Text>
       <View style={{ flexDirection: "row", gap: us(10) }}>
-        <Pressable testID="kind-group" onPress={() => { setIsGroup(true); setParentId(null); }} style={[styles.typeBtn, isGroup && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
+        <Pressable testID="kind-group" onPress={() => { setIsGroup(true); setParentId(null); }} style={[styles.typeBtn, isGroup && { backgroundColor: colors.identityAccent, borderColor: colors.identityAccent }]}>
           <Text style={{ color: isGroup ? "#fff" : colors.onSurface, fontWeight: "700" }}>{tr("ui.main")}</Text>
         </Pressable>
-        <Pressable testID="kind-sub" onPress={() => setIsGroup(false)} style={[styles.typeBtn, !isGroup && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
+        <Pressable testID="kind-sub" onPress={() => setIsGroup(false)} style={[styles.typeBtn, !isGroup && { backgroundColor: colors.identityAccent, borderColor: colors.identityAccent }]}>
           <Text style={{ color: !isGroup ? "#fff" : colors.onSurface, fontWeight: "700" }}>{tr("ui.subcategory")}</Text>
         </Pressable>
       </View>
@@ -185,6 +185,6 @@ const useStyles = makeStyles((colors) => ({
   typeBtn: { flex: 1, padding: 12, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, alignItems: "center", borderWidth: 1, borderColor: colors.border },
   iconOpt: { padding: 4, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSecondary },
   chip: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSecondary },
-  saveBtn: { marginTop: 28, backgroundColor: colors.brandPrimary, padding: 16, borderRadius: radius.pill, alignItems: "center" },
+  saveBtn: { marginTop: 28, backgroundColor: colors.primaryAction, padding: 16, borderRadius: radius.pill, alignItems: "center" },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 16 },
 }));

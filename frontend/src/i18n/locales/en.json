@@ -91,7 +91,16 @@
     "restoreSampleData": "Restore sample data",
     "spanish": "Español",
     "english": "English (United States)",
-    "chooseLanguage": "Language"
+    "chooseLanguage": "Language",
+    "profileTitle": "Profile",
+    "personalInformation": "Personal information",
+    "preferences": "Preferences",
+    "dataStorage": "Data & storage",
+    "email": "Email",
+    "editName": "Edit name",
+    "restoreConfirmation": "Restore sample data? This may replace existing information. This action requires server approval.",
+    "loadError": "Unable to load your profile.",
+    "retry": "Try again"
   },
   "more": {
     "title": "More",

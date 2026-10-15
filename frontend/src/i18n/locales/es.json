@@ -91,7 +91,16 @@
     "restoreSampleData": "Restaurar datos de ejemplo",
     "spanish": "Español",
     "english": "English (United States)",
-    "chooseLanguage": "Idioma"
+    "chooseLanguage": "Idioma",
+    "profileTitle": "Perfil",
+    "personalInformation": "Información personal",
+    "preferences": "Preferencias",
+    "dataStorage": "Datos y almacenamiento",
+    "email": "Correo electrónico",
+    "editName": "Editar nombre",
+    "restoreConfirmation": "¿Restaurar los datos de ejemplo? Podría reemplazar información existente. Esta acción requiere aprobación del servidor.",
+    "loadError": "No se pudo cargar tu perfil.",
+    "retry": "Reintentar"
   },
   "more": {
     "title": "Más",

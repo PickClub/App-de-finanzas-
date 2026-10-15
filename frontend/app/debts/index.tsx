@@ -241,7 +241,7 @@ export default function Debts() {
                 {/* top row */}
                 <View style={styles.cardTop}>
                   <IconTile icon={d.icon} tint={accent} size={us(44)} />
-                  <View style={{ flex: 1, marginLeft: us(12) }}>
+                  <View style={{ flex: 1, minWidth: 0, marginLeft: us(12) }}>
                     <Text style={styles.debtName}>{d.name}</Text>
                     <View style={styles.subRow}>
                       <View style={[styles.statusPill, { backgroundColor: statusColor + "22" }]}>
@@ -264,32 +264,34 @@ export default function Debts() {
                 <View style={styles.amountsRow}>
                   <View style={styles.amountCol}>
                     <View style={styles.amountHead}>
-                      <View style={[styles.amountIcon, { backgroundColor: P.red + "1F" }]}>
+                      <View style={styles.amountIcon}>
                         <Ionicons name="document-text" size={us(11)} color={P.red} />
                       </View>
-                      <Text style={styles.amountLabel}>{tr("ui.pending")}</Text>
+                      <Text style={styles.amountLabel} numberOfLines={1} adjustsFontSizeToFit>{tr("ui.pending")}</Text>
                     </View>
                     <Text style={[styles.amountValue, { color: P.text }]} numberOfLines={1} adjustsFontSizeToFit>
                       {formatCurrencyInt(d.remaining_amount)}
                     </Text>
                   </View>
+                  <View pointerEvents="none" style={styles.amountSeparator} />
                   <View style={styles.amountCol}>
                     <View style={styles.amountHead}>
-                      <View style={[styles.amountIcon, { backgroundColor: accent + "1F" }]}>
+                      <View style={styles.amountIcon}>
                         <Ionicons name="checkmark-circle" size={us(12)} color={accent} />
                       </View>
-                      <Text style={styles.amountLabel}>{tr("ui.paid")}</Text>
+                      <Text style={styles.amountLabel} numberOfLines={1} adjustsFontSizeToFit>{tr("ui.paid")}</Text>
                     </View>
                     <Text style={[styles.amountValue, { color: P.text }]} numberOfLines={1} adjustsFontSizeToFit>
                       {formatCurrencyInt(d.total_paid)}
                     </Text>
                   </View>
+                  <View pointerEvents="none" style={styles.amountSeparator} />
                   <View style={styles.amountCol}>
                     <View style={styles.amountHead}>
-                      <View style={[styles.amountIcon, { backgroundColor: P.green + "1F" }]}>
+                      <View style={styles.amountIcon}>
                         <Ionicons name="stats-chart" size={us(11)} color={P.green} />
                       </View>
-                      <Text style={styles.amountLabel}>{tr("ui.total")}</Text>
+                      <Text style={styles.amountLabel} numberOfLines={1} adjustsFontSizeToFit>{tr("ui.total")}</Text>
                     </View>
                     <Text style={[styles.amountValue, { color: P.text }]} numberOfLines={1} adjustsFontSizeToFit>
                       {formatCurrencyInt(d.original_amount)}
@@ -628,11 +630,12 @@ const useStyles = makeStyles((_c, scheme) => {
     ringPctSmall: { fontSize: 12.5, fontWeight: "800", letterSpacing: -0.3 },
 
     amountsRow: { flexDirection: "row", marginTop: 11 },
-    amountCol: { flex: 1 },
-    amountHead: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 4 },
-    amountIcon: { width: 18, height: 18, borderRadius: 6, alignItems: "center", justifyContent: "center" },
-    amountLabel: { fontSize: 11.5, color: P.muted, fontWeight: "500" },
-    amountValue: { fontSize: 15.5, fontWeight: "800", letterSpacing: -0.3 },
+    amountCol: { flex: 1, flexBasis: 0, minWidth: 0, paddingHorizontal: 8 },
+    amountHead: { flexDirection: "row", alignItems: "center", height: 20, gap: 5, marginBottom: 4 },
+    amountIcon: { width: 18, height: 18, flexShrink: 0, alignItems: "center", justifyContent: "center" },
+    amountLabel: { flexShrink: 1, minWidth: 0, fontSize: 11.5, lineHeight: 16, includeFontPadding: false, color: P.muted, fontWeight: "500" },
+    amountValue: { width: "100%", height: 20, lineHeight: 20, includeFontPadding: false, textAlignVertical: "center", fontSize: 15.5, fontWeight: "800", letterSpacing: -0.3 },
+    amountSeparator: { width: 1, alignSelf: "stretch", marginHorizontal: 2, marginVertical: 2, backgroundColor: P.divider, opacity: 0.7 },
 
     trackRow: { flexDirection: "row", alignItems: "center", marginTop: 11, gap: 10 },
     track: { flex: 1, height: 8, borderRadius: 4, overflow: "hidden" },

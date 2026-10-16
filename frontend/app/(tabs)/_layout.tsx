@@ -466,7 +466,23 @@ export default function TabsLayout() {
 
   return (
     <View ref={rootRef} collapsable={false} onLayout={measureCenter} style={{ flex: 1, backgroundColor: colors.pageBackground }}>
-      <Tabs tabBar={renderTabBar} screenOptions={{ headerShown: false, animation: "none" }}>
+      <Tabs
+        UNSTABLE_router={(original) => ({
+          getStateForAction(state, action, options) {
+            const next = original.getStateForAction(state, action, options);
+            // Notes is a hidden tab: keep its actual origin without changing other tab history.
+            if (next && next.index !== undefined && ["NAVIGATE", "NAVIGATE_DEPRECATED", "JUMP_TO"].includes(action.type)
+              && next.routes[next.index].name === "notes") {
+              if (state.routes[state.index].name === "notes") return { ...next, history: state.history };
+              const notesKey = next.routes[next.index].key;
+              if (!notesKey) return next;
+              return { ...next, history: [...state.history.filter((entry) => entry.key !== notesKey), { type: "route", key: notesKey }] };
+            }
+            return next;
+          },
+        })}
+        tabBar={renderTabBar} screenOptions={{ headerShown: false, animation: "none" }}
+      >
         <Tabs.Screen name="index" options={{ get title() { return tr("ui.accounts"); } }} />
         <Tabs.Screen name="transactions" options={{ get title() { return tr("ui.ai"); } }} />
         <Tabs.Screen name="fab" options={{ title: "" }} />

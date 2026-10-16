@@ -186,6 +186,8 @@
     }
   },
   "transactions": {
+    "selectAccount": "Select account",
+    "selectCategory": "Select category",
     "title": "Transactions",
     "recent": "Recent transactions",
     "newTransaction": "New transaction",

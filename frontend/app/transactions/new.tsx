@@ -29,17 +29,6 @@ const TYPE_ICON: Record<string, string> = {
   transfer: "swap-horizontal",
 };
 
-// Toggle a text color locally: Android nested text does not reliably animate
-// native opacity. Only this tiny child renders on each blink, never the form.
-function AmountCursor({ color }: { color: string }) {
-  const [visible, setVisible] = useState(true);
-  useEffect(() => {
-    const timer = setInterval(() => setVisible(value => !value), 500);
-    return () => clearInterval(timer);
-  }, []);
-  return <Text testID="amount-cursor" style={{ color: visible ? color : "transparent" }} accessible={false}>│</Text>;
-}
-
 // Same light-mode identity values used by Home (app/(tabs)/index.tsx HOME_LIGHT
 // + its sage background / mint badge / forest green). Local to this screen only;
 // dark mode keeps the global dark theme exactly like Home does.
@@ -120,7 +109,6 @@ export default function NewTransaction() {
 
   const [type, setType] = useState<string>(params.type || "expense");
   const [amount, setAmount] = useState("");
-  const [hasEnteredNumber, setHasEnteredNumber] = useState(false);
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState<string | undefined>();
   const [accountId, setAccountId] = useState<string | undefined>();
@@ -259,7 +247,7 @@ export default function NewTransaction() {
   };
 
   const pressKey = (k: string, kind: "op" | "num" | "eq") => {
-    if (kind === "num") { setHasEnteredNumber(true); pressDigit(k); }
+    if (kind === "num") pressDigit(k);
     else if (kind === "op") pressOp(k as Op);
     else pressEquals();
   };
@@ -363,6 +351,7 @@ export default function NewTransaction() {
     icon?: string;
     tint?: string;
     value?: string;
+    placeholder: string;
     onPress: () => void;
   }) => (
     <Pressable
@@ -380,7 +369,7 @@ export default function NewTransaction() {
           </View>
         )}
         <Text style={[styles.selectName, !opts.value && { color: pal.muted }]} numberOfLines={1}>
-          {opts.value || "Seleccionar"}
+          {opts.value || opts.placeholder}
         </Text>
         <Ionicons name="chevron-forward" size={us(16)} color={pal.onSurface} />
       </View>
@@ -442,6 +431,7 @@ export default function NewTransaction() {
         <View style={styles.selectGrid}>
           {renderSelectCard({
             testID: "pick-account",
+            placeholder: tr("transactions.selectAccount"),
             label: type === "transfer" ? tr("ui.from_account") : tr("ui.account"),
             icon: selAcc?.icon,
             tint: selAcc?.color,
@@ -451,6 +441,7 @@ export default function NewTransaction() {
           {type === "transfer"
             ? renderSelectCard({
                 testID: "pick-to-account",
+                placeholder: tr("transactions.selectAccount"),
                 get label() { return tr("ui.to_account"); },
                 icon: selToAcc?.icon,
                 tint: selToAcc?.color,
@@ -459,6 +450,7 @@ export default function NewTransaction() {
               })
             : renderSelectCard({
                 testID: "pick-category",
+                placeholder: tr("transactions.selectCategory"),
                 get label() { return tr("ui.category"); },
                 icon: selCat?.icon,
                 tint: selCat?.color,
@@ -496,7 +488,6 @@ export default function NewTransaction() {
               adjustsFontSizeToFit
             >
               {display}
-              {!sourceId && !hasEnteredNumber && ["income", "expense", "transfer"].includes(type) && !saving && !deletion.busy && <AmountCursor color={pal.forest} />}
             </Text>
             {hint ? (
               <Text testID="amount-hint" style={[styles.amountHint, calcError && { color: pal.expenseRed }]} numberOfLines={1}>

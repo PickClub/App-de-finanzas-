@@ -186,6 +186,8 @@
     }
   },
   "transactions": {
+    "selectAccount": "Seleccionar cuenta",
+    "selectCategory": "Seleccionar categoría",
     "title": "Movimientos",
     "recent": "Movimientos recientes",
     "newTransaction": "Nuevo movimiento",

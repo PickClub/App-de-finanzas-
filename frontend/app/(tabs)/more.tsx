@@ -12,6 +12,23 @@ import { useTranslation } from "@/src/i18n";
 import { useFonts } from "expo-font";
 
 import { us } from "@/src/ui-scale";
+const TOOLS_SCALE = 0.85;
+const toolsSize = (value: number) => us(value) * TOOLS_SCALE;
+
+// Scale already-resolved screen dimensions, preserving colors, strokes and shadows.
+function scaleToolsStyles(sheet: ReturnType<typeof useStyles>) {
+  const dimensions = /^(?:fontSize|lineHeight|letterSpacing|width|height|minWidth|minHeight|maxWidth|maxHeight|margin.*|padding.*|gap|rowGap|columnGap|borderRadius|top|bottom|left|right)$/;
+  return Object.fromEntries(Object.entries(sheet).map(([name, style]) => [
+    name,
+    Object.fromEntries(Object.entries(style).map(([key, value]) => [
+      key,
+      typeof value === "number" && dimensions.test(key) && !(name === "separator" && key === "height")
+        ? value * TOOLS_SCALE
+        : value,
+    ])),
+  ])) as typeof sheet;
+}
+
 type Tile = {
   icon: string;
   label: string;
@@ -36,7 +53,7 @@ const PALETTE = {
 export default function More() {
   const { colors, scheme } = useTheme();
   const { t } = useTranslation();
-  const styles = useStyles();
+  const styles = scaleToolsStyles(useStyles());
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -75,13 +92,13 @@ export default function More() {
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.container,
-          { paddingTop: insets.top + us(14), paddingBottom: insets.bottom + us(132) },
+          { paddingTop: insets.top + toolsSize(14), paddingBottom: insets.bottom + us(132) },
         ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
         <View style={styles.header}>
-          <View style={{ flex: 1, paddingRight: us(12) }}>
+          <View style={{ flex: 1, paddingRight: toolsSize(12) }}>
             <Text style={[styles.title, boldTitle]}>{t("more.title")}</Text>
           </View>
           <Pressable
@@ -90,7 +107,7 @@ export default function More() {
             onPress={() => go("/settings")}
             style={({ pressed }) => [styles.gearBtn, pressed && styles.pressed]}
           >
-            <Ionicons name="settings" size={us(20)} color={isDark ? colors.onSurface : FOREST} />
+            <Ionicons name="settings" size={toolsSize(20)} color={isDark ? colors.onSurface : FOREST} />
           </Pressable>
         </View>
 
@@ -98,7 +115,7 @@ export default function More() {
           <View key={group.id} testID={`tools-section-${group.id}`} style={[styles.group, { backgroundColor: isDark ? colors.surfaceSecondary : group.background }]}>
             <View style={styles.groupHeader}>
               <View style={[styles.groupIcon, { backgroundColor: group.palette.tile }]}>
-                <Ionicons name={group.icon as any} size={us(24)} color={group.palette.color} />
+                <Ionicons name={group.icon as any} size={toolsSize(24)} color={group.palette.color} />
               </View>
               <Text style={[styles.sectionTitle, boldTitle]}>{group.title}</Text>
             </View>
@@ -106,7 +123,7 @@ export default function More() {
               {group.items.map((it, index) => (
                 <Pressable key={it.route} testID={`more-${it.label}`} accessibilityLabel={it.label} onPress={() => go(it.route)} style={({ pressed }) => [styles.toolRow, pressed && styles.pressed]}>
                   <View style={[styles.toolIcon, { backgroundColor: it.tile }]}>
-                    <Ionicons name={it.icon as any} size={us(29)} color={isDark && it.color === FOREST ? colors.incomeGreen : it.color} />
+                    <Ionicons name={it.icon as any} size={toolsSize(29)} color={isDark && it.color === FOREST ? colors.incomeGreen : it.color} />
                   </View>
                   <View style={styles.toolCopy}>
                     <Text style={[styles.toolTitle, boldTitle]}>{it.label}</Text>

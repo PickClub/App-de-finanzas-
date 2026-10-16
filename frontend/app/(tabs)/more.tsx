@@ -1,15 +1,14 @@
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import React from "react";
-import { View, ScrollView } from "react-native";
+import { View } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useTheme, makeStyles, radius } from "@/src/theme";
+import { useTheme, makeStyles } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFonts } from "expo-font";
 
 import { us } from "@/src/ui-scale";
@@ -21,19 +20,17 @@ type Tile = {
   route?: string;
 };
 
-// "Tu dinero" card palette (screen-scoped, does NOT touch the global theme).
-// accent = icon colour, tile = icon square bg, from = strong pastel (top-right),
-// to = light pastel (bottom-left).
-type MoneyTile = Tile & { tile: string; from: string; to: string };
+// Screen-local pastel surfaces; global theme and navigation stay unchanged.
+type MoneyTile = Tile & { tile: string };
 const FOREST = "#126046";
 const PALETTE = {
-  mint: { color: FOREST, tile: "#CDEFDF", from: "#BDEAD4", to: "#F2FBF6" },
-  orange: { color: "#EE8A2E", tile: "#FFE2C6", from: "#FFD2AA", to: "#FFF7EF" },
-  coral: { color: "#DB4F4C", tile: "#FFD5D2", from: "#FFC7C3", to: "#FFF4F3" },
-  green: { color: "#1C9A68", tile: "#CFEEDD", from: "#C2ECD6", to: "#F2FBF6" },
-  gold: { color: "#D39A2F", tile: "#FFE6B5", from: "#FFE0A3", to: "#FFFAEE" },
-  violet: { color: "#8457E8", tile: "#E5D9FF", from: "#DACBFF", to: "#F8F4FF" },
-  blue: { color: "#2C78E4", tile: "#D4E4FF", from: "#C4DAFF", to: "#F3F7FF" },
+  mint: { color: FOREST, tile: "#CDEFDF" },
+  orange: { color: "#EE8A2E", tile: "#FFE2C6" },
+  coral: { color: "#DB4F4C", tile: "#FFD5D2" },
+  green: { color: "#1C9A68", tile: "#CFEEDD" },
+  gold: { color: "#D39A2F", tile: "#FFE6B5" },
+  violet: { color: "#8457E8", tile: "#E5D9FF" },
+  blue: { color: "#2C78E4", tile: "#D4E4FF" },
 };
 
 export default function More() {
@@ -46,18 +43,14 @@ export default function More() {
   const go = (route?: string) => {
     if (route) router.push(route as any);
   };
-  // Montserrat is loaded ONLY for the "Tu dinero" card titles (global font untouched).
+  // Reuse the existing local Montserrat assets without changing global typography.
   const [montserratLoaded] = useFonts({
     "Montserrat-Bold": require("../../assets/fonts/Montserrat-Bold.ttf"),
-    "Montserrat-ExtraBold": require("../../assets/fonts/Montserrat-ExtraBold.ttf"),
   });
+  const boldTitle = montserratLoaded
+    ? { fontFamily: "Montserrat-Bold", fontWeight: undefined }
+    : { fontWeight: "700" as const };
   const isDark = scheme === "dark";
-  // Light: pastel diagonal gradient. Dark: same hue as translucent tint over the surface.
-  const grad = (m: MoneyTile): [string, string] =>
-    isDark ? [m.color + "38", m.color + "10"] : [m.from, m.to];
-
-  // Navigation of the first six cards is preserved exactly (recurring had no route).
-  // Facturas -> /bills. Calendario -> /calendar.
   const MONEY: MoneyTile[] = [
     { icon: "wallet", label: t("more.accounts"), subtitle: t("more.subAccounts"), ...PALETTE.mint, route: "/accounts" },
     { icon: "pricetag-outline", label: t("more.categories"), subtitle: t("more.subCategories"), ...PALETTE.orange, route: "/categories" },
@@ -67,21 +60,13 @@ export default function More() {
     { icon: "sync", label: t("more.recurringPayments"), subtitle: t("more.subRecurring"), ...PALETTE.violet, route: "/recurring" },
     { icon: "document-text", label: t("more.invoices"), subtitle: t("more.subInvoices"), ...PALETTE.blue, route: "/bills" },
     { icon: "calendar", label: t("more.financialCalendar"), subtitle: t("more.subCalendar"), ...PALETTE.mint, route: "/calendar" },
+    { icon: "document-text", label: t("tabs.notes"), subtitle: t("more.subNotes"), ...PALETTE.mint, route: "/(tabs)/notes" },
   ];
 
-  const APP: Tile[] = [
-    { icon: "settings-outline", label: t("more.settings"), subtitle: t("more.subSettings"), color: colors.muted, route: "/settings" },
-    { icon: "shield-checkmark-outline", label: t("more.privacySecurity"), subtitle: t("more.subPrivacy"), color: colors.accountsBlue },
-    { icon: "help-circle-outline", label: t("more.helpCenter"), subtitle: t("more.subHelp"), color: colors.success },
-    { icon: "star-outline", label: t("more.rateApp"), subtitle: t("more.subRate"), color: colors.warning },
-    { icon: "information-circle-outline", label: t("more.about"), subtitle: t("more.subAbout"), color: colors.info },
-  ];
-
-  const rows: MoneyTile[][] = [
-    [MONEY[0], MONEY[1]],
-    [MONEY[2], MONEY[3]],
-    [MONEY[4], MONEY[5]],
-    [MONEY[6], MONEY[7]],
+  const groups = [
+    { id: "money", title: t("more.moneyManagement"), icon: "wallet", palette: PALETTE.mint, background: "#DFF3EB", items: MONEY.slice(0, 4) },
+    { id: "obligations", title: t("more.paymentsObligations"), icon: "server", palette: PALETTE.gold, background: "#FFF4D9", items: MONEY.slice(4, 7) },
+    { id: "planning", title: t("more.planning"), icon: "calendar", palette: PALETTE.mint, background: "#DFF3EB", items: MONEY.slice(7) },
   ];
 
   return (
@@ -97,22 +82,8 @@ export default function More() {
         {/* Header */}
         <View style={styles.header}>
           <View style={{ flex: 1, paddingRight: us(12) }}>
-            <Text style={styles.title}>{t("more.title")}</Text>
+            <Text style={[styles.title, boldTitle]}>{t("more.title")}</Text>
           </View>
-          <Pressable
-            testID="more-profile"
-            onPress={() => go("/settings")}
-            style={({ pressed }) => [styles.profilePill, pressed && styles.pressed]}
-          >
-            <View style={styles.avatar}>
-              <Ionicons name="person" size={us(16)} color={colors.brandPrimary} />
-            </View>
-            <View style={{ marginHorizontal: us(8) }}>
-              <Text style={styles.profileHi}>{t("more.greeting")}</Text>
-              <Text style={styles.profileName}>{t("more.defaultUser")}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={us(16)} color={colors.muted} />
-          </Pressable>
           <Pressable
             testID="more-settings-btn"
             accessibilityLabel={t("more.settings")}
@@ -123,94 +94,30 @@ export default function More() {
           </Pressable>
         </View>
 
-        {/* Tu dinero */}
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>{t("more.yourMoney")}</Text>
-          <Text style={styles.sectionHint}>{t("more.moneyHint")}</Text>
-        </View>
-        <View style={styles.grid}>
-          {rows.map((pair, ri) => (
-            <View key={ri} style={styles.gridRow}>
-              {pair.map((it) => (
-                <Pressable
-                  key={it.label}
-                  testID={`more-${it.label}`}
-                  onPress={() => go(it.route)}
-                  style={({ pressed }) => [
-                    styles.tile,
-                    { borderColor: isDark ? it.color + "33" : it.from + "AA" },
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  {/* Diagonal: strongest at top-right, fading to bottom-left */}
-                  <LinearGradient
-                    colors={grad(it)}
-                    start={{ x: 1, y: 0 }}
-                    end={{ x: 0, y: 1 }}
-                    style={styles.tileGradient}
-                    pointerEvents="none"
-                  />
-                  <View style={styles.tileTop}>
-                    <View style={[styles.tileIcon, { backgroundColor: isDark ? it.color + "2E" : it.tile }]}>
-                      <Ionicons name={it.icon as any} size={us(24)} color={isDark && it.color === FOREST ? colors.incomeGreen : it.color} />
-                    </View>
-                    <View style={styles.tileArrow}>
-                      <Ionicons name="chevron-forward" size={us(15)} color={isDark ? colors.onSurface : "#1C2B24"} />
-                    </View>
+        {groups.map((group) => (
+          <View key={group.id} testID={`tools-section-${group.id}`} style={[styles.group, { backgroundColor: isDark ? colors.surfaceSecondary : group.background }]}>
+            <View style={styles.groupHeader}>
+              <View style={[styles.groupIcon, { backgroundColor: group.palette.tile }]}>
+                <Ionicons name={group.icon as any} size={us(24)} color={group.palette.color} />
+              </View>
+              <Text style={[styles.sectionTitle, boldTitle]}>{group.title}</Text>
+            </View>
+            <View style={styles.groupBody}>
+              {group.items.map((it, index) => (
+                <Pressable key={it.route} testID={`more-${it.label}`} accessibilityLabel={it.label} onPress={() => go(it.route)} style={({ pressed }) => [styles.toolRow, pressed && styles.pressed]}>
+                  <View style={[styles.toolIcon, { backgroundColor: it.tile }]}>
+                    <Ionicons name={it.icon as any} size={us(29)} color={isDark && it.color === FOREST ? colors.incomeGreen : it.color} />
                   </View>
-                  <Text
-                    style={[styles.tileLabel, montserratLoaded && { fontFamily: "Montserrat-Bold", fontWeight: undefined }]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.8}
-                  >
-                    {it.label}
-                  </Text>
-                  <Text style={styles.tileSub} numberOfLines={2}>{it.subtitle}</Text>
+                  <View style={styles.toolCopy}>
+                    <Text style={[styles.toolTitle, boldTitle]}>{it.label}</Text>
+                    <Text style={styles.toolDescription}>{it.subtitle}</Text>
+                  </View>
+                  {index < group.items.length - 1 && <View pointerEvents="none" style={styles.separator} />}
                 </Pressable>
               ))}
             </View>
-          ))}
-        </View>
-
-        {/* Aplicación */}
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>{t("more.application")}</Text>
-          <Text style={styles.sectionHint}>{t("more.appHint")}</Text>
-        </View>
-        <View style={styles.appCard}>
-          {APP.map((it, i) => (
-            <Pressable
-              key={it.label}
-              testID={`more-${it.label}`}
-              onPress={() => go(it.route)}
-              style={({ pressed }) => [styles.appRow, i < APP.length - 1 && styles.appRowBorder, pressed && styles.pressed]}
-            >
-              <View style={[styles.appIcon, { backgroundColor: it.color + "24" }]}>
-                <Ionicons name={it.icon as any} size={us(19)} color={it.color} />
-              </View>
-              <View style={{ flex: 1, marginLeft: us(14) }}>
-                <Text style={styles.appLabel}>{it.label}</Text>
-                <Text style={styles.appSub}>{it.subtitle}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={us(19)} color={colors.muted} />
-            </Pressable>
-          ))}
-        </View>
-
-        {/* Suggestion */}
-        <Pressable testID="more-suggestion" style={({ pressed }) => [styles.suggestion, pressed && styles.pressed]}>
-          <View style={styles.suggIcon}>
-            <Ionicons name="bulb-outline" size={us(22)} color={colors.success} />
           </View>
-          <View style={{ flex: 1, marginHorizontal: us(14) }}>
-            <Text style={styles.suggTitle}>{t("more.suggestionTitle")}</Text>
-            <Text style={styles.suggSub}>{t("more.suggestionSubFull")}</Text>
-          </View>
-          <View style={styles.suggBtn}>
-            <Text style={styles.suggBtnText}>{t("more.send")}</Text>
-          </View>
-        </Pressable>
+        ))}
       </ElasticScrollView>
     </View>
   );
@@ -219,114 +126,27 @@ export default function More() {
 const useStyles = makeStyles((colors, scheme) => ({
   container: { paddingHorizontal: 20 },
   pressed: { opacity: 0.65 },
-
-  // Header
-  header: { flexDirection: "row", alignItems: "center", marginBottom: 26 },
-  title: { fontSize: 30, fontWeight: "800", color: colors.onSurface },
+  header: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
+  title: { fontSize: 30, fontWeight: "700", color: colors.onSurface },
   gearBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginLeft: 10,
-    backgroundColor: colors.surfaceSecondary,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 48, height: 48, borderRadius: 24, marginLeft: 10,
+    backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border,
+    alignItems: "center", justifyContent: "center",
   },
-  profilePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 8,
-    paddingHorizontal: 11,
+  group: {
+    borderRadius: 24, marginBottom: 16, borderWidth: 1,
+    borderColor: scheme === "dark" ? colors.border : "#F5FBF7",
+    shadowColor: "#153D2C", shadowOpacity: scheme === "dark" ? 0 : 0.035,
+    shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 1,
   },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.brandTertiary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  profileHi: { fontSize: 11, color: colors.muted, lineHeight: 14 },
-  profileName: { fontSize: 13.5, fontWeight: "700", color: colors.onSurface, lineHeight: 17 },
-
-  // Section headers
-  sectionHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 },
-  sectionTitle: { fontSize: 18, fontWeight: "800", color: colors.onSurface },
-  sectionHint: { fontSize: 12, color: colors.muted },
-
-  // Grid (Tu dinero) — natural, consistent card heights
-  grid: { gap: 12, marginBottom: 28 },
-  gridRow: { flexDirection: "row", gap: 12 },
-  // Uniform cards: fixed height, pastel diagonal gradient, hairline border, ultra-soft shadow.
-  tile: {
-    flex: 1,
-    height: 150,
-    borderRadius: 22,
-    padding: 14,
-    borderWidth: 1,
-    overflow: "hidden",
-    backgroundColor: colors.surfaceSecondary,
-    justifyContent: "flex-start",
-    shadowColor: "#0B2A1E",
-    shadowOpacity: scheme === "dark" ? 0 : 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
-  },
-  tileGradient: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  tileTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 },
-  tileIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  tileArrow: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.72)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tileLabel: { fontSize: 14.5, fontWeight: "800", color: scheme === "dark" ? colors.onSurface : "#13201A", marginBottom: 4 },
-  tileSub: { fontSize: 12, color: colors.muted, lineHeight: 16 },
-
-  // App list
-  appCard: {
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 16,
-    marginBottom: 28,
-    overflow: "hidden",
-  },
-  appRow: { flexDirection: "row", alignItems: "center", paddingVertical: 15 },
-  appRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.divider },
-  appIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  appLabel: { fontSize: 15, fontWeight: "700", color: colors.onSurface, marginBottom: 3 },
-  appSub: { fontSize: 12.5, color: colors.muted, lineHeight: 16 },
-
-  // Suggestion
-  suggestion: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.success + (scheme === "dark" ? "1F" : "14"),
-    borderRadius: 20,
-    padding: 16,
-  },
-  suggIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.success + "26",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  suggTitle: { fontSize: 14.5, fontWeight: "800", color: colors.onSurface, marginBottom: 3, lineHeight: 19 },
-  suggSub: { fontSize: 12.5, color: colors.muted, lineHeight: 16 },
-  suggBtn: { backgroundColor: colors.success + (scheme === "dark" ? "2E" : "1F"), borderRadius: radius.pill, paddingVertical: 11, paddingHorizontal: 16 },
-  suggBtnText: { color: colors.success, fontSize: 13, fontWeight: "700" },
+  groupHeader: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 7, gap: 14 },
+  groupIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  sectionTitle: { flex: 1, minWidth: 0, fontSize: 18, fontWeight: "700", color: colors.onSurface },
+  groupBody: { borderRadius: 23, backgroundColor: scheme === "dark" ? colors.surface : "#FFFFFF", overflow: "hidden" },
+  toolRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 9, minHeight: 69 },
+  toolIcon: { width: 50, height: 50, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  toolCopy: { flex: 1, minWidth: 0, marginLeft: 20 },
+  toolTitle: { fontSize: 16, fontWeight: "700", color: scheme === "dark" ? colors.onSurface : "#101B17", marginBottom: 3 },
+  toolDescription: { fontSize: 13, lineHeight: 18, fontWeight: "400", color: colors.muted },
+  separator: { position: "absolute", left: 86, right: 16, bottom: 0, height: 1, backgroundColor: scheme === "dark" ? colors.border : "#E9EBE9" },
 }));

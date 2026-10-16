@@ -93,7 +93,7 @@ export default function RecurringPayments() {
             <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
           </Pressable>
           <Text style={styles.title}>{t("rp.title")}</Text>
-          <Pressable testID="add-rp" onPress={openNew} style={[styles.backBtn, { backgroundColor: colors.brandPrimary }]}>
+          <Pressable testID="add-rp" onPress={openNew} style={[styles.backBtn, { backgroundColor: forest }]}>
             <Ionicons name="add" size={us(22)} color="#fff" />
           </Pressable>
         </View>
@@ -203,7 +203,7 @@ export default function RecurringPayments() {
                 </View>
                 <Text style={[styles.emptyTitle, mont()]}>{t("rp.emptyTitle")}</Text>
                 <Text style={styles.emptySub}>{t("rp.emptySub")}</Text>
-                <Pressable testID="rp-empty-create" onPress={openNew} style={styles.emptyBtn}>
+                <Pressable testID="rp-empty-create" onPress={openNew} style={[styles.emptyBtn, { backgroundColor: forest }]}>
                   <Ionicons name="add" size={us(18)} color="#fff" />
                   <Text style={styles.emptyBtnText}>{t("rp.emptyCta")}</Text>
                 </Pressable>
@@ -307,7 +307,7 @@ const useStyles = makeStyles((colors, scheme) => ({
   emptyIcon: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: 14 },
   emptyTitle: { fontSize: 17, fontWeight: "800", color: colors.onSurface, textAlign: "center" },
   emptySub: { fontSize: 13, color: colors.muted, textAlign: "center", marginTop: 6, lineHeight: 18 },
-  emptyBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 18, backgroundColor: colors.brandPrimary, paddingVertical: 13, paddingHorizontal: 22, borderRadius: radius.pill },
+  emptyBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 18, paddingVertical: 13, paddingHorizontal: 22, borderRadius: radius.pill },
   emptyBtnText: { color: "#fff", fontWeight: "800", fontSize: 14 },
   sheetTitle: { fontSize: 16, fontWeight: "800", color: colors.onSurface, textAlign: "center", marginTop: 4, marginBottom: 8 },
   yearBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },

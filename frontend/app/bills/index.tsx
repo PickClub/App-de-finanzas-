@@ -53,8 +53,15 @@ export default function BillsScreen() {
   }, []));
 
   const all: any[] = listQ.data?.items || [];
-  const counts = listQ.data?.counts || {};
-  const items = filter === "all" ? all : all.filter((b) => b.status === filter);
+  // Status is the server's payment-aware classification for this bill occurrence.
+  const groups = {
+    all: all.filter((b) => b.status !== "paid" && b.remaining > 0),
+    pending: all.filter((b) => b.status === "pending" && b.remaining > 0),
+    paid: all.filter((b) => b.status === "paid"),
+    overdue: all.filter((b) => b.status === "overdue" && b.remaining > 0),
+  };
+  const counts = Object.fromEntries(BILL_FILTERS.map((key) => [key, groups[key].length]));
+  const items = groups[filter];
   const s = sumQ.data;
 
   const SumCard = ({ testID, tint, icon, label, value, onPress }: any) => (
@@ -139,7 +146,7 @@ export default function BillsScreen() {
           return (
             <Pressable key={f} testID={`bills-filter-${f}`} onPress={() => setFilter(f)} style={[styles.chip, on && { backgroundColor: colors.incomeGreen + "26", borderColor: "transparent" }]}>
               <Text style={[styles.chipText, on && { color: forest, fontWeight: "800" }]} numberOfLines={1}>
-                {t(`bills.f_${f}`)}{counts[f] ? ` ${counts[f]}` : ""}
+                {t(`bills.f_${f}`)}{` ${counts[f]}`}
               </Text>
             </Pressable>
           );

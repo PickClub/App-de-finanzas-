@@ -17,7 +17,7 @@ import { useTheme, makeStyles, radius, spacing, type ColorScheme } from "@/src/t
 import { formatCurrencyInt } from "@/src/format";
 import { ProgressRing } from "@/src/components/ProgressRing";
 import { IconTile } from "@/src/components/ui";
-import { LockToggle, useLock } from "@/src/lock";
+import { useLock } from "@/src/lock";
 
 import { us, ufs } from "@/src/ui-scale";
 const TABS = [
@@ -168,10 +168,10 @@ export default function Debts() {
   const lentSummary = useMemo(() => buildStat(lentList), [lentList]);
 
   const filtered = useMemo(() => {
-    if (tab === "all") return debts;
+    if (tab === "all") return debts.filter((d) => d.remaining_amount > 0);
     if (tab === "active") return debts.filter((d) => d.status === "active");
-    if (tab === "paid") return debts.filter((d) => d.status === "paid");
-    return debts.filter((d) => d.direction === tab);
+    if (tab === "paid") return debts.filter((d) => d.remaining_amount <= 0);
+    return debts.filter((d) => d.direction === tab && d.remaining_amount > 0);
   }, [debts, tab]);
 
   return (
@@ -190,7 +190,7 @@ export default function Debts() {
             <Text style={styles.title}>{tr("ui.debts_loans")}</Text>
             <Text style={styles.subtitle}>{tr("ui.your_debts_in_one_place")}</Text>
           </View>
-          <LockToggle testID="lock-debts" compact />
+          <View pointerEvents="none" style={{ width: us(32), height: us(30) }} />
           <Pressable
             testID="add-debt"
             onPress={() => router.push("/debts/new")}

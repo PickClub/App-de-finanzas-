@@ -1,6 +1,6 @@
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, ScrollView, Platform } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { Pressable } from "@/src/components/pressable";
@@ -13,7 +13,7 @@ import { api } from "@/src/api";
 import { useTheme, makeStyles, spacing } from "@/src/theme";
 import { formatCurrency } from "@/src/format";
 import { useTranslation } from "@/src/i18n";
-import { LockToggle, useLock } from "@/src/lock";
+import { useLock } from "@/src/lock";
 
 import { us } from "@/src/ui-scale";
 
@@ -44,6 +44,11 @@ export default function Accounts() {
   const { guard } = useLock();
   const accQ = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
   const accs: any[] = accQ.data || [];
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(accs.length / 10));
+  const currentPage = Math.min(page, pageCount - 1);
+  useEffect(() => { setPage(currentPage); }, [currentPage]);
+  const visibleAccounts = accs.slice(currentPage * 10, (currentPage + 1) * 10);
   const total = accs.reduce((s, a) => s + a.current_balance, 0);
 
   const shadow = pal.dark ? null : styles.softShadow;
@@ -58,9 +63,7 @@ export default function Accounts() {
           <Ionicons name="chevron-back" size={us(24)} color={pal.ink} />
         </Pressable>
         <Text style={[styles.title, { color: pal.dark ? colors.onSurface : pal.ink }]} numberOfLines={1}>{t("accounts.title")}</Text>
-        <View style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
-          <LockToggle testID="lock-accounts" compact />
-        </View>
+        <View pointerEvents="none" style={{ width: us(46), height: us(46) }} />
         <Pressable testID="add-account" onPress={() => router.push("/accounts/new")} style={[styles.circleBtn, styles.addBtn, { backgroundColor: pal.dark ? pal.forest : pal.ink, borderColor: "transparent" }, shadow]}>
           <Ionicons name="add" size={us(26)} color={pal.dark ? colors.onSuccess : "#fff"} />
         </Pressable>
@@ -81,7 +84,7 @@ export default function Accounts() {
       </View>
 
       <View style={{ paddingHorizontal: us(spacing.lg), gap: us(10) }}>
-        {accs.map((a) => (
+        {visibleAccounts.map((a) => (
           <Pressable
             testID={`account-${a.id}`}
             key={a.id}
@@ -100,6 +103,17 @@ export default function Accounts() {
             <Ionicons name="chevron-forward" size={us(18)} color={pal.muted} style={{ marginLeft: us(6) }} />
           </Pressable>
         ))}
+        {pageCount > 1 && (
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: us(12) }}>
+            <Pressable testID="accounts-previous" accessibilityLabel={t("calendar.prev")} disabled={currentPage === 0} onPress={() => setPage(currentPage - 1)} style={[styles.circleBtn, { opacity: currentPage === 0 ? 0.4 : 1 }]}>
+              <Ionicons name="chevron-back" size={us(20)} color={pal.ink} />
+            </Pressable>
+            <Text style={{ color: pal.ink }}>{currentPage + 1} / {pageCount}</Text>
+            <Pressable testID="accounts-next" accessibilityLabel={t("calendar.next")} disabled={currentPage === pageCount - 1} onPress={() => setPage(currentPage + 1)} style={[styles.circleBtn, { opacity: currentPage === pageCount - 1 ? 0.4 : 1 }]}>
+              <Ionicons name="chevron-forward" size={us(20)} color={pal.ink} />
+            </Pressable>
+          </View>
+        )}
       </View>
     </ElasticScrollView>
   );

@@ -14,7 +14,7 @@ import { api } from "@/src/api";
 
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { IconTile } from "@/src/components/ui";
-import { LockToggle, useLock } from "@/src/lock";
+import { useLock } from "@/src/lock";
 import { catLabel } from "@/src/category-labels";
 
 import { us } from "@/src/ui-scale";
@@ -181,7 +181,7 @@ export default function Categories() {
           <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.title}>{tr("ui.categories")}</Text>
-        <LockToggle testID="lock-cats" compact />
+        <View pointerEvents="none" style={{ width: us(32), height: us(30) }} />
         <Pressable testID="add-category" onPress={() => router.push("/categories/new")} style={[styles.backBtn, { backgroundColor: accentGreen, borderColor: accentGreen }]}>
           <Ionicons name="add" size={us(22)} color="#fff" />
         </Pressable>

@@ -1,0 +1,36 @@
+{
+  "database": "test_c3_snapshot_5025e56b1bd1482d9e4a0ee7937e510b",
+  "environment_id": "9fa60766-31f5-494d-bee6-0cff16f0d7f5",
+  "scenarios": {
+    "fresh_database_identity": {
+      "passed": true,
+      "absent_before_first_write": true,
+      "synthetic_r6": true
+    },
+    "server_selected_T": {
+      "passed": true,
+      "seconds": 1791921660,
+      "increment": 16,
+      "source": "atClusterTime returned by first snapshot find"
+    }
+  },
+  "metrics": {},
+  "certificate_issued": false,
+  "server": {
+    "version": "8.0.32",
+    "PRIMARY": true,
+    "replica_set": "app_finanzas_dev_rs",
+    "sessions_minutes": 30,
+    "min_history_seconds": 300,
+    "transaction_lifetime_seconds": 60
+  },
+  "collection_uuid": "a38e2e4236d148659352123524d225dd",
+  "T": {
+    "seconds": 1791921660,
+    "increment": 16,
+    "source": "atClusterTime returned by first snapshot find"
+  },
+  "status": "failed",
+  "error_type": "OperationFailure",
+  "error": "cannot set maxTimeMS on getMore command for a non-awaitData cursor, full error: {'ok': 0.0, 'errmsg': 'cannot set maxTimeMS on getMore command for a non-awaitData cursor', 'code': 2, 'codeName': 'BadValue', '$clusterTime': {'clusterTime': Timestamp(1791921660, 16), 'signature': {'hash': b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00', 'keyId': 0}}, 'operationTime': Timestamp(1791921660, 16)}"
+}

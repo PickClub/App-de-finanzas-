@@ -41,7 +41,7 @@ class TransactionValidationTests(unittest.IsolatedAsyncioTestCase):
     active_payments = harness.PaymentTests.active_payments
 
     def payload(self, **changes):
-        return dict(name="Movement", amount=25, type="expense", **changes)
+        return dict(name="Movement", amount=25, type="expense", account_id="a", **changes)
 
     async def add(self, **changes):
         data = self.payload()
@@ -51,8 +51,8 @@ class TransactionValidationTests(unittest.IsolatedAsyncioTestCase):
         return response.json()
 
     async def test_valid_types_and_optional_accounts(self):
-        for kind in ("income", "expense", "loan_given", "loan_received"):
-            tx = await self.add(type=kind)
+        for kind in ("income", "loan_given", "loan_received"):
+            tx = await self.add(type=kind, account_id=None)
             self.assertIsNone(tx["account_id"])
             await self.add(type=kind, account_id="a", category_id="category")
         self.assertEqual((await self.request("POST", "/transactions", json={
@@ -127,10 +127,10 @@ class TransactionValidationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(r.json()[field], tx[field])
         self.assertEqual(self.balance(), 975)
 
-    async def test_explicit_null_ordinary_optional_relations(self):
-        tx = await self.add(account_id="a", category_id="category", notes="Clear")
+    async def test_explicit_null_income_optional_relations(self):
+        tx = await self.add(type="income", account_id="a", category_id="category", notes="Clear")
         r = await self.request("PUT", f"/transactions/{tx['id']}", json={
-            "name": "Movement", "amount": 25, "type": "expense",
+            "name": "Movement", "amount": 25, "type": "income",
             "account_id": None, "category_id": None, "notes": None,
         })
         self.assertEqual(r.status_code, 200, r.text)
@@ -148,6 +148,10 @@ class TransactionValidationTests(unittest.IsolatedAsyncioTestCase):
             stored[field] = value
             data = dict(name="Metadata edit", amount=stored["amount"], type=stored["type"])
             r = await self.request("PUT", f"/transactions/{tx['id']}", json=data)
+            if field == "account_id":
+                self.assertEqual(r.status_code, 422, r.text)
+                self.assertEqual(self.db.data["transactions"][0][field], value)
+                continue
             self.assertEqual(r.status_code, 200, r.text)
             self.assertEqual(r.json()[field], value)
             data[field] = replacement

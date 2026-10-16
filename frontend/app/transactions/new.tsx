@@ -272,6 +272,10 @@ export default function NewTransaction() {
       Alert.alert(tr("ui.missing_information"), localizedError(calcError || tr("ui.enter_a_valid_amount")));
       return;
     }
+    if (type === "expense" && (!accountId || !accounts.some((account: any) => account.id === accountId && account.deleted !== true))) {
+      Alert.alert(tr("ui.missing_information"), tr("transactions.expenseSourceRequired"));
+      return;
+    }
     const finalName = params.id ? name : name.trim() || "Sin descripción";
     const payload: any = {
       name: finalName,

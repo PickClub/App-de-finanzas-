@@ -103,6 +103,15 @@
     "retry": "Try again"
   },
   "more": {
+    "subNotes": "Write and organize your notes",
+    "moneyManagement": "Money management",
+    "paymentsObligations": "Payments & obligations",
+    "planning": "Planning",
+    "financialToolsTitle": "Your financial tools",
+    "financialToolsSubtitle": "Everything you need in one place",
+    "quickAccess": "Quick access",
+    "manageObligations": "Manage your obligations",
+    "planAhead": "Plan ahead",
     "title": "More",
     "subtitle": "Manage your account and preferences",
     "premiumTitle": "Get more out of MoneyFlow",
@@ -240,7 +249,8 @@
     "changeCategory": "Change category",
     "changeCategorySearch": "Search category",
     "count_many": "{{count}} transactions",
-    "monthCount_many": "{{count}} transactions this month"
+    "monthCount_many": "{{count}} transactions this month",
+    "expenseSourceRequired": "Select a valid source account for this expense."
   },
   "debts": {
     "title": "Debts & loans",
@@ -282,7 +292,13 @@
     "deleteConfirmation": "Delete “{{name}}”? This cannot be undone.",
     "deleteLinked": "This debt cannot be deleted while it has linked payments or transactions. Its history has not been changed.",
     "deleteRefreshFailed": "The debt was deleted, but some totals could not refresh. Reopen the list to retry.",
-    "deleteCompleted": "The debt was deleted."
+    "deleteCompleted": "The debt was deleted.",
+    "unresolvedOtherPayment": "An earlier payment for another debt is unresolved. Review it in its original debt before creating a new payment. Nothing will be sent from this form.",
+    "reviewPreviousPayment": "Review previous payment",
+    "confirmedOtherPayment": "The previous payment is confirmed. Select Record new payment to open a blank form for this debt. Existing payments and history will remain unchanged.",
+    "invalidPaymentAmount": "Enter a valid payment amount greater than zero.",
+    "paymentExceedsBalance": "The payment exceeds the outstanding balance.",
+    "paymentSavedRefreshFailed": "Payment saved. Some information could not refresh. Reopen the debt to check its updated balance and history; do not submit the payment again."
   },
   "reports": {
     "title": "Reports",

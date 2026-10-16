@@ -137,59 +137,9 @@ async function main() {
   assert.equal(wire[0].options.headers['Idempotency-Key'], 'stable-key');
   assert.deepEqual(JSON.parse(wire[0].options.body), data());
 
-  // Execute the actual screen handler and recovery effect with synthetic hooks.
+  // The current form's navigation/recovery lifecycle is exercised end-to-end.
   const src = fs.readFileSync(path.join(root, 'app/debts/[id]/pay.tsx'), 'utf8');
-  const tree = ts.createSourceFile('pay.tsx', src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  let handler, effect;
-  const visit = n => {
-    if (ts.isVariableDeclaration(n) && n.name.getText(tree) === 'save') handler = n.initializer.getText(tree);
-    if (ts.isCallExpression(n) && n.expression.getText(tree) === 'useEffect') effect = n.arguments[0].getText(tree);
-    ts.forEachChild(n, visit);
-  }; visit(tree);
-  f = fixture(); c = f.fresh();
-  let operation = null, navigation = 0;
-  const ctx = { Error, operation: null, amt: 100, d: { id: 'd' }, params: { id: 'd' }, accountId: 'a', notes: '',
-    recoveryReady: { current: false }, recoveryError: { current: null }, savingRef: { current: false },
-    setSaving: () => {}, setReady: () => {}, Alert: { alert: () => {} }, qc: { invalidateQueries: () => {} },
-    router: { back: () => navigation++ }, pendingDebtPayments: c,
-    setOperation: record => { operation = record; ctx.operation = record; }, setAmount: value => ctx.amt = parseFloat(value) || 0,
-    setAccountId: value => ctx.accountId = value, setNotes: value => ctx.notes = value };
-  vm.createContext(localeGlobals(ctx)); vm.runInContext(ts.transpileModule('globalThis.save = '+handler, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, ctx);
-  vm.runInContext('globalThis.effect = '+effect, ctx);
-  await ctx.save(); assert.equal(f.calls.length, 0);
-  ctx.effect(); await new Promise(r => setImmediate(r)); assert.equal(ctx.recoveryReady.current, true);
-  const finish = f.hold(); const waiting = ctx.save(); await new Promise(r => setImmediate(r));
-  await ctx.save(); assert.equal(f.calls.length, 1); finish(); await waiting;
-  assert.equal(operation.state, 'confirmed'); assert.equal(navigation, 0);
-  await ctx.save(); // Explicit new-payment action; does not submit the old values.
-  assert.equal(operation, null); assert.equal(ctx.amt, 0); assert.equal(f.calls.length, 1);
-  await ctx.save(); assert.equal(f.calls.length, 1); // Empty new form cannot pay.
-  ctx.amt = 100; ctx.accountId = 'a'; await ctx.save();
-  assert.equal(f.paid.size, 2); assert.notEqual(f.calls[0].key, f.calls[1].key);
-  console.log('PASS: screen separates confirmed result from explicit empty new form; identical legitimate second payment uses new key');
-
-  // Restore exact payload while ignoring mutable/stale form values on retries.
-  f = fixture(); c = f.fresh(); const original = data({ amount: 100.25, account_id: null, notes: null, date: '2026-10-12T00:00:00Z' });
-  f.lose(); await assert.rejects(c.submit(original));
-  ctx.pendingDebtPayments = f.fresh(); ctx.effect(); await new Promise(r => setImmediate(r));
-  assert.equal(ctx.amt, 100.25); assert.equal(ctx.accountId, undefined); assert.equal(ctx.notes, '');
-  ctx.amt = 999; ctx.notes = 'stale edits'; await ctx.save();
-  assert.deepEqual(f.calls[1].payload, original); assert.equal(f.calls[0].key, f.calls[1].key);
-  assert.equal(operation.state, 'confirmed');
-  f.flags.remove = true; await ctx.save(); assert.equal(operation.state, 'confirmed'); assert.equal(f.calls.length, 2);
-  assert.equal(ctx.amt, 100.25); // Failed cleanup restores the old confirmed display, not a new payment.
-  console.log('PASS: recovery retries only original data; cleanup failure cannot report a new payment as successful');
-
-  f = fixture(); c = f.fresh(); f.flags.conflict = true; await assert.rejects(c.submit(data()));
-  ctx.pendingDebtPayments = f.fresh(); ctx.effect(); await new Promise(r => setImmediate(r));
-  await ctx.save(); assert.equal(operation.state, 'conflict'); assert.equal(f.calls.length, 1);
-  let finishRecovery;
-  ctx.pendingDebtPayments = { recover: () => new Promise(resolve => finishRecovery = resolve) };
-  const cleanup = ctx.effect(); cleanup(); finishRecovery({ debtId: 'd', payload: original });
-  await new Promise(r => setImmediate(r)); assert.equal(ctx.recoveryReady.current, false);
-  ctx.pendingDebtPayments.recover = async () => { throw Error('synthetic read failure'); };
-  ctx.effect(); await new Promise(r => setImmediate(r)); assert.equal(ctx.recoveryReady.current, false);
-  console.log('PASS: discrepant payments stay blocked; unmounted/failed recovery cannot enable sending');
+  await require('./test-debt-payment-form.cjs').run();
 
   const viewExports = {};
   vm.runInNewContext(compile('src/debt-payments/view.ts'), localeGlobals({ exports: viewExports }));

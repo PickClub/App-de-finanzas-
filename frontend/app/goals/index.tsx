@@ -116,7 +116,7 @@ export default function Goals() {
             <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
           </Pressable>
           <Text style={styles.title}>{t("goals.title")}</Text>
-          <Pressable testID="add-goal" onPress={openNew} style={[styles.backBtn, { backgroundColor: colors.brandPrimary }]}>
+          <Pressable testID="add-goal" onPress={openNew} style={[styles.backBtn, { backgroundColor: forest }]}>
             <Ionicons name="add" size={us(22)} color="#fff" />
           </Pressable>
         </View>
@@ -202,7 +202,7 @@ export default function Goals() {
                 </View>
                 <Text style={[styles.emptyTitle, mont()]}>{t("goals.emptyTitle")}</Text>
                 <Text style={styles.emptySub}>{t("goals.emptySub")}</Text>
-                <Pressable testID="goals-empty-create" onPress={openNew} style={({ pressed }) => [styles.emptyBtn, pressed && styles.pressed]}>
+                <Pressable testID="goals-empty-create" onPress={openNew} style={({ pressed }) => [styles.emptyBtn, { backgroundColor: forest }, pressed && styles.pressed]}>
                   <Ionicons name="add" size={us(18)} color="#fff" />
                   <Text style={styles.emptyBtnText}>{t("goals.emptyCta")}</Text>
                 </Pressable>
@@ -298,7 +298,7 @@ const useStyles = makeStyles((colors, scheme) => ({
   emptyIcon: { width: 68, height: 68, borderRadius: 34, alignItems: "center", justifyContent: "center", marginBottom: 14 },
   emptyTitle: { fontSize: 17, fontWeight: "800", color: colors.onSurface, textAlign: "center" },
   emptySub: { fontSize: 13, color: colors.muted, textAlign: "center", marginTop: 6, lineHeight: 18 },
-  emptyBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 18, backgroundColor: colors.brandPrimary, paddingVertical: 13, paddingHorizontal: 22, borderRadius: radius.pill },
+  emptyBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 18, paddingVertical: 13, paddingHorizontal: 22, borderRadius: radius.pill },
   emptyBtnText: { color: "#fff", fontWeight: "800", fontSize: 14 },
   // Sheet
   sheetTitle: { fontSize: 16, fontWeight: "800", color: colors.onSurface, textAlign: "center", marginTop: 4, marginBottom: 8 },

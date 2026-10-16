@@ -43,14 +43,21 @@ function payPalette(colors: any, scheme: string) {
 }
 
 export default function PayDebt() {
+  const params = useLocalSearchParams<{ id: string }>();
+  return <PayDebtForm key={params.id || "missing"} debtId={params.id} />;
+}
+
+// A route change mounts a fresh form; drafts and async recovery never cross debts.
+function PayDebtForm({ debtId }: { debtId: string | undefined }) {
   useInterfaceLanguage();
   const { colors, scheme } = useTheme();
   const pal = payPalette(colors, scheme);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+  const completedRef = useRef(false);
   const styles = useStyles();
-  const params = useLocalSearchParams<{ id: string }>();
+  const params = { id: debtId };
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
@@ -68,10 +75,20 @@ export default function PayDebt() {
   useEffect(() => {
     let mounted = true;
     recoveryReady.current = false;
-    setReady(false);
     recoveryError.current = null;
-    pendingDebtPayments.recover().then(record => {
+    pendingDebtPayments.recover().then(async record => {
       if (!mounted) return;
+      if (record?.state === "confirmed") {
+        // Opening Record payment is the explicit request for a new blank form.
+        // This releases only a validated local receipt, never payment history.
+        try { await pendingDebtPayments.startNew(record.key); }
+        catch (error) {
+          // Strict Mode may have prepared the same confirmed slot already.
+          if (await pendingDebtPayments.recover()) throw error;
+        }
+        if (!mounted) return;
+        record = null;
+      }
       setOperation(record);
       if (record && record.debtId === params.id) {
         setAmount(String(record.payload.amount));
@@ -113,16 +130,35 @@ export default function PayDebt() {
   );
 
   const view = paymentView(operation, d.id, ready);
-  const amt = parseFloat(amount) || 0;
+  const amt = Number(amount.trim());
   const newBalance = Math.max(0, d.remaining_amount - amt);
 
   const save = async () => {
-    if (savingRef.current) return;
+    if (savingRef.current || completedRef.current) return;
     savingRef.current = true;
     setSaving(true);
+    const finishPayment = (confirmed: PaymentDisplay) => {
+      if (confirmed.state !== "confirmed" || confirmed.debtId !== d.id || confirmed.payload.debt_id !== d.id ||
+          !confirmed.receipt?.id || !confirmed.receipt.transaction_id) {
+        throw new Error(tr("ui.could_not_verify_the_payment"));
+      }
+      completedRef.current = true;
+      // Refresh inactive detail/history queries too, without delaying navigation.
+      void Promise.allSettled(
+        [["debt", d.id], ["debt-payments", d.id], ["debts"], ["transactions"], ["accounts"], ["summary"]]
+          .map(queryKey => qc.invalidateQueries({ queryKey, refetchType: "all" }, { throwOnError: true }))
+      ).then(results => {
+        if (results.some(result => result.status === "rejected")) {
+          Alert.alert(tr("ui.payment_status"), tr("debts.paymentSavedRefreshFailed"));
+        }
+      });
+      try { router.dismissTo(`/debts/${d.id}`); }
+      catch (error) { completedRef.current = false; setOperation(confirmed); throw error; }
+    };
     try {
       if (!recoveryReady.current) {
         const record = await pendingDebtPayments.verify();
+        if (record?.state === "confirmed" && record.debtId === d.id) { finishPayment(record); return; }
         setOperation(record);
         if (record && record.debtId === d.id) {
           setAmount(String(record.payload.amount));
@@ -137,38 +173,39 @@ export default function PayDebt() {
       }
       const pending = await pendingDebtPayments.recover();
       setOperation(pending);
+      if (pending?.state === "confirmed") {
+        if (pending.debtId === d.id) { finishPayment(pending); return; }
+        // A different form completed while this one was open; never resend it.
+        await pendingDebtPayments.startNew(pending.key);
+        setOperation(null);
+        setAmount("");
+        setAccountId(undefined);
+        setNotes("");
+        return;
+      }
+      if (operation && (!pending || operation.key !== pending.key)) {
+        throw new Error("El registro del pago anterior cambió. No se enviará un pago nuevo.");
+      }
       if (pending && pending.debtId !== d.id) {
-        throw new Error("Hay un pago anterior de otra deuda. Vuelve a esa deuda para resolverlo antes de registrar uno nuevo.");
+        Alert.alert(tr("ui.payment_status"), tr("debts.unresolvedOtherPayment"), [
+          { text: tr("common.cancel"), style: "cancel" },
+          { text: tr("debts.reviewPreviousPayment"), onPress: () => router.push(`/debts/${pending.debtId}/pay`) },
+        ]);
+        return; // Review navigation only; never send or reassign the stored intention.
       }
       if (pending?.state === "conflict" && !pendingDebtPayments.supportsReconciliation) {
         throw new Error("La discrepancia requiere conciliación. Se conserva la clave y no se enviará ningún pago.");
       }
-      if (operation?.state === "confirmed") {
-        // Only a click displayed as "Registrar nuevo pago" can clear confirmation.
-        if (pending && pending.state !== "confirmed") {
-          throw new Error("El registro cambió. Revisa el pago anterior antes de continuar.");
-        }
-        setAmount("");
-        setAccountId(undefined);
-        setNotes("");
-        if (pending) await pendingDebtPayments.startNew();
-        setOperation(null);
-        return;
-      }
-      if (pending?.state === "confirmed") {
-        qc.invalidateQueries();
-        return; // First show the confirmation; do not start a new intention implicitly.
-      }
-      if (operation && (!pending || operation.key !== pending.key)) {
-        throw new Error("El registro del pago anterior cambió. No se enviará un pago nuevo.");
+      if (!pending) {
+        if (!Number.isFinite(amt) || amt <= 0) throw new Error(tr("debts.invalidPaymentAmount"));
+        if (amt > d.remaining_amount) throw new Error(tr("debts.paymentExceedsBalance"));
       }
       // Never rebuild a recovered intention from editable form values.
       const data: PaymentPayload = pending ? { ...pending.payload } : {
         debt_id: d.id, amount: amt, account_id: accountId ?? null, notes, date: null,
       };
       const confirmed = await pendingDebtPayments.submit(data);
-      setOperation(confirmed);
-      qc.invalidateQueries();
+      finishPayment(confirmed);
     } catch (error) {
       if (!recoveryReady.current) recoveryError.current = error;
       // Refresh durable state (including HTTP 409); failed reads keep sending blocked.
@@ -298,6 +335,9 @@ export default function PayDebt() {
           />
         </View>
 
+        {operation && operation.debtId !== d.id && <Text testID="debt-pay-previous-context" style={[styles.debtSub, { color: pal.muted, marginBottom: us(12) }]}>
+          {tr(operation.state === "confirmed" ? "debts.confirmedOtherPayment" : "debts.unresolvedOtherPayment")}
+        </Text>}
         <Pressable
           testID="confirm-pay"
           onPress={save}

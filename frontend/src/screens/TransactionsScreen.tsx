@@ -11,7 +11,7 @@ import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatCurrency, formatDate } from "@/src/format";
 import { IconTile, Chip } from "@/src/components/ui";
-import { LockToggle, useLock } from "@/src/lock";
+import { useLock } from "@/src/lock";
 
 import { us, ufs } from "@/src/ui-scale";
 const TYPE_FILTERS = [
@@ -89,7 +89,7 @@ export default function Transactions() {
       <View style={[styles.header, { paddingTop: insets.top + us(12) }]}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(10) }}>
           <Text style={styles.title}>{tr("ui.transactions")}</Text>
-          <LockToggle testID="lock-tx" compact />
+          <View pointerEvents="none" style={{ width: us(32), height: us(30) }} />
           <Pressable
             testID="open-filters"
             onPress={() => setFiltersOpen(true)}

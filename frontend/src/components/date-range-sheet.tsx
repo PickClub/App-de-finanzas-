@@ -15,14 +15,14 @@ export type DateRangeSheetHandle = {
   close: () => void;
 };
 
-function monthNames() {
+function monthNames(language: string = i18n.language) {
   return Array.from({ length: 12 }, (_, month) => {
-    const value = new Date(2024, month, 1).toLocaleDateString(localeTag(i18n.language), { month: "long" });
+    const value = new Date(2024, month, 1).toLocaleDateString(localeTag(language), { month: "long" });
     return value.charAt(0).toUpperCase() + value.slice(1);
   });
 }
-function weekdayNames() {
-  return Array.from({ length: 7 }, (_, day) => new Date(2024, 0, day + 1).toLocaleDateString(localeTag(i18n.language), { weekday: "narrow" }));
+function weekdayNames(language: string = i18n.language) {
+  return Array.from({ length: 7 }, (_, day) => new Date(2024, 0, day + 1).toLocaleDateString(localeTag(language), { weekday: "narrow" }));
 }
 
 // midnight of a given date
@@ -43,8 +43,8 @@ function sameDay(a: Date, b: Date) {
     a.getDate() === b.getDate()
   );
 }
-function longEs(d: Date) {
-  return d.toLocaleDateString(localeTag(i18n.language), { day: "numeric", month: "long", year: "numeric" });
+function longEs(d: Date, language: string = i18n.language) {
+  return d.toLocaleDateString(localeTag(language), { day: "numeric", month: "long", year: "numeric" });
 }
 
 /**
@@ -57,6 +57,9 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
   allowClear?: boolean;
 }>(function DateRangeSheet({ onApply, allowClear = false }, ref) {
   useInterfaceLanguage();
+  const language = i18n.language;
+  const months = useMemo(() => monthNames(language), [language]);
+  const weekdays = useMemo(() => weekdayNames(language), [language]);
   const { colors, scheme } = useTheme();
   const insets = useSafeAreaInsets();
   const isDark = scheme === "dark";
@@ -121,7 +124,7 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
     return rows;
   }, [viewMonth]);
 
-  const onDayPress = (d: Date) => {
+  const onDayPress = useCallback((d: Date) => {
     const day = startOfDay(d);
     if (!selStart || (selStart && selEnd)) {
       // start a fresh selection
@@ -138,9 +141,9 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
         setSelEnd(day);
       }
     }
-  };
+  }, [selStart, selEnd]);
 
-  const dayState = (d: Date) => {
+  const dayState = useCallback((d: Date) => {
     if (!selStart) return "none";
     const t = d.getTime();
     const s = selStart.getTime();
@@ -150,7 +153,47 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
     if (t === e) return "end";
     if (t > s && t < e) return "range";
     return "none";
-  };
+  }, [selStart, selEnd]);
+
+  // Reuse the same element subtree during visibility and modal-height updates.
+  const dayGrid = useMemo(() => (
+    <View>
+        {cells.map((row, ri) => (
+          <View key={ri} style={st.weekRow}>
+            {row.map((d, ci) => {
+              if (!d) return <View key={ci} style={st.cell} />;
+              const state = dayState(d);
+              const endpoint = state === "single" || state === "start" || state === "end";
+              const inRange = state === "range";
+              return (
+                <View key={ci} style={st.cell}>
+                  <Pressable
+                    testID={`date-day-${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`}
+                    onPress={() => onDayPress(d)}
+                    style={[
+                      st.dayBtn,
+                      inRange && { backgroundColor: mint },
+                      endpoint && { backgroundColor: green },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        st.dayText,
+                        { color: colors.onSurface },
+                        inRange && { color: green, fontWeight: "800" },
+                        endpoint && { color: "#FFFFFF", fontWeight: "800" },
+                      ]}
+                    >
+                      {d.getDate()}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        ))}
+    </View>
+  ), [cells, dayState, onDayPress, mint, green, colors.onSurface]);
 
   const applyDisabled = !selStart;
 
@@ -168,15 +211,15 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
   };
 
   const isRange = !!(selStart && selEnd);
-  const summaryText = selStart
-    ? isRange
-      ? `${longEs(selStart)} — ${longEs(selEnd!)}`
-      : longEs(selStart)
-    : "Ninguna fecha seleccionada";
+  const summaryText = useMemo(() => selStart
+    ? selEnd
+      ? `${longEs(selStart, language)} — ${longEs(selEnd, language)}`
+      : longEs(selStart, language)
+    : "Ninguna fecha seleccionada", [selStart, selEnd, language]);
   const kindLabel = !selStart ? "—" : isRange ? "Rango" : "Un solo día";
 
   return (
-    <Modal visible={isOpen} transparent animationType="none" onRequestClose={close}
+    <Modal visible={isOpen} transparent animationType="none" hardwareAccelerated onRequestClose={close}
       statusBarTranslucent navigationBarTranslucent>
       <View testID="date-modal-root" style={[st.modalRoot, {
         paddingTop: insets.top + us(16), paddingBottom: insets.bottom + us(16),
@@ -221,7 +264,7 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
           <Ionicons name="chevron-back" size={us(18)} color={colors.onSurface} />
         </Pressable>
         <Text style={[st.monthLabel, { color: colors.onSurface }]}>
-          {monthNames()[viewMonth.getMonth()]} {viewMonth.getFullYear()}
+          {months[viewMonth.getMonth()]} {viewMonth.getFullYear()}
         </Text>
         <Pressable
           testID="date-next-month"
@@ -235,7 +278,7 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
 
       {/* Weekday header */}
       <View style={st.weekRow}>
-        {weekdayNames().map((w, i) => (
+        {weekdays.map((w, i) => (
           <View key={i} style={st.cell}>
             <Text style={[st.weekLabel, { color: colors.muted }]}>{w}</Text>
           </View>
@@ -243,42 +286,7 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
       </View>
 
       {/* Day grid */}
-      <View>
-        {cells.map((row, ri) => (
-          <View key={ri} style={st.weekRow}>
-            {row.map((d, ci) => {
-              if (!d) return <View key={ci} style={st.cell} />;
-              const state = dayState(d);
-              const endpoint = state === "single" || state === "start" || state === "end";
-              const inRange = state === "range";
-              return (
-                <View key={ci} style={st.cell}>
-                  <Pressable
-                    testID={`date-day-${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`}
-                    onPress={() => onDayPress(d)}
-                    style={[
-                      st.dayBtn,
-                      inRange && { backgroundColor: mint },
-                      endpoint && { backgroundColor: green },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        st.dayText,
-                        { color: colors.onSurface },
-                        inRange && { color: green, fontWeight: "800" },
-                        endpoint && { color: "#FFFFFF", fontWeight: "800" },
-                      ]}
-                    >
-                      {d.getDate()}
-                    </Text>
-                  </Pressable>
-                </View>
-              );
-            })}
-          </View>
-        ))}
-      </View>
+      {dayGrid}
 
       {/* Selected-period summary */}
       <View style={[st.divider, { backgroundColor: gridLine }]} />

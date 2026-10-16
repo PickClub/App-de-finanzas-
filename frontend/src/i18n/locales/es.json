@@ -103,6 +103,15 @@
     "retry": "Reintentar"
   },
   "more": {
+    "subNotes": "Escribe y organiza tus notas",
+    "moneyManagement": "Gestión del dinero",
+    "paymentsObligations": "Pagos y obligaciones",
+    "planning": "Planificación",
+    "financialToolsTitle": "Tus herramientas financieras",
+    "financialToolsSubtitle": "Todo lo que necesitas en un solo lugar",
+    "quickAccess": "Acceso rápido",
+    "manageObligations": "Gestiona tus obligaciones",
+    "planAhead": "Planifica con tiempo",
     "title": "Más",
     "subtitle": "Gestiona tu cuenta y preferencias",
     "premiumTitle": "Saca más provecho de MoneyFlow",
@@ -240,7 +249,8 @@
     "changeCategory": "Cambiar categoría",
     "changeCategorySearch": "Buscar categoría",
     "count_many": "{{count}} movimientos",
-    "monthCount_many": "{{count}} movimientos este mes"
+    "monthCount_many": "{{count}} movimientos este mes",
+    "expenseSourceRequired": "Selecciona una cuenta de origen válida para este gasto."
   },
   "debts": {
     "title": "Deudas y préstamos",
@@ -282,7 +292,13 @@
     "deleteConfirmation": "¿Eliminar «{{name}}»? Esta acción no se puede deshacer.",
     "deleteLinked": "No se puede eliminar esta deuda mientras tenga pagos o movimientos vinculados. Su historial no se ha modificado.",
     "deleteRefreshFailed": "La deuda se eliminó, pero algunos totales no pudieron actualizarse. Vuelve a abrir la lista para reintentar.",
-    "deleteCompleted": "La deuda se eliminó."
+    "deleteCompleted": "La deuda se eliminó.",
+    "unresolvedOtherPayment": "Hay un pago sin resolver de otra deuda. Revísalo en su deuda original antes de crear uno nuevo. No se enviará nada desde este formulario.",
+    "reviewPreviousPayment": "Revisar pago anterior",
+    "confirmedOtherPayment": "El pago anterior está confirmado. Selecciona Registrar nuevo pago para abrir un formulario vacío de esta deuda. Los pagos y el historial existentes se conservan.",
+    "invalidPaymentAmount": "Introduce un importe de pago válido mayor que cero.",
+    "paymentExceedsBalance": "El pago supera el saldo pendiente.",
+    "paymentSavedRefreshFailed": "Pago guardado. No se pudo actualizar parte de la información. Vuelve a abrir la deuda para consultar su saldo e historial; no envíes el pago otra vez."
   },
   "reports": {
     "title": "Informes",

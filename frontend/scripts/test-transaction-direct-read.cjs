@@ -55,7 +55,7 @@ function fixture(kind, initialParams) {
     '@/src/api':{api,ApiError},
     '@/src/use-resource-deletion':{useResourceDeletion:()=>deletion,useMissingResource:(missing,fn)=>{if(missing)effects.push(fn);}},
     '@tanstack/react-query':{useQuery:c=>{
-      if(c.queryKey[0]!=='transactions')return {data:[]};
+      if(c.queryKey[0]!=='transactions')return {data:c.queryKey[0]==='accounts'?[{id:'A'},{id:'B'}]:[]};
       const key=JSON.stringify(c.queryKey);let q=queries.get(key);
       if(!q){q={data:undefined,error:null,isError:false,isLoading:!!c.enabled,isSuccess:false,isFetching:false};queries.set(key,q);}
       q.options=c;
@@ -182,8 +182,12 @@ async function main() {
       if(file===files.form){
         const approvedBlock=current.slice(current.indexOf('    if (params.id && sourceQ.data?.id === sourceId\n'),current.indexOf('    savingRef.current = true;'));
         assert(approvedBlock.includes('delete payload[field]'));
-        const normalized=current.replace(approvedBlock,'').replace('params.id ? name : name.trim() || "Sin descripción"','name.trim() || "Sin descripción"');
-        assert.equal(normalizeUI(initializer(normalized,'save')),normalizeUI(initializer(old,'save')));
+        const withoutExpenseGuard = code => {
+          const ast=ts.createSourceFile('handler.tsx',code,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let guard;
+          function visit(n){if(ts.isIfStatement(n)&&n.expression.getText(ast).startsWith('type === "expense"'))guard=n.getText(ast);ts.forEachChild(n,visit);}visit(ast);
+          return normalizeUI(guard?code.replace(guard,''):code).replace(/\s+/g,' ').trim();
+        };
+        assert.equal(withoutExpenseGuard(initializer(current,'save')),withoutExpenseGuard(initializer(old,'save')));
       }
     }
   }

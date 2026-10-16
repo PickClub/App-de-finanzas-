@@ -148,14 +148,14 @@ export function createPaymentCoordinator(deps: Dependencies) {
     active.set(backend, { data, promise });
     return promise;
   }
-  async function startNew(): Promise<void> {
+  async function startNew(expectedKey?: string): Promise<void> {
     await assertNoUnresolvedV2(deps.storage);
     const { backend, slot } = destination();
     if (active.has(backend) || resetting.has(backend)) throw new Error("Otro pago está en curso.");
     resetting.add(backend);
     try {
       const record = await read(slot, backend);
-      if (!record || record.state !== "confirmed") {
+      if (!record || record.state !== "confirmed" || (expectedKey !== undefined && record.key !== expectedKey)) {
         throw new Error("Solo se puede iniciar un pago nuevo después de confirmar el anterior.");
       }
       await clear(slot);

@@ -540,9 +540,10 @@ class ReferenceCases:
                 if mode=='expense':
                     data['account_id']=f['a']
                 else:
-                    created = await self.request('POST','/transactions',dict(name='Legacy unassigned',type='expense',amount=10))
-                    self.assertEqual(created.status_code,200,created.text)
-                    data['transaction_id']=created.json()['id']
+                    # Historical fixture only: new accountless expenses are now rejected.
+                    data['transaction_id']='legacy-'+f['rp']
+                    await self.insert('transactions',dict(id=data['transaction_id'],user_id='default-user',
+                        name='Legacy unassigned',type='expense',amount=10,date='2026-10-20',account_id=None,category_id=None))
                     await self.change('transactions',data['transaction_id'],account_id='',category_id='')
                 created = await self.request('POST','/recurring-payments/'+f['rp']+'/payments',data,'empty-optional')
                 self.assertEqual(created.status_code,200,created.text)

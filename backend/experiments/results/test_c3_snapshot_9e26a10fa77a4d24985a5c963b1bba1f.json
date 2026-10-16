@@ -1,0 +1,206 @@
+{
+  "database": "test_c3_snapshot_9e26a10fa77a4d24985a5c963b1bba1f",
+  "environment_id": "bdf679b9-ff50-46b6-a698-d7f2ca1c93d4",
+  "scenarios": {
+    "fresh_database_identity": {
+      "passed": true,
+      "absent_before_first_write": true,
+      "synthetic_r6": true
+    },
+    "server_selected_T": {
+      "passed": true,
+      "seconds": 1791921682,
+      "increment": 13,
+      "source": "atClusterTime returned by first snapshot find"
+    },
+    "baseline_snapshot_walk": {
+      "passed": true,
+      "count": 6001,
+      "digest": "1647ced69cd5e3836aa65e9cc05bbb003a9255c9910d6cce8bc3fe1c47d2f65a",
+      "states": {
+        "ready": 1201,
+        "missing": 1200,
+        "stale_or_corrupt": 1200,
+        "unverifiable": 1200,
+        "incompatible": 1200
+      },
+      "pages": 151
+    },
+    "inventory_same_T": {
+      "passed": true,
+      "counts": {
+        "objectId": 1000,
+        "int": 1001,
+        "long": 1000,
+        "string": 1000,
+        "binData": 2000
+      }
+    },
+    "duplicates_same_T": {
+      "passed": true,
+      "visited": 6001,
+      "duplicate_groups": 3000,
+      "extra_documents": 3000
+    },
+    "post_T_insert_edit_delete": {
+      "passed": true,
+      "new_rows_hidden": true,
+      "original_value_preserved": true,
+      "deleted_row_visible_at_T": true
+    },
+    "independent_walk_same_T": {
+      "passed": true,
+      "count": 6001,
+      "digest": "1647ced69cd5e3836aa65e9cc05bbb003a9255c9910d6cce8bc3fe1c47d2f65a",
+      "states": {
+        "ready": 1201,
+        "missing": 1200,
+        "stale_or_corrupt": 1200,
+        "unverifiable": 1200,
+        "incompatible": 1200
+      },
+      "pages": 7
+    },
+    "live_comparison": {
+      "passed": true,
+      "snapshot_count": 6001,
+      "live_count": 6002,
+      "snapshot_duplicates": 3000,
+      "live_duplicates": 2999
+    },
+    "killed_cursor_failure": {
+      "passed": true,
+      "mongo_code": 43
+    },
+    "new_session_resume_same_T": {
+      "passed": true,
+      "numeric_total": 2001,
+      "same_T": true
+    },
+    "new_client_same_T": {
+      "passed": true,
+      "deleted_row_still_visible": true,
+      "physical_process_restart_tested": false
+    },
+    "unavailable_T_blocks": {
+      "passed": true,
+      "code": 239,
+      "code_name": "SnapshotTooOld",
+      "probe": "Timestamp(1,1), unavailable historical time; not natural expiry of selected T",
+      "certificate_issued": false
+    },
+    "valid_T_still_available": {
+      "passed": true,
+      "configured_min_seconds": 300,
+      "T_successfully_read_after_seconds": 3.471,
+      "natural_expiry_of_T_observed": false
+    },
+    "R6_same_T_and_current": {
+      "passed": true
+    }
+  },
+  "metrics": {
+    "baseline_pages40": {
+      "elapsed_ms": 1477.147,
+      "python_peak_bytes": 188250,
+      "rss_before_bytes": 66392064,
+      "rss_after_bytes": 66457600
+    },
+    "post_changes_pages1000": {
+      "elapsed_ms": 1275.286,
+      "python_peak_bytes": 3472400,
+      "rss_before_bytes": 66457600,
+      "rss_after_bytes": 73420800
+    },
+    "duplicates_same_T": {
+      "elapsed_ms": 396.252,
+      "python_peak_bytes": 25307,
+      "rss_before_bytes": 73420800,
+      "rss_after_bytes": 73420800
+    }
+  },
+  "certificate_issued": false,
+  "server": {
+    "version": "8.0.32",
+    "PRIMARY": true,
+    "replica_set": "app_finanzas_dev_rs",
+    "sessions_minutes": 30,
+    "min_history_seconds": 300,
+    "transaction_lifetime_seconds": 60
+  },
+  "collection_uuid": "a4d5725fa0404054a6956948284ae9b1",
+  "T": {
+    "seconds": 1791921682,
+    "increment": 13,
+    "source": "atClusterTime returned by first snapshot find"
+  },
+  "unavailable_snapshot": {
+    "code": 239,
+    "code_name": "SnapshotTooOld",
+    "probe": "Timestamp(1,1), unavailable historical time; not natural expiry of selected T"
+  },
+  "retention_observation": {
+    "configured_min_seconds": 300,
+    "T_successfully_read_after_seconds": 3.471,
+    "natural_expiry_of_T_observed": false
+  },
+  "indexes": {
+    "transactions": [
+      "_id_"
+    ],
+    "moneyflow_metadata": [
+      "_id_"
+    ]
+  },
+  "explicit_indexes_created": 0,
+  "command_counts": {
+    "admin.hello": 1,
+    "admin.listDatabases": 1,
+    "admin.buildInfo": 1,
+    "admin.getParameter": 1,
+    "test_c3_snapshot_9e26a10fa77a4d24985a5c963b1bba1f.insert": 15,
+    "test_c3_snapshot_9e26a10fa77a4d24985a5c963b1bba1f.listCollections": 171,
+    "test_c3_snapshot_9e26a10fa77a4d24985a5c963b1bba1f.create": 1,
+    "test_c3_snapshot_9e26a10fa77a4d24985a5c963b1bba1f.find": 346,
+    "test_c3_snapshot_9e26a10fa77a4d24985a5c963b1bba1f.killCursors": 2,
+    "test_c3_snapshot_9e26a10fa77a4d24985a5c963b1bba1f.getMore": 3603,
+    "test_c3_snapshot_9e26a10fa77a4d24985a5c963b1bba1f.aggregate": 5,
+    "test_c3_snapshot_9e26a10fa77a4d24985a5c963b1bba1f.update": 1,
+    "test_c3_snapshot_9e26a10fa77a4d24985a5c963b1bba1f.delete": 1,
+    "test_c3_snapshot_9e26a10fa77a4d24985a5c963b1bba1f.listIndexes": 2
+  },
+  "reply_bson_total_bytes": {
+    "hello": 742,
+    "listDatabases": 226468,
+    "buildInfo": 6450,
+    "getParameter": 218,
+    "insert": 3135,
+    "listCollections": 73813,
+    "create": 142,
+    "find": 445041,
+    "killCursors": 470,
+    "getMore": 6371951,
+    "aggregate": 11246,
+    "update": 224,
+    "delete": 209,
+    "listIndexes": 614
+  },
+  "reply_bson_max_bytes": {
+    "hello": 742,
+    "listDatabases": 226468,
+    "buildInfo": 6450,
+    "getParameter": 218,
+    "insert": 209,
+    "listCollections": 433,
+    "create": 142,
+    "find": 2583,
+    "killCursors": 235,
+    "getMore": 511541,
+    "aggregate": 8802,
+    "update": 224,
+    "delete": 209,
+    "listIndexes": 310
+  },
+  "foreign_commands": [],
+  "status": "passed"
+}

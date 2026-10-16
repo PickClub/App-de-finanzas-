@@ -148,6 +148,12 @@ async def validate_transaction(payload, old=None, session=None):
         raise HTTPException(422, "Tipo de movimiento desconocido.")
     if changed("amount") and (not math.isfinite(payload["amount"]) or payload["amount"] <= 0):
         raise HTTPException(422, "El importe debe ser positivo y finito.")
+    if payload["type"] == "expense":
+        source = payload.get("account_id")
+        if not isinstance(source, str) or not source.strip() or not await db.accounts.find_one(
+            {"id": source, "user_id": DEFAULT_USER_ID, "deleted": {"$ne": True}}, PROJ, session=session
+        ):
+            raise HTTPException(422, "Select a valid source account for this expense.")
     for field, collection in (("account_id", db.accounts), ("to_account_id", db.accounts),
                               ("category_id", db.categories)):
         value = payload.get(field)

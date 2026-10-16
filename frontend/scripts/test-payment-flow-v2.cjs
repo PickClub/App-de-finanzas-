@@ -56,7 +56,7 @@ async function main(){
 
   await assert.rejects(c.submit(payload));assert.equal(f.counts().sends,1);
   f.flags.remove=true;await assert.rejects(c.startNew());assert.equal((await c.recover()).state,'confirmed');await assert.rejects(c.submit(payload));
-  f.flags.remove=false;await c.startNew();const second=await c.submit(payload);assert.notEqual(second.key,confirmed.key);assert.equal(f.counts().balance,800);
+  f.flags.remove=false;const retained=[...f.disk];await assert.rejects(c.startNew('wrong-key'));assert.deepEqual([...f.disk],retained);await c.startNew();const second=await c.submit(payload);assert.notEqual(second.key,confirmed.key);assert.equal(f.counts().balance,800);
   console.log('PASS flow: confirmation, failed cleanup and explicit identical second payment');
 
   f=fixture();f.flags.beforeCommit=true;await assert.rejects(f.fresh().submit(payload));
@@ -102,25 +102,8 @@ async function main(){
   assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(f.counts().balance,900);assert.equal(f.counts().sends,1);
   console.log('PASS flow: simultaneous instances serialize; no second intention or discount');
 
-  // Execute the actual screen handler with the prepared v2 service and synthetic hooks.
-  const screen=fs.readFileSync(path.join(root,'app/debts/[id]/pay.tsx'),'utf8');
-  const source=ts.createSourceFile('pay.tsx',screen,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
-  let handler;function find(node){if(ts.isVariableDeclaration(node)&&node.name.getText(source)==='save')handler=node.initializer.getText(source);ts.forEachChild(node,find);}find(source);
-  assert(handler);
-  f=fixture();f.flags.lost=true;const alerts=[];
-  const ui={exports:{},pendingDebtPayments:f.fresh(),operation:null,d:{id:'d'},amt:100,accountId:'a',notes:'original',
-    recoveryReady:{current:true},recoveryError:{current:null},savingRef:{current:false},qc:{invalidateQueries(){}},
-    setOperation:r=>ui.operation=r,setAmount(){},setAccountId(){},setNotes(){},setSaving(){},setReady(){},
-    Alert:{alert:(...a)=>alerts.push(a)}};
-  vm.runInNewContext(ts.transpileModule('exports.save = '+handler,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,localeGlobals(ui));
-  await ui.exports.save();assert.equal(ui.operation.state,'pending');assert.equal(f.counts().balance,900);
-  ui.pendingDebtPayments=f.fresh();f.flags.lost=false;await ui.exports.save();assert.equal(ui.operation.state,'confirmed');assert.equal(f.counts().sends,1);
-  await ui.exports.save();assert.equal(ui.operation,null);assert.equal(f.counts().sends,1);
-  await ui.exports.save();assert.equal(ui.operation.state,'confirmed');assert.equal(f.counts().balance,800);
-  // A displayed conflict must perform reconciliation rather than a blind resend.
-  f=fixture();f.flags.http409=true;ui.pendingDebtPayments=f.fresh();ui.operation=null;
-  await ui.exports.save();assert.equal(ui.operation.state,'conflict');f.flags.http409=false;
-  await ui.exports.save();assert.equal(f.counts().reads,1);assert.equal(f.counts().sends,1);
-  console.log('PASS flow: actual screen handler recovers v2, reconciles conflicts and separates explicit new payment');
+  // Includes the actual screen with a real v2 coordinator and synthetic services.
+  await require('./test-debt-payment-form.cjs').run();
+
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

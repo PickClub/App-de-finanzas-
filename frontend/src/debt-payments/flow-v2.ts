@@ -95,10 +95,10 @@ export function createV2PaymentFlow(deps: {
       return confirm(record, payment);
     });
   }
-  function startNew() {
+  function startNew(expectedKey?: string) {
     return exclusive(async () => {
       const record = await journal.recover();
-      if (!record || record.state !== "confirmed") throw new Error("Primero debe confirmarse la intención anterior.");
+      if (!record || record.state !== "confirmed" || (expectedKey !== undefined && record.key !== expectedKey)) throw new Error("Primero debe confirmarse la intención anterior.");
       await journal.clearConfirmed(record.key);
     });
   }

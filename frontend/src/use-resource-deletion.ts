@@ -1,7 +1,7 @@
+import { Alert } from "@/src/components/interaction-system";
 import { tr } from "@/src/i18n";
 import { localizedError } from "@/src/i18n/errors";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "./api";

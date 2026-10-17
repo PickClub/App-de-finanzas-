@@ -1,5 +1,6 @@
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useCallback, useState } from "react";
 import { View, ScrollView, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -15,6 +16,7 @@ import { useTranslation } from "@/src/i18n";
 import { formatCurrencyInt, formatDateTime } from "@/src/format";
 import { ProgressBar } from "@/src/components/ProgressBar";
 import { ConfirmSheet } from "@/src/components/sheets";
+import { ContextActionsTrigger } from "@/src/components/interaction-system";
 import { FOREST, useMontserrat, statusColor, budgetLabel, pastel, shortDate } from "@/src/budgets/shared";
 
 import { us } from "@/src/ui-scale";
@@ -80,10 +82,16 @@ export default function BudgetDetail() {
     <View style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(60), paddingHorizontal: us(spacing.lg) }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
-          <Pressable testID="budget-detail-back" onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-          </Pressable>
-          <Text style={styles.title} numberOfLines={1}>{t("budgets.detail")}</Text>
+          <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("budgets.detail")}</Text>
+          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="budget-detail-back" beforeActions={b && <ContextActionsTrigger
+            testID="budget-actions"
+            style={styles.backBtn}
+            disabled={deleting}
+            actions={[
+              { id: "edit", label: t("common.edit"), icon: "create-outline", onPress: () => router.push(`/budgets/new?id=${b.id}` as any) },
+              { id: "delete", label: t("common.delete"), icon: "trash-outline", destructive: true, onPress: () => setConfirmDel(true) },
+            ]}
+          />} />
         </View>
 
         {q.isLoading ? (
@@ -154,23 +162,14 @@ export default function BudgetDetail() {
               )}
             </View>
 
-            <View style={{ flexDirection: "row", gap: us(12), marginTop: us(18) }}>
-              <Pressable testID="budget-edit" onPress={() => router.push(`/budgets/new?id=${b.id}` as any)} style={[styles.actionBtn, { backgroundColor: forest }]}>
-                <Ionicons name="create-outline" size={us(18)} color="#fff" />
-                <Text style={styles.actionText}>{t("common.edit")}</Text>
-              </Pressable>
-              <Pressable testID="budget-delete" onPress={() => setConfirmDel(true)} style={[styles.actionBtn, { backgroundColor: colors.expenseRed + "1A" }]}>
-                <Ionicons name="trash-outline" size={us(18)} color={colors.expenseRed} />
-                <Text style={[styles.actionText, { color: colors.expenseRed }]}>{t("common.delete")}</Text>
-              </Pressable>
-            </View>
           </>
         )}
       </ElasticScrollView>
 
       <ConfirmSheet
         visible={confirmDel}
-        onClose={() => setConfirmDel(false)}
+        onClose={() => { if (!deleting) setConfirmDel(false); }}
+        busy={deleting}
         icon="trash-outline"
         accent={colors.expenseRed}
         title={t("budgets.deleteTitle")}
@@ -207,6 +206,4 @@ const useStyles = makeStyles((colors) => ({
   txBorder: { borderBottomWidth: 1, borderBottomColor: colors.divider },
   txName: { fontSize: 14, fontWeight: "700", color: colors.onSurface, marginBottom: 2 },
   txAmt: { fontSize: 14, fontWeight: "800" },
-  actionBtn: { flex: 1, flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: radius.pill },
-  actionText: { color: "#fff", fontWeight: "800", fontSize: 14.5 },
 }));

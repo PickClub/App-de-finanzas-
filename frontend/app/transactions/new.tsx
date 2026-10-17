@@ -1,9 +1,11 @@
+import { Alert } from "@/src/components/interaction-system";
 import { localizedError } from "@/src/i18n/errors";
 import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, ScrollView, KeyboardAvoidingView, Platform, Alert, Keyboard } from "react-native";
+import { View, ScrollView, KeyboardAvoidingView, Platform, Keyboard } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -311,10 +313,8 @@ export default function NewTransaction() {
     return (
       <View style={{ flex: 1, backgroundColor: pal.bg }}>
         <View style={[styles.header, { paddingTop: insets.top + us(8) }]}>
-          <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={us(24)} color={pal.onSurface} />
-          </Pressable>
-          <Text style={styles.title}>{tr(params.id ? "ui.edit_transaction" : "ui.new_transaction")}</Text>
+          <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{tr(params.id ? "ui.edit_transaction" : "ui.new_transaction")}</Text>
+          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="back-btn" />
         </View>
         <Text testID="transaction-source-state" style={{ color: colors.muted, textAlign: "center", marginTop: us(40) }}>
           {missing || deletion.deleted.current ? tr("ui.transaction_not_found") : sourceQ.isError
@@ -334,7 +334,6 @@ export default function NewTransaction() {
   const selAcc = accounts.find((a: any) => a.id === accountId);
   const selToAcc = accounts.find((a: any) => a.id === toAccountId);
   const selCat = cats.find((c: any) => c.id === categoryId);
-  const activeColor = typeColor(pal, type);
   const pending = acc !== null && op;
   const display = pending ? `${numStr(acc as number)} ${op} ${amount}` : amount || "0.00";
   const hint = calcError
@@ -393,15 +392,21 @@ export default function NewTransaction() {
       style={{ flex: 1, backgroundColor: pal.bg }}
     >
       <View style={[styles.header, { paddingTop: insets.top + us(8) }]}>
-        <Pressable testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={us(24)} color={pal.onSurface} />
-        </Pressable>
-        <Text style={styles.title}>{tr(params.id ? "ui.edit_transaction" : "ui.new_transaction")}</Text>
-        {params.id && (
-          <Pressable testID="delete-tx" disabled={deletion.busy} onPress={() => { if (!deletion.locked.current) setConfirmDel(true); }} style={styles.backBtn}>
+        <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{tr(params.id ? "ui.edit_transaction" : "ui.new_transaction")}</Text>
+        <MoneyFlowHeaderActions
+          onBack={() => router.back()}
+          onSave={save}
+          saving={saving}
+          saveDisabled={deletion.busy}
+          backTestID="back-btn"
+          saveTestID="save-tx"
+          saveAccessibilityLabel={tr("headerActions.saveTransaction")}
+          beforeActions={params.id && (
+          <Pressable testID="delete-tx" disabled={deletion.busy} onPress={() => { if (!deletion.locked.current) setConfirmDel(true); }} style={styles.backBtn} accessibilityRole="button" accessibilityLabel={tr("ui.delete")}>
             <Ionicons name="trash-outline" size={us(22)} color={pal.expenseRed} />
           </Pressable>
-        )}
+          )}
+        />
       </View>
 
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
@@ -530,17 +535,6 @@ export default function NewTransaction() {
         </View>
       </ElasticScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + us(12) }]}>
-        <Pressable
-          testID="save-tx"
-          onPress={save}
-          disabled={saving}
-          style={({ pressed }) => [styles.saveBtn, { backgroundColor: activeColor }, (pressed || saving) && { opacity: 0.85 }]}
-        >
-          <Text style={styles.saveText}>{saving ? tr("ui.saving") : tr("ui.save")}</Text>
-        </Pressable>
-      </View>
-
       <AppSheet visible={picker !== null} onClose={() => setPicker(null)} testID="picker-sheet">
         <Text style={styles.sheetTitle}>{pickerTitle}</Text>
         <ScrollView style={{ maxHeight: us(380) }} contentContainerStyle={{ paddingHorizontal: us(spacing.lg), gap: us(8) }}>
@@ -631,9 +625,7 @@ const useStyles = makeStyles((colors, scheme) => {
       backgroundColor: p.card, borderWidth: 1, borderColor: p.border,
     },
     calcKeyText: { fontSize: 22, fontWeight: "700", color: p.onSurface },
-    footer: { paddingHorizontal: spacing.lg, paddingTop: 10, backgroundColor: p.bg },
     saveBtn: { padding: 16, borderRadius: radius.pill, alignItems: "center" },
-    saveText: { color: "#fff", fontWeight: "800", fontSize: 16 },
     sheetTitle: { fontSize: 16, fontWeight: "800", color: p.onSurface, paddingHorizontal: spacing.lg, marginBottom: 12, marginTop: 4 },
     sheetEmpty: { fontSize: 13, color: p.muted, paddingVertical: 12 },
     sheetRow: {

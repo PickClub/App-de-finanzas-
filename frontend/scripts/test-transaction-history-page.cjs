@@ -1,4 +1,4 @@
-const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
+const {localeGlobals,localeMocks,normalizeUI,headerActionNodes}=require('./i18n-test-support.cjs');
 // Actual screen + React Query, synthetic API only: no Expo server or database.
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const vm = require('node:vm'), cp = require('node:child_process'), ts = require('typescript');
@@ -12,7 +12,7 @@ function compile(file) {
   return out.outputText;
 }
 const find = (tree,id) => !tree || typeof tree !== 'object' ? null : tree.props?.testID === id ? tree
-  : (tree.children || []).flat(Infinity).map(x => find(x,id)).find(Boolean);
+  : [...(tree.children || []), ...(tree.props?.children ? [tree.props.children] : []), ...headerActionNodes(tree)].flat(Infinity).map(x => find(x,id)).find(Boolean);
 const text = tree => typeof tree === 'string' ? tree : (tree?.children || []).flat(Infinity).map(text).join(' ');
 const plain = value => JSON.parse(JSON.stringify(value));
 const apiExports = {};

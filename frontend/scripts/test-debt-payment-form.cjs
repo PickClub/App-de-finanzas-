@@ -1,6 +1,7 @@
 // Real form, presentation and legacy coordinator; synthetic storage/server only.
 const assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm'), ts = require('typescript');
 const { createInstance } = require('i18next');
+const { headerActionNodes } = require('./i18n-test-support.cjs');
 const { QueryClient } = require('@tanstack/react-query');
 const engine = createInstance();
 engine.init({ lng: 'en-US', fallbackLng: 'en-US', initImmediate: false, resources: { 'en-US': { translation: require('../src/i18n/locales/en.json') }, es: { translation: require('../src/i18n/locales/es.json') } } });
@@ -12,7 +13,7 @@ const pending = load('frontend/src/debt-payments/pending.ts', { '@react-native-a
 const v2 = load('frontend/src/debt-payments/flow-v2.ts', { '../api': { ApiError }, './journal-v2': journal });
 const presentation = load('frontend/src/debt-payments/view.ts', { '@/src/i18n': { tr: engine.t.bind(engine) } });
 const tick = () => new Promise(setImmediate);
-const all = n => !n || typeof n !== 'object' ? [] : [n, ...[n.props?.children].flat(Infinity).flatMap(all)];
+const all = n => !n || typeof n !== 'object' ? [] : [n, ...[n.props?.children, ...headerActionNodes(n)].flat(Infinity).flatMap(all)];
 function fixture(version = 1) {
   let id = 'A', key = 0, cursor = 0, mountedKey;
   let cells = [], effects = [], deps = [], cleanups = [];
@@ -50,6 +51,8 @@ function fixture(version = 1) {
     'react-native': { View: 'View', ScrollView: 'Scroll', KeyboardAvoidingView: 'Keyboard', ActivityIndicator: 'Loading', Platform: { OS: 'android', select: v => v.default }, Alert: { alert: (...v) => alerts.push(v) } },
     '@/src/i18n': { tr: engine.t.bind(engine), useTranslation: () => ({ t: engine.t.bind(engine) }) }, '@/src/i18n/errors': { localizedError: e => e },
     '@/src/components/elastic-scroll-view': { ElasticScrollView: 'Scroll' }, '@/src/native-scroll': { NATIVE_VERTICAL_SCROLL: {} },
+    '@/src/components/interaction-system': { Alert: { alert: (...values) => alerts.push(values) } },
+    '@/src/components/header-actions': { MoneyFlowHeaderActions: 'MoneyFlowHeaderActions' },
     '@/src/components/pressable': { Pressable: 'Pressable' }, '@/src/components/typography': { Text: 'Text', TextInput: 'Input' },
     '@react-native-vector-icons/ionicons': { default: 'Icon' }, 'expo-router': { useLocalSearchParams: () => ({ id }), useRouter: () => ({ back() {}, push: route => routes.push(route), dismissTo: route => routes.push(route) }) },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },

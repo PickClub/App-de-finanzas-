@@ -4,11 +4,12 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
 const { createInstance } = require('i18next');
+const { headerActionNodes } = require('./i18n-test-support.cjs');
 const i18n = createInstance();
 i18n.init({ lng: 'en-US', fallbackLng: 'en-US', initImmediate: false, resources: {
   'en-US': { translation: require('../src/i18n/locales/en.json') }, es: { translation: require('../src/i18n/locales/es.json') },
 } });
-const nodes = n => !n || typeof n !== 'object' ? [] : [n, ...[n.props?.children].flat(Infinity).flatMap(nodes)];
+const nodes = n => !n || typeof n !== 'object' ? [] : [n, ...[n.props?.children, ...headerActionNodes(n)].flat(Infinity).flatMap(nodes)];
 function fixture(options = {}) {
   let cursor = 0;
   const cells = [], calls = [], alerts = [];
@@ -18,6 +19,8 @@ function fixture(options = {}) {
   const mocks = {
     react, 'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
     'react-native': { View: 'View', useWindowDimensions: () => ({ width: state.width ?? 393, fontScale: state.fontScale ?? 1 }), Alert: { alert: (...args) => alerts.push(args) } },
+    '@/src/components/interaction-system': { Alert: { alert: (...args) => alerts.push(args) } },
+    '@/src/components/header-actions': { MoneyFlowHeaderActions: 'MoneyFlowHeaderActions' },
     '@/src/i18n': { useTranslation: () => ({ t: i18n.t.bind(i18n) }), useLang: () => ({ lang: state.lang, setLang: async lang => { calls.push(['language', lang]); state.lang = lang; await i18n.changeLanguage(lang); } }) },
     '@/src/i18n/errors': { localizedError: value => value },
     '@/src/components/elastic-scroll-view': { ElasticScrollView: 'Scroll' }, '@/src/native-scroll': { NATIVE_VERTICAL_SCROLL: {} },

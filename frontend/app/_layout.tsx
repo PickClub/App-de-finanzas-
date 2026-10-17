@@ -15,6 +15,7 @@ import { ErrorBoundary } from "@/src/components/error-boundary";
 import { queryClient } from "@/src/query-client";
 import { ThemeProvider, useTheme } from "@/src/theme";
 import { LockProvider } from "@/src/lock";
+import { InteractionProvider } from "@/src/components/interaction-system";
 import { LanguageProvider } from "@/src/i18n";
 import { FONT_FILES } from "@/src/components/typography";
 
@@ -54,6 +55,7 @@ function ThemedApp() {
         <QueryClientProvider client={queryClient}>
           <BottomSheetModalProvider>
             <LockProvider>
+              <InteractionProvider>
               <StatusBar barStyle={scheme === "dark" ? "light-content" : "dark-content"} backgroundColor={colors.pageBackground} />
               <Stack
                 screenOptions={{
@@ -68,6 +70,7 @@ function ThemedApp() {
                   fullScreenGestureEnabled: false,
                 }}
               />
+              </InteractionProvider>
             </LockProvider>
           </BottomSheetModalProvider>
         </QueryClientProvider>

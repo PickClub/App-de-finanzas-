@@ -1,5 +1,6 @@
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useEffect, useState } from "react";
 import { View, ScrollView, Platform } from "react-native";
 import Svg, { Path } from "react-native-svg";
@@ -59,14 +60,10 @@ export default function Accounts() {
       contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40) }}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
-          <Ionicons name="chevron-back" size={us(24)} color={pal.ink} />
-        </Pressable>
-        <Text style={[styles.title, { color: pal.dark ? colors.onSurface : pal.ink }]} numberOfLines={1}>{t("accounts.title")}</Text>
-        <View pointerEvents="none" style={{ width: us(46), height: us(46) }} />
-        <Pressable testID="add-account" onPress={() => router.push("/accounts/new")} style={[styles.circleBtn, styles.addBtn, { backgroundColor: pal.dark ? pal.forest : pal.ink, borderColor: "transparent" }, shadow]}>
+        <Text style={[styles.title, { color: pal.dark ? colors.onSurface : pal.ink, flex: 1 }]} numberOfLines={1}>{t("accounts.title")}</Text>
+        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="accounts-back" beforeActions={<Pressable testID="add-account" onPress={() => router.push("/accounts/new")} style={[styles.circleBtn, styles.addBtn, { backgroundColor: pal.dark ? pal.forest : pal.ink, borderColor: "transparent" }, shadow]} accessibilityRole="button" accessibilityLabel={t("common.add")}>
           <Ionicons name="add" size={us(26)} color={pal.dark ? colors.onSuccess : "#fff"} />
-        </Pressable>
+        </Pressable>} />
       </View>
 
       <View style={[styles.totalCard, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>

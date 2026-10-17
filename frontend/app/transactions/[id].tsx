@@ -3,8 +3,10 @@ import i18n, { localeTag, tr, useTranslation as useInterfaceLanguage } from "@/s
 
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useMemo, useState } from "react";
-import { View, ScrollView, StyleSheet, Alert } from "react-native";
+import { View, ScrollView, StyleSheet } from "react-native";
+import { Alert, ContextActionsTrigger } from "@/src/components/interaction-system";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -93,7 +95,6 @@ export default function TransactionDetail() {
   const account = useMemo(() => (accQ.data || []).find((a: any) => a.id === tx?.account_id), [accQ.data, tx]);
 
   // Sheets
-  const [moreOpen, setMoreOpen] = useState(false);
   const [confirmEdit, setConfirmEdit] = useState(false);
   const [confirmDup, setConfirmDup] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -130,11 +131,8 @@ export default function TransactionDetail() {
     return (
       <View style={[styles.screen, { paddingTop: insets.top + us(8) }]}>
         <View style={styles.header}>
-          <Pressable testID="back-btn" onPress={() => router.back()} style={styles.circleBtn}>
-            <Ionicons name="chevron-back" size={us(22)} color={colors.onSurface} />
-          </Pressable>
-          <Text style={styles.headerTitle}>{tr("ui.transaction_detail")}</Text>
-          <View style={styles.circleBtn} />
+          <Text style={[styles.headerTitle, { flex: 1 }]}>{tr("ui.transaction_detail")}</Text>
+          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="back-btn" />
         </View>
         <Text style={{ color: colors.muted, textAlign: "center", marginTop: us(40) }}>
           {txQ.isLoading ? tr("ui.loading") : missing || !params.id || deletion.deleted.current
@@ -198,8 +196,7 @@ export default function TransactionDetail() {
     if (deletion.locked.current) return;
     setPickedCat(tx.category_id);
     setCatSearch("");
-    setMoreOpen(false);
-    setTimeout(() => setCatOpen(true), 180);
+    setCatOpen(true);
   };
 
   // After confirming "Continuar", open the compact recurring config sheet.
@@ -254,30 +251,19 @@ export default function TransactionDetail() {
   };
 
   const menu = [
-    { key: "edit", icon: "create-outline", get label() { return tr("ui.edit_transaction"); }, tint: colors.brandSecondary, onPress: () => afterMenu(() => setConfirmEdit(true)) },
-    { key: "dup", icon: "copy-outline", get label() { return tr("ui.duplicate_transaction"); }, tint: colors.accountsBlue, onPress: () => afterMenu(() => setConfirmDup(true)) },
-    { key: "recur", icon: "sync-outline", get label() { return tr("ui.make_recurring"); }, tint: colors.incomeGreen, onPress: () => afterMenu(() => setConfirmRecur(true)) },
-    { key: "receipt", icon: "attach-outline", get label() { return tr("ui.add_receipt"); }, tint: colors.statsPurple, onPress: () => afterMenu(() => setSoon({ get title() { return tr("ui.add_receipt"); }, get desc() { return tr("ui.receipt_uploads_will_be_available_soon"); }, icon: "attach-outline", accent: colors.statsPurple })) },
-    { key: "category", icon: "pricetag-outline", get label() { return tr("ui.change_category"); }, tint: colors.brandSecondary, onPress: openCategorySheet },
+    { id: "edit", icon: "create-outline", label: tr("ui.edit_transaction"), onPress: () => { if (!deletion.locked.current) setConfirmEdit(true); } },
+    { id: "dup", icon: "copy-outline", label: tr("ui.duplicate_transaction"), onPress: () => { if (!deletion.locked.current) setConfirmDup(true); } },
+    { id: "recur", icon: "sync-outline", label: tr("ui.make_recurring"), onPress: () => { if (!deletion.locked.current) setConfirmRecur(true); } },
+    { id: "category", icon: "pricetag-outline", label: tr("ui.change_category"), onPress: openCategorySheet },
+    { id: "delete", icon: "trash-outline", label: tr("ui.delete_transaction"), destructive: true, onPress: () => { if (!deletion.locked.current) setConfirmDel(true); } },
   ];
-
-  function afterMenu(fn: () => void) {
-    if (deletion.locked.current) return;
-    setMoreOpen(false);
-    setTimeout(() => { if (!deletion.locked.current) fn(); }, 180);
-  }
 
   return (
     <View pointerEvents={deletion.busy ? "none" : "auto"} style={[styles.screen, { paddingTop: insets.top + us(8) }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable testID="back-btn" onPress={() => router.back()} style={styles.circleBtn}>
-          <Ionicons name="chevron-back" size={us(22)} color={colors.onSurface} />
-        </Pressable>
-        <Text style={styles.headerTitle}>{tr("ui.transaction_detail")}</Text>
-        <Pressable testID="more-btn" onPress={() => setMoreOpen(true)} style={styles.circleBtn}>
-          <Ionicons name="ellipsis-horizontal" size={us(20)} color={colors.onSurface} />
-        </Pressable>
+        <Text style={[styles.headerTitle, { flex: 1 }]}>{tr("ui.transaction_detail")}</Text>
+        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="back-btn" beforeActions={<ContextActionsTrigger testID="more-btn" actions={menu} disabled={deletion.busy} style={styles.circleBtn} iconColor={colors.onSurface} iconSize={us(20)} />} />
       </View>
 
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} contentContainerStyle={{ padding: us(spacing.lg), paddingBottom: insets.bottom + us(40) }}>
@@ -356,33 +342,6 @@ export default function TransactionDetail() {
         </View>
       </ElasticScrollView>
 
-      {/* ===== Más opciones menu ===== */}
-      <AppSheet visible={moreOpen} onClose={() => setMoreOpen(false)} testID="more-sheet">
-        <Text style={styles.sheetTitle}>{tr("ui.more_options")}</Text>
-        <View style={{ marginTop: us(6) }}>
-          {menu.map((m) => (
-            <Pressable key={m.key} testID={`menu-${m.key}`} onPress={m.onPress} style={styles.menuRow}>
-              <View style={[styles.menuIcon, { backgroundColor: m.tint + "1A" }]}>
-                <Ionicons name={m.icon as any} size={us(19)} color={m.tint} />
-              </View>
-              <Text style={styles.menuLabel}>{m.label}</Text>
-              <Ionicons name="chevron-forward" size={us(17)} color={colors.muted} />
-            </Pressable>
-          ))}
-          <View style={styles.menuSeparator} />
-          <Pressable testID="menu-delete" onPress={() => afterMenu(() => setConfirmDel(true))} style={styles.menuRow}>
-            <View style={[styles.menuIcon, { backgroundColor: colors.expenseRed + "1A" }]}>
-              <Ionicons name="trash-outline" size={us(19)} color={colors.expenseRed} />
-            </View>
-            <Text style={[styles.menuLabel, { color: colors.expenseRed }]}>{tr("ui.delete_transaction")}</Text>
-            <Ionicons name="chevron-forward" size={us(17)} color={colors.expenseRed + "99"} />
-          </Pressable>
-        </View>
-        <Pressable onPress={() => setMoreOpen(false)} style={[styles.cancelRow, { backgroundColor: colors.surfaceTertiary }]}>
-          <Text style={styles.cancelRowText}>{tr("ui.cancel")}</Text>
-        </Pressable>
-      </AppSheet>
-
       {/* ===== Confirmations ===== */}
       <ConfirmSheet
         visible={confirmEdit}
@@ -416,6 +375,7 @@ export default function TransactionDetail() {
         description={tr("ui.this_permanently_deletes_the_transaction_and_may_affect_your_balances_and_reports")}
         confirmLabel={tr("ui.delete")}
         confirmTestID="confirm-delete"
+        busy={deletion.busy}
         onConfirm={doDelete}
       />
       {soon && (
@@ -675,15 +635,6 @@ const useStyles = makeStyles((colors) => ({
   },
   noteIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", marginRight: 10 },
   noteText: { flex: 1, fontSize: 12.5, color: colors.onSurface, lineHeight: 17 },
-
-  // Sheet menu
-  sheetTitle: { fontSize: 17, fontWeight: "800", color: colors.onSurface, marginBottom: 4 },
-  menuRow: { flexDirection: "row", alignItems: "center", paddingVertical: 11 },
-  menuIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center", marginRight: 14 },
-  menuLabel: { flex: 1, fontSize: 15, fontWeight: "700", color: colors.onSurface },
-  menuSeparator: { height: 1, backgroundColor: colors.divider, marginVertical: 6 },
-  cancelRow: { marginTop: 12, paddingVertical: 15, borderRadius: radius.pill, alignItems: "center" },
-  cancelRowText: { fontWeight: "800", fontSize: 15.5, color: colors.onSurface },
 
   // Category sheet
   confirmIconSm: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", marginBottom: 10 },

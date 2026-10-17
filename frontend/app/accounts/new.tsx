@@ -2,8 +2,10 @@ import { localizedError } from "@/src/i18n/errors";
 import { tr, useTranslation } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useEffect, useState } from "react";
-import { View, ScrollView, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import { View, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
+import { Alert, ContextActionsTrigger, MoneyFlowConfirmDialog } from "@/src/components/interaction-system";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -65,6 +67,7 @@ export default function AccountForm() {
   const styles = useStyles();
   const pal = formPalette(colors, scheme);
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const savingRef = React.useRef(false);
   const params = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
@@ -143,15 +146,20 @@ export default function AccountForm() {
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: pal.bg }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
     <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} pointerEvents={deletion.busy ? "none" : "auto"} keyboardShouldPersistTaps="handled" style={{ flex: 1, backgroundColor: pal.bg }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(32), paddingHorizontal: us(spacing.lg) }}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
-          <Ionicons name="chevron-back" size={us(24)} color={pal.forest} />
-        </Pressable>
-        <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest }]} numberOfLines={1}>{params.id ? t("accounts.editAccount") : t("accounts.newAccount")}</Text>
-        {params.id && (
-          <Pressable onPress={remove} disabled={deletion.busy} style={[styles.backBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
-            <Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} />
-          </Pressable>
-        )}
+        <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest, flex: 1 }]} numberOfLines={1}>{params.id ? t("accounts.editAccount") : t("accounts.newAccount")}</Text>
+        <MoneyFlowHeaderActions
+          onBack={() => router.back()}
+          onSave={save}
+          saving={saving}
+          saveDisabled={deletion.busy}
+          backTestID="account-form-back"
+          saveTestID="save-account"
+          saveAccessibilityLabel={t("headerActions.saveAccount")}
+          beforeActions={params.id && <ContextActionsTrigger testID="account-form-options" disabled={deletion.busy} style={[styles.backBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]} iconColor={pal.forest} iconSize={us(22)} actions={[
+            { id: "delete", label: tr("ui.delete"), icon: "trash-outline", destructive: true, onPress: () => setConfirmDelete(true) },
+          ]} />}
+          style={{ gap: us(6) }}
+        />
       </View>
 
       {/* Nombre de la cuenta */}
@@ -227,10 +235,10 @@ export default function AccountForm() {
         </View>
       </View>
 
-      <Pressable testID="save-account" onPress={save} disabled={saving} style={[styles.saveBtn, { backgroundColor: scheme === "dark" ? pal.forest : colors.primaryAction, opacity: saving ? 0.7 : 1 }, shadow]}>
-        <Text style={[styles.saveText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{tr("ui.save_account")}</Text>
-      </Pressable>
     </ElasticScrollView>
+    <MoneyFlowConfirmDialog visible={confirmDelete} onClose={() => setConfirmDelete(false)} icon="trash-outline" destructive
+      title={t("accounts.deleteConfirmTitle")} description={t("accounts.deleteConfirmDesc")} confirmLabel={tr("ui.delete")}
+      confirmTestID="account-confirm-delete" busy={deletion.busy} onConfirm={async () => { await remove(); setConfirmDelete(false); }} />
     </KeyboardAvoidingView>
   );
 }
@@ -260,6 +268,4 @@ const useStyles = makeStyles(() => ({
   swatches: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   swatchRing: { width: 48, height: 48, borderRadius: 24, borderWidth: 3, alignItems: "center", justifyContent: "center" },
   swatch: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
-  saveBtn: { marginTop: 8, marginHorizontal: 4, minHeight: 56, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-  saveText: { fontWeight: "800", fontSize: 17 },
 }));

@@ -29,13 +29,13 @@ function render(language, mode, dark = false, editing = null, previewNote = null
   const events = [];
   const context = {
     React: { createElement: (type, props, ...children) => ({ type, props: props || {}, children }) },
-    View: 'View', Text: 'Text', TextInput: 'Input', NoteItemInput:'ItemInput', Pressable: 'Pressable', Modal: 'Modal', ScrollView: 'Scroll', KeyboardAvoidingView: 'Keyboard', Ionicons: 'Icon', OrderedGlyph: 'OrderedGlyph', ColorSwatch: 'ColorSwatch',
+    View: 'View', Text: 'Text', TextInput: 'Input', NoteItemInput:'ItemInput', Pressable: 'Pressable', ContextActionsTrigger: 'ContextActionsTrigger', Modal: 'Modal', ScrollView: 'Scroll', KeyboardAvoidingView: 'Keyboard', Ionicons: 'Icon', OrderedGlyph: 'OrderedGlyph', ColorSwatch: 'ColorSwatch',
     makeStyles: factory => factory, us: x => x, ufs: x => x,
     radius: { md: 12, pill: 99, cardLg: 24, lg: 20 }, spacing: { lg: 20, sm: 8, xl: 24, xxl: 32 },
     colors: new Proxy({}, { get: () => '#176F78' }), scheme: dark ? 'dark' : 'light', isDark: dark,
     previewNote, parseListItems: (content, mode) => content.split('\n').map(line => ({text:line.replace(/^\[( |x)\] /,''),checked:mode==='check'&&line.startsWith('[x] ')})),
     formatDateTime: () => engine.language==='es'?'15 de enero de 2026':'January 15, 2026',
-    setPreviewNote: value => events.push(['preview',value]), openEditor: value => events.push(['edit',value]), requestPreviewDelete: () => events.push(['confirmDelete']),
+    setPreviewNote: value => events.push(['preview',value]), openEditor: value => events.push(['edit',value]), requestPreviewDelete: () => events.push(['confirmDelete']), togglePin: id => events.push(['togglePin',id]),
     tr: (key, options) => engine.t(key, options), editorOpen: true, editing, editorFontsReady: true, deleteBusy: false, confirmDelete: false,
     insets: { top: 24, bottom: 24 }, Platform: { OS: 'android' },
     draftTitle: 'Custom title ñ', draftContent: 'User body\nunchanged', draftListMode: mode,
@@ -126,9 +126,11 @@ for(const lang of ['en-US','es']) for(const dark of [false,true]) for(const mode
     const check=f.find('notes-preview-check-1');assert.equal(check.props.accessibilityRole,'checkbox');assert.equal(check.props.accessibilityState.checked,true);
     check.props.onPress();assert.deepEqual(f.events.pop(),['toggleCheck',1]);
   }
-  for(const id of ['notes-preview-close','notes-preview-edit','notes-preview-delete'])assert(f.find(id).props.accessibilityLabel);
+  for(const id of ['notes-preview-close','notes-preview-actions'])assert(f.find(id).props.accessibilityLabel);
   f.find('notes-preview-backdrop').props.onPress();assert.deepEqual(f.events.pop(),['preview',null]);
-  f.find('notes-preview-delete').props.onPress();assert.deepEqual(f.events.pop(),['confirmDelete']);
-  f.find('notes-preview-edit').props.onPress();assert.deepEqual(f.events.pop(),['edit',note]);assert.deepEqual(f.events.pop(),['preview',null]);
+  const actions=f.find('notes-preview-actions').props.actions;assert.equal(JSON.stringify(actions.map(action=>action.id)),JSON.stringify(['edit','pin','delete']));
+  actions.find(action=>action.id==='delete').onPress();assert.deepEqual(f.events.pop(),['confirmDelete']);
+  actions.find(action=>action.id==='pin').onPress();assert.deepEqual(f.events.pop(),['togglePin',note.id]);
+  actions.find(action=>action.id==='edit').onPress();assert.deepEqual(f.events.pop(),['edit',note]);assert.deepEqual(f.events.pop(),['preview',null]);
 }
-console.log('PASS: 12 preview variants with body text read-only and interactive checkboxes render complete long legacy text/75 checklist rows in both languages/themes, fixed title/date/actions outside body scroll, localized accessible actions and safe event wiring.');
+console.log('PASS: 12 preview variants with body text read-only and interactive checkboxes render complete long legacy text/75 checklist rows in both languages/themes, fixed title/date, a localized shared actions trigger and safe event wiring.');

@@ -230,7 +230,7 @@ async function main() {
       }visit(ast);return result;
     };
     const before=styleEntries(old),after=styleEntries(source);
-    const editorChanges=new Set(['toolsRow','toolBtn','sheetActions']);
+    const editorChanges=new Set(['toolsRow','toolBtn','sheetActions','sheetHandle','menuBackdrop','menuSheet','menuItem','menuItemText']);
     for(const key of Object.keys(before))if(!editorChanges.has(key))assert.equal(after[key],before[key],`Unrelated style changed: ${key}`);
   }
   console.log('PASS: TSX syntax; editor input/close guards; unchanged non-editor style definitions.');

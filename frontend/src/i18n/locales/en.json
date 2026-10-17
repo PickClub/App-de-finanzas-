@@ -18,6 +18,17 @@
     "error": "Error",
     "unknown": "Unknown"
   },
+  "headerActions": {
+    "saveChanges": "Save changes",
+    "saveAccount": "Save account",
+    "saveTransaction": "Save transaction",
+    "saveDebt": "Save debt",
+    "saveBudget": "Save budget",
+    "saveGoal": "Save savings goal",
+    "saveBill": "Save invoice",
+    "saveCategory": "Save category",
+    "saveRecurringPayment": "Save recurring payment"
+  },
   "tabs": {
     "accounts": "Accounts",
     "ai": "AI",
@@ -344,7 +355,9 @@
     "type": "Type",
     "expense": "Expense",
     "income": "Income",
-    "empty": "You don't have any categories yet"
+    "empty": "You don't have any categories yet",
+    "deleteTitle": "Delete this category?",
+    "deleteDescription": "Only this category will be removed. If it is in use, MoneyFlow will keep it and explain why."
   },
   "budgets": {
     "title": "Budgets",

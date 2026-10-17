@@ -10,7 +10,13 @@ function visit(n){
   if(ts.isVariableDeclaration(n)&&['save','remove'].includes(n.name.getText(tree)))functions[n.name.getText(tree)]=n.initializer.getText(tree);
   if(ts.isJsxOpeningElement(n)||ts.isJsxSelfClosingElement(n)){
     const a=n.attributes.properties;
-    if(a.some(p=>p.name?.getText(tree)==='testID'&&p.initializer?.text==='save-category'))disabled=a.find(p=>p.name?.getText(tree)==='disabled')?.initializer?.expression?.getText(tree);
+    const saveId=a.find(p=>p.name?.getText(tree)==='saveTestID');
+    if((a.some(p=>p.name?.getText(tree)==='testID'&&p.initializer?.text==='save-category'))||(saveId?.initializer?.text==='save-category')){
+      const direct=a.find(p=>p.name?.getText(tree)==='disabled')?.initializer?.expression?.getText(tree);
+      const headerDisabled=a.find(p=>p.name?.getText(tree)==='saveDisabled')?.initializer?.expression?.getText(tree);
+      const savingProp=a.find(p=>p.name?.getText(tree)==='saving')?.initializer?.expression?.getText(tree);
+      disabled=direct||[headerDisabled,savingProp].filter(Boolean).join(' || ')||undefined;
+    }
   }
   ts.forEachChild(n,visit);
 }visit(tree);assert(functions.save&&functions.remove);
@@ -96,7 +102,8 @@ async function main(){
   console.log('PASS: confirmed save plus refresh error is not reported as a failed POST; no duplicate retry or navigation after unmount.');
 
   const base=cp.execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),marker='const useStyles =';
-  assert.equal(normalizeHomeColors(source.slice(source.indexOf(marker))),normalizeHomeColors(base.slice(base.indexOf(marker))));
+  const withoutRemovedSaveButton=styles=>normalizeHomeColors(styles).replace(/^  (?:saveBtn|saveText): \{[^\n]*\},?\n/gm,'');
+  assert.equal(withoutRemovedSaveButton(source.slice(source.indexOf(marker))),withoutRemovedSaveButton(base.slice(base.indexOf(marker))));
   assert(source.includes('editable={!saving && !deletion.busy}'));
   assert(source.includes('pointerEvents={deletion.busy || saving ? "none" : "auto"}'));
   const compiled=ts.transpileModule(source,{fileName:file,reportDiagnostics:true,compilerOptions:{jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2020}});

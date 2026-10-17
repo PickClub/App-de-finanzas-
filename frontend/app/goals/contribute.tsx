@@ -2,6 +2,7 @@ import { localizedError } from "@/src/i18n/errors";
 import { tr, useTranslation } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Switch } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -119,10 +120,8 @@ export default function GoalContribution() {
           contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
-            <Pressable testID="contrib-back" onPress={() => router.back()} style={styles.backBtn}>
-              <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-            </Pressable>
-            <Text style={styles.title}>{isDeposit ? t("goals.addSaving") : t("goals.withdraw")}</Text>
+            <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{isDeposit ? t("goals.addSaving") : t("goals.withdraw")}</Text>
+            <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="contrib-back" />
           </View>
 
           {goalQ.isLoading ? (

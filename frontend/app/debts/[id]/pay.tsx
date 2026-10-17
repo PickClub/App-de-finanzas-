@@ -1,9 +1,11 @@
+import { Alert } from "@/src/components/interaction-system";
 import { localizedError } from "@/src/i18n/errors";
 import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useEffect, useRef, useState } from "react";
-import { View, ScrollView, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
+import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -110,10 +112,8 @@ function PayDebtForm({ debtId }: { debtId: string | undefined }) {
     <View style={{ flex: 1, backgroundColor: pal.bg }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
         <View style={styles.headerRow}>
-          <Pressable testID="debt-pay-back" onPress={() => router.back()} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, pal.dark ? null : styles.softShadow]}>
-            <Ionicons name="chevron-back" size={us(24)} color={pal.forest} />
-          </Pressable>
-          <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest }]}>{tr("ui.debt_payment")}</Text>
+          <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest, flex: 1 }]}>{tr("ui.debt_payment")}</Text>
+          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="debt-pay-back" />
         </View>
         {resourceState === "loading" ? <ActivityIndicator testID="debt-pay-loading" color={pal.forest} /> : (
           <View style={[styles.card, { backgroundColor: pal.card, borderColor: pal.border }]} testID="debt-pay-query-error">
@@ -244,10 +244,8 @@ function PayDebtForm({ debtId }: { debtId: string | undefined }) {
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, backgroundColor: pal.bg }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
         <View style={styles.headerRow}>
-          <Pressable onPress={() => router.back()} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
-            <Ionicons name="chevron-back" size={us(24)} color={pal.forest} />
-          </Pressable>
-          <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest }]}>{view.title}</Text>
+          <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest, flex: 1 }]}>{view.title}</Text>
+          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="debt-pay-back" />
         </View>
 
         {/* Deuda */}

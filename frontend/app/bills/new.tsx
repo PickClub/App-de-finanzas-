@@ -2,6 +2,7 @@ import { localizedError } from "@/src/i18n/errors";
 import { tr, useTranslation } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -124,10 +125,8 @@ export default function BillForm() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(24), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
-            <Pressable testID="bill-form-back" onPress={() => router.back()} style={styles.backBtn}>
-              <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-            </Pressable>
-            <Text style={[styles.title, mont()]}>{editing ? t("bills.editBill") : t("bills.newBill")}</Text>
+            <Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1}>{editing ? t("bills.editBill") : t("bills.newBill")}</Text>
+            <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="bill-form-back" onSave={save} saving={saving} saveTestID="save-bill" saveAccessibilityLabel={t("headerActions.saveBill")} />
           </View>
           {editing && billQ.isLoading ? <ActivityIndicator color={forest} /> : null}
 
@@ -215,12 +214,6 @@ export default function BillForm() {
             </View>
           ) : null}
         </ElasticScrollView>
-        {/* Save button stays reachable above the keyboard / safe area. */}
-        <View style={[styles.footer, { paddingBottom: insets.bottom + us(12) }]}>
-          <Pressable testID="save-bill" onPress={save} disabled={saving} style={({ pressed }) => [styles.saveBtn, (pressed || saving) && { opacity: 0.75 }]}>
-            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{editing ? t("bills.save") : t("bills.create")}</Text>}
-          </Pressable>
-        </View>
       </KeyboardAvoidingView>
 
       <AppSheet visible={sheet !== null} onClose={() => setSheet(null)} testID="bill-form-sheet">
@@ -269,9 +262,6 @@ const useStyles = makeStyles((colors) => ({
   swatch: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   errorBox: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16, padding: 12, borderRadius: radius.lg, backgroundColor: colors.expenseRed + "14" },
   errorText: { flex: 1, color: colors.expenseRed, fontSize: 13, fontWeight: "600" },
-  footer: { paddingHorizontal: spacing.lg, paddingTop: 10, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.divider },
-  saveBtn: { backgroundColor: colors.primaryAction, padding: 16, minHeight: 54, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-  saveText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   sheetTitle: { fontSize: 16, color: colors.onSurface, textAlign: "center", marginTop: 4, marginBottom: 8 },
   sheetRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.divider },
   sheetRowText: { flex: 1, fontSize: 14.5, color: colors.onSurface },

@@ -1,6 +1,7 @@
 import { localizedError } from "@/src/i18n/errors";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useRef, useState } from "react";
 import { verifiedDeletionContext, type Context } from "@/src/obligation-payments/journal";
 import { View, ScrollView, ActivityIndicator } from "react-native";
@@ -15,6 +16,7 @@ import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { formatCurrencyInt, formatDateTime } from "@/src/format";
 import { ConfirmSheet } from "@/src/components/sheets";
+import { ContextActionsTrigger } from "@/src/components/interaction-system";
 import { ProgressBar } from "@/src/components/ProgressBar";
 import { catLabel } from "@/src/category-labels";
 import { FOREST, useMontserrat, safeHex, deepen, longDate, statusColor, invalidateBills } from "@/src/bills/shared";
@@ -91,7 +93,7 @@ export default function BillDetail() {
     return (
       <View style={[styles.center, { backgroundColor: colors.pageBackground, paddingTop: insets.top }]}>
         <Text style={styles.muted}>{t("bills.notFound")}</Text>
-        <Pressable onPress={() => router.back()} style={[styles.secondaryBtn, { marginTop: us(12) }]}><Text style={styles.secondaryText}>{t("common.back", { defaultValue: "Volver" })}</Text></Pressable>
+        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="bill-back" style={{ alignSelf: "flex-end", marginTop: us(12) }} />
       </View>
     );
   }
@@ -114,16 +116,11 @@ export default function BillDetail() {
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}
       >
         <View style={styles.header}>
-          <Pressable testID="bill-back" onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-          </Pressable>
-          <Text style={[styles.title, mont()]} numberOfLines={1}>{t("bills.title")}</Text>
-          <Pressable testID="bill-edit" accessibilityLabel={t("bills.edit")} onPress={() => router.push({ pathname: "/bills/new", params: { id: b.id } } as any)} style={styles.backBtn}>
-            <Ionicons name="create-outline" size={us(20)} color={colors.onSurface} />
-          </Pressable>
-          <Pressable testID="bill-delete" accessibilityLabel={t("bills.delete")} onPress={() => setConfirm("delete")} style={styles.backBtn}>
-            <Ionicons name="trash-outline" size={us(20)} color={colors.expenseRed} />
-          </Pressable>
+          <Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1}>{t("bills.title")}</Text>
+          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="bill-back" beforeActions={<ContextActionsTrigger testID="bill-actions" disabled={busy} style={styles.backBtn} iconSize={us(20)} actions={[
+            { id: "edit", label: t("bills.edit"), icon: "create-outline", onPress: () => router.push({ pathname: "/bills/new", params: { id: b.id } } as any) },
+            { id: "delete", label: t("bills.delete"), icon: "trash-outline", destructive: true, onPress: () => setConfirm("delete") },
+          ]} />} />
         </View>
 
         <View style={[styles.hero, { backgroundColor: base + (isDark ? "1F" : "14") }]}>
@@ -200,9 +197,9 @@ export default function BillDetail() {
                 <Text style={[styles.payAmount, mont()]}>{formatCurrencyInt(p.amount)}</Text>
                 <Text style={styles.small} numberOfLines={1}>{formatDateTime(p.date)}{p.account_name ? ` · ${p.account_name}` : ""}</Text>
               </View>
-              <Pressable testID={`bill-pay-del-${p.id}`} hitSlop={8} onPress={() => setConfirm({ pay: p.id })} style={styles.iconBtn}>
-                <Ionicons name="trash-outline" size={us(17)} color={colors.muted} />
-              </Pressable>
+              <ContextActionsTrigger testID={`bill-pay-actions-${p.id}`} disabled={busy} iconSize={us(17)} actions={[
+                { id: "delete", label: t("bills.deletePayTitle"), icon: "trash-outline", destructive: true, onPress: () => setConfirm({ pay: p.id }) },
+              ]} />
             </View>
           ))}
         </View>
@@ -210,6 +207,7 @@ export default function BillDetail() {
 
       <ConfirmSheet
         visible={confirm !== null}
+        busy={busy}
         onClose={() => setConfirm(null)}
         icon="trash-outline"
         accent={colors.expenseRed}
@@ -257,6 +255,5 @@ const useStyles = makeStyles((colors, scheme) => {
     payRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 },
     payIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
     payAmount: { fontSize: 15, color: colors.onSurface },
-    iconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   };
 });

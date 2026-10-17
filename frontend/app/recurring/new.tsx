@@ -2,6 +2,7 @@ import { localizedError } from "@/src/i18n/errors";
 import { tr, useTranslation } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import { invalidateObligationPayments } from "@/src/obligation-payments/journal";
 import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Switch } from "react-native";
@@ -130,10 +131,8 @@ export default function RecurringForm() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
-            <Pressable testID="rp-form-back" onPress={() => router.back()} style={styles.backBtn}>
-              <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-            </Pressable>
-            <Text style={styles.title}>{editing ? t("rp.editPayment") : t("rp.newPayment")}</Text>
+            <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{editing ? t("rp.editPayment") : t("rp.newPayment")}</Text>
+            <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="rp-form-back" onSave={save} saving={saving} saveTestID="save-rp" saveAccessibilityLabel={t("headerActions.saveRecurringPayment")} />
           </View>
           {editing && rpQ.isLoading ? <ActivityIndicator color={colors.incomeGreen} /> : null}
 
@@ -260,9 +259,6 @@ export default function RecurringForm() {
             </View>
           ) : null}
 
-          <Pressable testID="save-rp" onPress={save} disabled={saving} style={({ pressed }) => [styles.saveBtn, (pressed || saving) && { opacity: 0.75 }]}>
-            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{editing ? t("rp.save") : t("rp.create")}</Text>}
-          </Pressable>
         </ElasticScrollView>
       </KeyboardAvoidingView>
 
@@ -306,8 +302,6 @@ const useStyles = makeStyles((colors) => ({
   swatch: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   errorBox: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16, padding: 12, borderRadius: radius.lg, backgroundColor: colors.expenseRed + "14" },
   errorText: { flex: 1, color: colors.expenseRed, fontSize: 13, fontWeight: "600" },
-  saveBtn: { marginTop: 22, backgroundColor: colors.primaryAction, padding: 16, minHeight: 54, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-  saveText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   sheetTitle: { fontSize: 16, fontWeight: "800", color: colors.onSurface, textAlign: "center", marginTop: 4, marginBottom: 8 },
   sheetRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.divider },
   sheetRowText: { flex: 1, fontSize: 14.5, color: colors.onSurface },

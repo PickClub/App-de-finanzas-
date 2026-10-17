@@ -2,9 +2,11 @@ import { localizedError } from "@/src/i18n/errors";
 import { tr, useTranslation } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import { invalidateObligationPayments, verifiedDeletionContext, type Context } from "@/src/obligation-payments/journal";
 import React, { useCallback, useRef, useState } from "react";
-import { View, ScrollView, ActivityIndicator, Alert } from "react-native";
+import { View, ScrollView, ActivityIndicator } from "react-native";
+import { Alert, ContextActionsTrigger } from "@/src/components/interaction-system";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -90,7 +92,7 @@ export default function RecurringDetail() {
       await refreshAll();
       setConfirm(null);
     } catch (error: any) {
-      Alert.alert(tr("ui.could_not_complete_the_operation"), localizedError(error instanceof ApiError ? error.detail : error?.message || "Vuelve a verificar el contexto financiero."));
+      Alert.alert(tr("ui.could_not_complete_the_operation"), localizedError(error instanceof ApiError ? error.detail : error?.message || tr("ui.please_try_again")));
     } finally { setBusy(false); }
   };
 
@@ -110,10 +112,14 @@ export default function RecurringDetail() {
     <View style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(60), paddingHorizontal: us(spacing.lg) }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
-          <Pressable testID="rp-detail-back" onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-          </Pressable>
-          <Text style={styles.title} numberOfLines={1}>{t("rp.detail")}</Text>
+          <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("rp.detail")}</Text>
+          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="rp-detail-back" beforeActions={r && <ContextActionsTrigger testID="rp-actions" disabled={busy} style={styles.backBtn} iconSize={us(20)} actions={[
+            { id: "edit", label: t("rp.edit"), icon: "create-outline", onPress: () => router.push(`/recurring/new?id=${r.id}` as any) },
+            ...(r.state === "active" ? [{ id: "pause", label: t("rp.pause"), icon: "pause-outline", onPress: () => doAction("pause") }]
+              : r.state === "paused" ? [{ id: "resume", label: t("rp.resume"), icon: "play-outline", onPress: () => doAction("resume") }] : []),
+            ...(r.state !== "ended" ? [{ id: "end", label: t("rp.end"), icon: "stop-circle-outline", destructive: true, onPress: () => setConfirm("end") }] : []),
+            { id: "delete", label: t("rp.delete"), icon: "trash-outline", destructive: true, onPress: () => setConfirm("delete") },
+          ]} />} />
         </View>
 
         {q.isLoading ? <ActivityIndicator color={colors.incomeGreen} style={{ marginTop: us(40) }} /> : !r ? (
@@ -190,9 +196,9 @@ export default function RecurringDetail() {
                           {t(`rp.${rec.mode}`)} · {formatDateTime(rec.date)}{rec.notes ? ` · ${rec.notes}` : ""}
                         </Text>
                         <Text style={[styles.recAmt, { color: forest }]}>{formatCurrencyInt(rec.amount)}</Text>
-                        <Pressable testID={`rp-undo-${rec.id}`} onPress={() => setConfirm({ undo: rec.id })} hitSlop={8} style={{ marginLeft: us(8) }}>
-                          <Ionicons name="arrow-undo-outline" size={us(16)} color={colors.expenseRed} />
-                        </Pressable>
+                        <ContextActionsTrigger testID={`rp-record-actions-${rec.id}`} disabled={busy} iconSize={us(16)} actions={[
+                          { id: "undo", label: t("rp.undo"), icon: "arrow-undo-outline", destructive: true, onPress: () => setConfirm({ undo: rec.id }) },
+                        ]} />
                       </View>
                     ))}
                   </View>
@@ -205,41 +211,13 @@ export default function RecurringDetail() {
               ) : null}
             </View>
 
-            <View style={styles.actions}>
-              <Pressable testID="rp-edit" onPress={() => router.push(`/recurring/new?id=${r.id}` as any)} style={[styles.actBtn, { backgroundColor: forest }]}>
-                <Ionicons name="create-outline" size={us(17)} color="#fff" />
-                <Text style={styles.actText}>{t("rp.edit")}</Text>
-              </Pressable>
-              {r.state === "active" ? (
-                <Pressable testID="rp-pause" disabled={busy} onPress={() => doAction("pause")} style={[styles.actBtn, styles.outline]}>
-                  <Ionicons name="pause-outline" size={us(17)} color={forest} />
-                  <Text style={[styles.actText, { color: forest }]}>{t("rp.pause")}</Text>
-                </Pressable>
-              ) : r.state === "paused" ? (
-                <Pressable testID="rp-resume" disabled={busy} onPress={() => doAction("resume")} style={[styles.actBtn, styles.outline]}>
-                  <Ionicons name="play-outline" size={us(17)} color={forest} />
-                  <Text style={[styles.actText, { color: forest }]}>{t("rp.resume")}</Text>
-                </Pressable>
-              ) : null}
-            </View>
-            <View style={styles.actions}>
-              {r.state !== "ended" ? (
-                <Pressable testID="rp-end" onPress={() => setConfirm("end")} style={[styles.actBtn, styles.outline]}>
-                  <Ionicons name="stop-circle-outline" size={us(17)} color={colors.onSurface} />
-                  <Text style={[styles.actText, { color: colors.onSurface }]}>{t("rp.end")}</Text>
-                </Pressable>
-              ) : null}
-              <Pressable testID="rp-delete" onPress={() => setConfirm("delete")} style={[styles.actBtn, { backgroundColor: colors.expenseRed + "1A" }]}>
-                <Ionicons name="trash-outline" size={us(17)} color={colors.expenseRed} />
-                <Text style={[styles.actText, { color: colors.expenseRed }]}>{t("rp.delete")}</Text>
-              </Pressable>
-            </View>
           </>
         )}
       </ElasticScrollView>
 
       <ConfirmSheet
         visible={confirm !== null}
+        busy={busy}
         onClose={() => setConfirm(null)}
         icon={confirm === "end" ? "stop-circle-outline" : confirm === "delete" ? "trash-outline" : "arrow-undo-outline"}
         accent={colors.expenseRed}
@@ -282,8 +260,4 @@ const useStyles = makeStyles((colors) => ({
   recAmt: { fontSize: 12.5, fontWeight: "800" },
   moreBtn: { paddingVertical: 14, alignItems: "center" },
   moreText: { fontWeight: "800", fontSize: 13.5 },
-  actions: { flexDirection: "row", gap: 10, marginTop: 12 },
-  actBtn: { flex: 1, flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center", minHeight: 48, borderRadius: radius.pill },
-  outline: { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
-  actText: { color: "#fff", fontWeight: "800", fontSize: 14 },
 }));

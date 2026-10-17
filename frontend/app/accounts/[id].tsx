@@ -1,5 +1,6 @@
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import { useAccountDeletionExit } from "@/src/account-deletion-navigation";
 import React, { useCallback, useMemo, useState } from "react";
 import { View, ScrollView, Platform, ActivityIndicator } from "react-native";
@@ -15,6 +16,7 @@ import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { formatCurrencyInt, formatDateLong } from "@/src/format";
 import { IconTile } from "@/src/components/ui";
+import { ContextActionsTrigger } from "@/src/components/interaction-system";
 
 import { us } from "@/src/ui-scale";
 // Mirror the Home square-card color logic so the detail accents match the card
@@ -100,9 +102,7 @@ export default function AccountDetail() {
     return (
       <View style={{ flex: 1, backgroundColor: colors.pageBackground, paddingTop: insets.top + us(8) }}>
         <View style={styles.headerRow}>
-          <Pressable testID="acc-detail-back" onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-          </Pressable>
+          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="acc-detail-back" />
         </View>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           {accountsQ.isLoading ? (
@@ -129,10 +129,10 @@ export default function AccountDetail() {
       >
         {/* 1. Header */}
         <View style={styles.headerRow}>
-          <Pressable testID="acc-detail-back" onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-          </Pressable>
           <View style={{ flex: 1 }} />
+          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="acc-detail-back" beforeActions={<ContextActionsTrigger testID="acc-detail-options" style={styles.backBtn} iconColor={forest} actions={[
+            { id: "edit", label: t("accounts.editAccount"), icon: "create-outline", onPress: () => router.push(`/accounts/new?id=${account.id}`) },
+          ]} />} />
         </View>
 
         {/* Identity */}
@@ -236,15 +236,6 @@ export default function AccountDetail() {
           })}
         </View>
 
-        {/* 5. Edit account -> existing edit form (unchanged logic/route) */}
-        <Pressable
-          testID="acc-edit"
-          onPress={() => router.push(`/accounts/new?id=${account.id}`)}
-          style={[styles.editBtn, { backgroundColor: ac }]}
-        >
-          <Ionicons name="create-outline" size={us(20)} color="#fff" />
-          <Text style={styles.editText}>{t("accounts.editAccount")}</Text>
-        </Pressable>
       </ElasticScrollView>
     </View>
   );
@@ -312,19 +303,4 @@ const useStyles = makeStyles((colors, scheme) => ({
   txName: { fontSize: 15, fontWeight: "700", color: colors.onSurface },
   txDate: { fontSize: 12.5, color: colors.muted, marginTop: 2, fontWeight: "500" },
   txAmount: { fontSize: 15, fontWeight: "800" },
-  editBtn: {
-    marginTop: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: radius.pill,
-    ...Platform.select({
-      ios: { shadowColor: "#000", shadowOpacity: scheme === "dark" ? 0.3 : 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 5 } },
-      android: { elevation: 3 },
-      default: {},
-    }),
-  },
-  editText: { color: "#fff", fontWeight: "800", fontSize: 16 },
 }));

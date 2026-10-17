@@ -20,7 +20,19 @@ function localeGlobals(context){
 function localeMocks(mocks){
   mocks['@/src/i18n']={default:{language:'es'},tr,localeTag:()=> 'es-US',useTranslation:()=>({t:key=>key,i18n:{language:'es'}}),...mocks['@/src/i18n']};
   if(integration)Object.assign(mocks['@/src/i18n'],{default:engine,tr,localeTag:()=>engine.language==='es'?'es-US':'en-US',useTranslation:()=>({t:tr,i18n:engine})});
-  mocks['@/src/i18n/errors']={localizedError};return mocks;
+  mocks['@/src/i18n/errors']={localizedError};
+  mocks['@/src/components/header-actions']={MoneyFlowHeaderActions:'MoneyFlowHeaderActions',...mocks['@/src/components/header-actions']};
+  const nativeAlert=mocks['react-native']?.Alert;
+  mocks['@/src/components/interaction-system']={Alert:nativeAlert||{alert(){}},ContextActionsTrigger:'ContextActionsTrigger',MoneyFlowConfirmDialog:'MoneyFlowConfirmDialog',...mocks['@/src/components/interaction-system']};
+  return mocks;
+}
+function headerActionNodes(node){
+  if(!node||typeof node!=='object'||node.type!=='MoneyFlowHeaderActions')return [];
+  const p=node.props||{},nodes=[];
+  if(p.beforeActions)nodes.push(p.beforeActions);
+  if(p.onBack)nodes.push({type:'Pressable',props:{testID:p.backTestID,onPress:p.onBack}});
+  if(p.onSave)nodes.push({type:'Pressable',props:{testID:p.saveTestID,onPress:p.onSave,disabled:!!(p.saveDisabled||p.saving)}});
+  return nodes;
 }
 // Exact financial-handler comparisons allow only translated presentation calls.
 // Source/payload conditions, request methods and field assignments stay intact.
@@ -58,4 +70,4 @@ function normalizeHomeColors(source){
   .replace(/\bcolors\.primaryAction\b/g,'colors.brandPrimary')
   .replace(/\bcolors\.identityAccent\b/g,'colors.brandPrimary');
 }
-module.exports={localeGlobals,localeMocks,normalizeUI,visualContract,normalizeHomeColors,setTestLocale,tr,localizedError};
+module.exports={localeGlobals,localeMocks,normalizeUI,visualContract,normalizeHomeColors,setTestLocale,tr,localizedError,headerActionNodes};

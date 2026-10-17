@@ -11,7 +11,6 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   TextInput as NativeTextInput,
 } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -23,6 +22,7 @@ import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatDateTime } from "@/src/format";
 import { useFonts } from "expo-font";
 import { storage } from "@/src/utils/storage";
+import { Alert, ContextActionsTrigger } from "@/src/components/interaction-system";
 
 import { us, ufs } from "@/src/ui-scale";
 // Simple, text-only Notes V1. Persisted locally via the shared storage wrapper
@@ -82,26 +82,27 @@ function NoteItemInput({ itemId, onReady, ...props }: React.ComponentProps<typeo
   return <NativeTextInput {...props} ref={input} />;
 }
 
-// Parse a plain-text note body into individual items for a note-like
-// presentation. Splits on line breaks first; a single-line note is broken into
-// sentences. Never mutates or persists — purely a display transform, so the
-// existing plain-text data model is fully preserved.
-function toItems(content: string): string[] {
-  if (!content) return [];
-  const lines = content
-    .split("\n")
-    .map((s) => s.replace(/^[-•○\s]+/, "").trim())
-    .filter(Boolean);
-  if (lines.length > 1) return lines;
-  const parts = content.split(/([.!?])\s+/);
-  const sentences: string[] = [];
-  for (let i = 0; i < parts.length; i += 2) {
-    const seg = (parts[i] || "").trim();
-    if (!seg) continue;
-    const punct = parts[i + 1] || "";
-    sentences.push((seg + punct).trim());
+type NotePreviewBlock = { kind: ListMode; text: string; checked?: boolean; number?: number };
+
+// Preview only: list metadata authorizes markers; paragraphs never create them.
+function notePreviewBlocks(note: Note): NotePreviewBlock[] {
+  const mode = note.listMode;
+  if (mode !== "check" && mode !== "ordered") {
+    return note.content ? [{ kind: "plain", text: note.content.slice(0, 720) }] : [];
   }
-  return sentences.length ? sentences : [content.trim()];
+  const marker = mode === "check" ? /^\s*\[([ xX])\]\s?(.*)$/ : /^\s*(\d+)[.)]\s+(.*)$/;
+  const hasExplicitMarkers = note.content.split("\n").some(line => marker.test(line));
+  return note.content.split("\n", 3).map((line, index): NotePreviewBlock => {
+    const match = line.match(marker);
+    // Legacy notes may have only a whole-note listMode; keep that explicit metadata.
+    if (!match && hasExplicitMarkers) return { kind: "plain", text: line.slice(0, 240) };
+    return {
+      kind: mode,
+      text: (match ? match[2] : line.trim()).slice(0, 240),
+      checked: mode === "check" && !!match && match[1].toLowerCase() === "x",
+      number: mode === "ordered" && match ? Number(match[1]) : index + 1,
+    };
+  }).filter(block => block.text.trim().length > 0);
 }
 
 type ListItem = { id?: string; text: string; checked: boolean; originalLength?: number };
@@ -239,7 +240,6 @@ export default function Notes() {
   const [sortNewest, setSortNewest] = useState(true);
   const [previewNote, setPreviewNote] = useState<Note | null>(null);
   const lastLimitNotice = React.useRef(0);
-  const [menuNote, setMenuNote] = useState<Note | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Note | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
@@ -520,7 +520,6 @@ export default function Notes() {
       setNotes(next);
       setEditorOpen(false);
       setEditing(null);
-      setMenuNote(null);
     } catch (error) {
       Alert.alert(tr("ui.could_not_delete"), localizedError(error instanceof Error ? error.message : tr("ui.please_try_again")));
     } finally {
@@ -586,10 +585,8 @@ export default function Notes() {
     const pal = note.palette ? NOTE_PALETTES[note.palette] : null;
     const accent = pal ? (isDark ? pal.accentDark : pal.accentLight) : note.color;
     const cardBg = pal ? (isDark ? pal.bgDark : pal.bgLight) : tintOf(note.color);
-    const isCheck = note.listMode === "check";
-    const listItems = note.listMode ? parseListItems(note.content.split("\n", 3).map(line => line.slice(0, 240)).join("\n"), note.listMode).filter((i) => i.text.length > 0) : [];
-    const items = note.listMode ? [] : toItems(note.content.slice(0, 720));
-    const checklist = !note.pinned; // pinned → filled bullets, others → check circles
+    const blocks = notePreviewBlocks(note);
+    const isList = note.listMode === "check" || note.listMode === "ordered";
     return (
       <Pressable
         key={note.id}
@@ -604,56 +601,40 @@ export default function Notes() {
               <Ionicons name={icon as any} size={us(20)} color="#FFFFFF" />
             </View>
             <Text style={styles.cardTitle}>{note.title}</Text>
-            <Pressable
+            <ContextActionsTrigger
               testID={`note-menu-${note.id}`}
-              hitSlop={8}
-              onPress={() => setMenuNote(note)}
               style={styles.menuBtn}
-            >
-              <Ionicons name="ellipsis-vertical" size={us(18)} color={subColor} />
-            </Pressable>
+              iconColor={subColor}
+              iconSize={us(18)}
+              disabled={deleteBusy}
+              actions={[
+                { id: "edit", label: tr("ui.edit"), icon: "create-outline", onPress: () => openEditor(note) },
+                { id: "pin", label: note.pinned ? tr("ui.unpin_note") : tr("ui.pin_note"), icon: note.pinned ? "pin" : "pin-outline", onPress: () => togglePin(note.id) },
+                { id: "delete", label: tr("ui.delete"), icon: "trash-outline", destructive: true, onPress: () => Alert.alert(tr("ui.delete_this_note"), tr("notes.preview.deleteMessage"), [
+                  { text: tr("ui.cancel"), style: "cancel" },
+                  { text: tr("ui.delete"), style: "destructive", onPress: () => deleteNote(note.id) },
+                ]) },
+              ]}
+            />
           </View>
 
-          {note.listMode ? (
-            listItems.length > 0 && (
-              <View style={styles.itemList}>
-                {listItems.slice(0, 3).map((it, idx) => (
-                  <View key={idx} style={styles.itemRow}>
-                    {isCheck ? (
-                      <Ionicons
-                        name={it.checked ? "checkbox" : "square-outline"}
-                        size={us(17)}
-                        color={accent}
-                        style={styles.itemMark}
-                      />
-                    ) : (
-                      <Text style={[styles.itemNum, { color: accent }]}>{idx + 1}.</Text>
-                    )}
-                    <Text
-                      style={[styles.itemText, isCheck && it.checked && styles.itemTextDone]}
-                      numberOfLines={1}
-                    >
-                      {it.text}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )
-          ) : (
-            items.length > 0 && (
-              <View style={styles.itemList}>
-                {items.slice(0, 3).map((it, idx) => (
-                  <View key={idx} style={styles.itemRow}>
-                    {checklist ? (
-                      <Ionicons name="ellipse-outline" size={us(16)} color={accent} style={styles.itemMark} />
-                    ) : (
-                      <View style={[styles.itemDot, { backgroundColor: accent }]} />
-                    )}
-                    <Text style={styles.itemText} numberOfLines={1}>{it}</Text>
-                  </View>
-                ))}
-              </View>
-            )
+          {blocks.length > 0 && (
+            <View style={styles.itemList}>
+              {blocks.map((block, index) => block.kind === "plain" ? (
+                <View key={index} style={styles.itemRow}>
+                  <Text style={styles.itemText} numberOfLines={isList ? 1 : 3}>{block.text}</Text>
+                </View>
+              ) : (
+                <View key={index} style={styles.itemRow}>
+                  {block.kind === "check" ? (
+                    <Ionicons name={block.checked ? "checkbox" : "square-outline"} size={us(17)} color={accent} style={styles.itemMark} />
+                  ) : (
+                    <Text style={[styles.itemNum, { color: accent }]}>{block.number}.</Text>
+                  )}
+                  <Text style={[styles.itemText, block.kind === "check" && block.checked && styles.itemTextDone]} numberOfLines={1}>{block.text}</Text>
+                </View>
+              ))}
+            </View>
           )}
 
           <View style={styles.cardFooter}>
@@ -785,13 +766,11 @@ export default function Notes() {
                   <Ionicons name={(previewNote.icon || "document-text") as any} size={us(22)} color={noteGreen} />
                 </View>
                 <View style={styles.previewButtons}>
-                  <Pressable testID="notes-preview-edit" accessibilityRole="button" accessibilityLabel={tr("ui.edit_note")} disabled={deleteBusy} style={styles.previewButton}
-                    onPress={() => { const note = previewNote; setPreviewNote(null); openEditor(note); }}>
-                    <Ionicons name="create-outline" size={us(18)} color={noteGreen} />
-                  </Pressable>
-                  <Pressable testID="notes-preview-delete" accessibilityRole="button" accessibilityLabel={tr("ui.delete")} disabled={deleteBusy} style={[styles.previewButton, { backgroundColor: colors.expenseRed + "16" }]} onPress={requestPreviewDelete}>
-                    <Ionicons name="trash-outline" size={us(18)} color={colors.expenseRed} />
-                  </Pressable>
+                  <ContextActionsTrigger testID="notes-preview-actions" accessibilityLabel={tr("ui.more_options")} disabled={deleteBusy} style={styles.previewButton} iconColor={noteGreen} iconSize={us(18)} actions={[
+                    { id: "edit", label: tr("ui.edit_note"), icon: "create-outline", onPress: () => { const note = previewNote; setPreviewNote(null); openEditor(note); } },
+                    { id: "pin", label: previewNote.pinned ? tr("ui.unpin_note") : tr("ui.pin_note"), icon: previewNote.pinned ? "pin" : "pin-outline", onPress: () => togglePin(previewNote.id) },
+                    { id: "delete", label: tr("ui.delete"), icon: "trash-outline", destructive: true, onPress: requestPreviewDelete },
+                  ]} />
                   <Pressable testID="notes-preview-close" accessibilityRole="button" accessibilityLabel={tr("common.close")} style={styles.previewButton} onPress={() => setPreviewNote(null)}>
                     <Ionicons name="close" size={us(20)} color={noteGreen} />
                   </Pressable>
@@ -813,39 +792,6 @@ export default function Notes() {
               </ScrollView>
             </View>
           ) : null}
-        </View>
-      </Modal>
-
-      {/* Card action menu (three-dot) */}
-      <Modal visible={!!menuNote} transparent animationType="fade" onRequestClose={() => setMenuNote(null)}>
-        <Pressable style={styles.menuBackdrop} onPress={() => setMenuNote(null)} />
-        <View style={[styles.menuSheet, { paddingBottom: insets.bottom + us(12) }]}>
-          <View style={styles.sheetHandle} />
-          <Pressable
-            testID="note-menu-edit"
-            style={styles.menuItem}
-            onPress={() => { const n = menuNote; setMenuNote(null); if (n) openEditor(n); }}
-          >
-            <Ionicons name="create-outline" size={us(20)} color={titleColor} />
-            <Text style={styles.menuItemText}>{tr("ui.edit")}</Text>
-          </Pressable>
-          <Pressable
-            testID="note-menu-pin"
-            style={styles.menuItem}
-            onPress={() => { const n = menuNote; setMenuNote(null); if (n) togglePin(n.id); }}
-          >
-            <Ionicons name={menuNote?.pinned ? "pin" : "pin-outline"} size={us(20)} color={titleColor} />
-            <Text style={styles.menuItemText}>{menuNote?.pinned ? tr("ui.unpin_note") : tr("ui.pin_note")}</Text>
-          </Pressable>
-          <Pressable
-            testID="note-menu-delete"
-            disabled={deleteBusy}
-            style={styles.menuItem}
-            onPress={() => { const n = menuNote; setMenuNote(null); if (n) deleteNote(n.id); }}
-          >
-            <Ionicons name="trash-outline" size={us(20)} color={colors.expenseRed} />
-            <Text style={[styles.menuItemText, { color: colors.expenseRed }]}>{tr("ui.delete")}</Text>
-          </Pressable>
         </View>
       </Modal>
 
@@ -1191,7 +1137,6 @@ const useStyles = makeStyles((colors, scheme) => {
     sheetScroll: { flexGrow: 0, flexShrink: 1 },
     sheetScrollContent: { paddingBottom: 4 },
     fieldLabel: { fontSize: 13, fontWeight: "800", color: subColor, marginBottom: 8, letterSpacing: 0.1 },
-    sheetHandle: { alignSelf: "center", width: 44, height: 4, borderRadius: 2, backgroundColor: lineSoft, marginBottom: 12 },
     sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
     sheetTitle: { fontSize: 18, fontWeight: "800", color: titleColor, letterSpacing: -0.3 },
     titleInput: {
@@ -1250,21 +1195,6 @@ const useStyles = makeStyles((colors, scheme) => {
     },
     saveText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13.5 },
 
-    // Card action menu (three-dot)
-    menuBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },
-    menuSheet: {
-      position: "absolute", left: 0, right: 0, bottom: 0,
-      backgroundColor: isDark ? colors.surfaceSecondary : "#FCFCF8",
-      borderTopLeftRadius: radius.cardLg,
-      borderTopRightRadius: radius.cardLg,
-      paddingHorizontal: 12, paddingTop: 10,
-    },
-    menuItem: {
-      flexDirection: "row", alignItems: "center", gap: 14,
-      paddingHorizontal: 14, paddingVertical: 15,
-      borderRadius: radius.md,
-    },
-    menuItemText: { fontSize: 15.5, fontWeight: "700", color: titleColor },
     confirmRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16 },
     confirmText: { flex: 1, fontSize: 13.5, fontWeight: "700", color: titleColor },
     confirmCancel: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: lineSoft },

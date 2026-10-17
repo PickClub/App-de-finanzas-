@@ -1,5 +1,6 @@
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useCallback, useMemo, useState } from "react";
 import { View, ScrollView, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -112,13 +113,10 @@ export default function Goals() {
       >
         {/* Header (unchanged) */}
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-          </Pressable>
-          <Text style={styles.title}>{t("goals.title")}</Text>
-          <Pressable testID="add-goal" onPress={openNew} style={[styles.backBtn, { backgroundColor: forest }]}>
+          <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("goals.title")}</Text>
+          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="goals-back" beforeActions={<Pressable testID="add-goal" onPress={openNew} style={[styles.backBtn, { backgroundColor: forest }]} accessibilityRole="button" accessibilityLabel={t("common.add")}>
             <Ionicons name="add" size={us(22)} color="#fff" />
-          </Pressable>
+          </Pressable>} />
         </View>
 
         {q.isLoading ? (

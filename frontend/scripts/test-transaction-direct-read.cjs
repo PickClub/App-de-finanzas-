@@ -1,10 +1,17 @@
-const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
+const {localeGlobals,localeMocks,normalizeUI,headerActionNodes}=require('./i18n-test-support.cjs');
 // C3 block 1: actual API and screens, synthetic reads, no server or storage.
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const vm = require('node:vm'), cp = require('node:child_process'), ts = require('typescript');
 const { QueryClient, QueryObserver } = require('@tanstack/react-query');
 const root = path.resolve(__dirname, '../..');
 const files = { detail:'frontend/app/transactions/[id].tsx', form:'frontend/app/transactions/new.tsx' };
+const normalizedStyles = source => source.slice(source.indexOf('const useStyles ='))
+  .replace(/^  \/\/ Sheet menu\n/gm,'')
+  .replace(/^  (?:sheetTitle|menuRow|menuIcon|menuLabel|menuSeparator|cancelRow|cancelRowText): \{[^\n]*\},?\n/gm,'')
+  .replace(/\n{3,}/g,'\n\n');
+const normalizedFormStyles = source => normalizedStyles(source)
+  .replace(/^    footer: \{[^\n]*\},?\n/gm,'')
+  .replace(/^    saveText: \{[^\n]*\},?\n/gm,'');
 const read = file => process.env.C3_DIRECT_TEST_REF
   ? cp.execFileSync('git', ['show', `${process.env.C3_DIRECT_TEST_REF}:${file}`], { cwd:root, encoding:'utf8' })
   : fs.readFileSync(path.join(root, file), 'utf8');
@@ -23,7 +30,7 @@ const { ApiError } = apiExports;
 const row = (id, type='expense') => ({id,type,amount:70,name:`Synthetic ${id}`,date:'2026-10-01T12:00:00Z',
   account_id:'A',to_account_id:type==='transfer'?'B':undefined,category_id:'C',notes:'Original'});
 const find = (tree,id) => !tree || typeof tree !== 'object' ? null : tree.props?.testID === id ? tree
-  : (tree.children || []).flat(Infinity).map(x => find(x,id)).find(Boolean);
+  : [...(tree.children || []), ...(tree.props?.children ? [tree.props.children] : []), ...headerActionNodes(tree)].flat(Infinity).map(x => find(x,id)).find(Boolean);
 const text = tree => typeof tree === 'string' ? tree : (tree?.children || []).flat(Infinity).map(text).join(' ');
 function fixture(kind, initialParams) {
   let params = initialParams, hook = 0, effects = [], calls = [], backs = 0, writes = [], invalidations = [];
@@ -175,7 +182,7 @@ async function main() {
     assert.deepEqual(withoutDirectRead(currentApi),withoutDirectRead(oldApi));
     for(const file of Object.values(files)){
       const old=cp.execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),current=read(file);
-      assert.equal(current.slice(current.indexOf('const useStyles =')),old.slice(old.indexOf('const useStyles =')));
+      assert.equal(file===files.form?normalizedFormStyles(current):normalizedStyles(current),file===files.form?normalizedFormStyles(old):normalizedStyles(old));
       assert(!current.includes('api.listTransactions'));
       for(const name of file===files.form?['remove']:['doEdit','doDuplicate','doDelete','saveCategory','saveRecurring'])
         assert.equal(normalizeUI(initializer(current,name)),normalizeUI(initializer(old,name)));

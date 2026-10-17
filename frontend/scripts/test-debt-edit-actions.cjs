@@ -1,11 +1,12 @@
 // Execute actual debt form/menu handlers with synthetic queries and API responses only.
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
+const {headerActionNodes}=require('./i18n-test-support.cjs');
 const {createInstance}=require('i18next');
 const engine=createInstance();engine.init({lng:'en-US',fallbackLng:'en-US',initImmediate:false,resources:{'en-US':{translation:require('../src/i18n/locales/en.json')},es:{translation:require('../src/i18n/locales/es.json')}}});
 const clone=x=>JSON.parse(JSON.stringify(x));
 const original={id:'debt-one',name:'Nombre del usuario',direction:'i_owe',person:'Persona ñ',original_amount:500,minimum_payment:20,payment_frequency:'monthly',interest_rate:3,notes:'User notes\nuntouched',color:'#123456',icon:'cash-outline',account_id:'linked-account',category_id:'category-one',start_date:'2025-01-05T10:20:30Z',due_date:'2027-02-02',total_paid:100,remaining_amount:400,status:'active'};
 class ApiError extends Error {constructor(status,message){super(message);this.status=status;}}
-const all=n=>!n||typeof n!=='object'?[]:[n,...[n.props?.children].flat(Infinity).flatMap(all)];
+const all=n=>!n||typeof n!=='object'?[]:[n,...[n.props?.children,...headerActionNodes(n)].flat(Infinity).flatMap(all)];
 function fixture(file, options={}) {
  let cursor=0;const cells=[],effects=[],cleanups=[],events=[],calls=[],alerts=[],cache={debts:[clone(original),{id:'unrelated'}]};
  const state={debt:clone(original),payments:[{id:'payment-one',amount:100}],...options};
@@ -32,11 +33,13 @@ function fixture(file, options={}) {
   }},'@/src/api':{api,ApiError},'@/src/debts/editor':editor.exports,
   '@/src/theme':{useTheme:()=>({colors,scheme:'light'}),makeStyles:f=>()=>f(colors,'light'),radius:{cardLg:28,lg:24,pill:999},spacing:{xs:4,sm:8,md:12,lg:16}},
   '@/src/components/ui':{IconTile:'IconTile'},'@/src/components/sheets':{AppSheet:'AppSheet'},'./sheets':{AppSheet:'AppSheet'},
+  '@/src/components/interaction-system':{Alert:{alert:(...a)=>alerts.push(a)},MoneyFlowConfirmDialog:'MoneyFlowConfirmDialog'},'./interaction-system':{MoneyFlowConfirmDialog:'MoneyFlowConfirmDialog'},
+  '@/src/components/header-actions':{MoneyFlowHeaderActions:'MoneyFlowHeaderActions'},
   '@/src/ui-scale':{us:x=>x,ufs:x=>x},'@/src/color-palette':{COLOR_PALETTE:['#123456']}};
  const context={exports:{},require:name=>{assert(name in mocks,name);return mocks[name];}};
  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:false}}).outputText,context);
  const component=context.exports.default??context.exports.DebtActions;
- function render(){cursor=0;const tree=component(file.includes('debt-actions')?{debt:state.debt,onClose:()=>events.push(['close']),...(state.detailReturn?{onDeleted:()=>events.push(['deleted',state.debt.id])}:{})}:{});effects.splice(0).forEach(f=>cleanups.push(f()));return tree;}
+ function render(){cursor=0;const tree=component(file.includes('debt-actions')?{visible:true,debt:state.debt,onClose:()=>events.push(['close']),...(state.detailReturn?{onDeleted:()=>events.push(['deleted',state.debt.id])}:{})}:{});effects.splice(0).forEach(f=>cleanups.push(f()));return tree;}
  function find(id){return all(render()).find(n=>n.props?.testID===id);}
  render();render();return {render,find,state,calls,events,alerts,cache,unmount:()=>cleanups.filter(Boolean).forEach(f=>f())};
 }
@@ -66,19 +69,18 @@ async function main(){
   f=fixture('frontend/app/debts/new.tsx',{updateError:new ApiError(409,'Server conflict')});await f.find('save-debt').props.onPress();assert(f.alerts.length);assert(!f.events.some(e=>e[0]==='dismissTo'));
   f=fixture('frontend/app/debts/new.tsx');const save=f.find('save-debt').props.onPress;await Promise.all([save(),save()]);assert.equal(f.calls.filter(c=>c[0]==='update').length,1);
   f=fixture('frontend/app/debts/new.tsx',{create:true});f.find('dir-i-owe').props.onPress();f.find('debt-name').props.onChangeText('New');f.find('debt-amount').props.onChangeText('250');await f.find('save-debt').props.onPress();assert.equal(f.calls.filter(c=>c[0]==='create').length,1);assert(!f.calls.some(c=>c[0]==='update'));
-  f=fixture('frontend/src/components/debt-actions.tsx');f.find('debt-action-edit').props.onPress();assert.equal(f.events.at(-1)[1].params.id,original.id);assert.equal(f.events.at(-1)[1].pathname,'/debts/new');assert.equal(f.calls.length,0);
-  for(const cancel of [f=>f.render().props.onClose(),f=>f.find('debt-actions-cancel').props.onPress()]){f=fixture('frontend/src/components/debt-actions.tsx');cancel(f);assert.equal(f.calls.length,0);assert.deepEqual(f.events,[['close']]);}
-  f=fixture('frontend/src/components/debt-actions.tsx');f.find('debt-action-delete').props.onPress();assert.equal(f.calls.length,0);f.find('debt-actions-cancel').props.onPress();assert.equal(f.calls.length,0);
-  f=fixture('frontend/src/components/debt-actions.tsx');f.find('debt-action-delete').props.onPress();assert(all(f.render()).some(n=>n.type==='Text'&&n.props.children?.includes?.(original.name)));const confirm=f.find('debt-delete-confirm').props.onPress;confirm();confirm();await tick();assert.deepEqual(f.calls,[['delete',original.id]]);assert.equal(f.cache.debts.length,1);assert.equal(f.cache.debts[0].id,'unrelated');assert(f.events.some(e=>e[0]==='close'));
+  f=fixture('frontend/src/components/debt-actions.tsx');assert.equal(f.render().type,'MoneyFlowConfirmDialog');assert.equal(f.render().props.title,engine.t('ui.delete_debt'));assert.equal(f.render().props.description,engine.t('debts.deleteConfirmation',{name:original.name}));assert.equal(f.calls.length,0);
+  f=fixture('frontend/src/components/debt-actions.tsx');f.render().props.onClose();assert.equal(f.calls.length,0);assert.deepEqual(f.events,[['close']]);
+  f=fixture('frontend/src/components/debt-actions.tsx');const confirm=f.render().props.onConfirm;confirm();confirm();await tick();assert.deepEqual(f.calls,[['delete',original.id]]);assert.equal(f.cache.debts.length,1);assert.equal(f.cache.debts[0].id,'unrelated');assert(f.events.some(e=>e[0]==='close'));
   for(const failure of [new ApiError(409,'Linked records'),new ApiError(503,'Unavailable')]) {
-   f=fixture('frontend/src/components/debt-actions.tsx',{deleteError:failure});f.find('debt-action-delete').props.onPress();f.find('debt-delete-confirm').props.onPress();await tick();assert.equal(f.cache.debts.length,2);assert(f.find('debt-delete-error'));assert(!f.events.some(e=>e[0]==='close'));if(failure.status===409)assert.equal(f.find('debt-delete-error').props.children,engine.t('debts.deleteLinked'));
+   f=fixture('frontend/src/components/debt-actions.tsx',{deleteError:failure});await f.render().props.onConfirm();assert.equal(f.cache.debts.length,2);assert.equal(f.render().props.error,failure.status===409?engine.t('debts.deleteLinked'):'Unavailable');assert(!f.events.some(e=>e[0]==='close'));
   }
-  let release;const hold=new Promise(resolve=>release=resolve);f=fixture('frontend/src/components/debt-actions.tsx',{hold});f.find('debt-action-delete').props.onPress();f.find('debt-delete-confirm').props.onPress();f.render().props.onClose();assert(!f.events.some(e=>e[0]==='close'));f.unmount();release();await tick();assert.equal(f.cache.debts.length,1);assert(!f.events.some(e=>e[0]==='close'));
+  let release;const hold=new Promise(resolve=>release=resolve);f=fixture('frontend/src/components/debt-actions.tsx',{hold});const pendingDelete=f.render().props.onConfirm();assert.equal(f.render().props.busy,true);f.render().props.onClose();assert(!f.events.some(e=>e[0]==='close'));f.unmount();release();await pendingDelete;assert.equal(f.cache.debts.length,1);assert(!f.events.some(e=>e[0]==='close'));
   for(const deleteError of [null,new ApiError(409,'Linked')]) {
-   f=fixture('frontend/src/components/debt-actions.tsx',{detailReturn:true,deleteError});f.find('debt-action-delete').props.onPress();f.find('debt-delete-confirm').props.onPress();await tick();
+   f=fixture('frontend/src/components/debt-actions.tsx',{detailReturn:true,deleteError});await f.render().props.onConfirm();await tick();
    assert.equal(f.events.filter(e=>e[0]==='deleted').length,deleteError?0:1);
   }
-  f=fixture('frontend/src/components/debt-actions.tsx',{refreshError:new Error('refresh')});f.find('debt-action-delete').props.onPress();f.find('debt-delete-confirm').props.onPress();await tick();assert.equal(f.cache.debts.length,1);assert(!f.find('debt-delete-confirm'));assert.equal(f.find('debt-delete-error').props.children,engine.t('debts.deleteRefreshFailed'));
+  f=fixture('frontend/src/components/debt-actions.tsx',{refreshError:new Error('refresh')});await f.render().props.onConfirm();await tick();assert.equal(f.cache.debts.length,1);assert.equal(f.render().props.error,engine.t('debts.deleteRefreshFailed'));
  }
  console.log('PASS: actual creation/edit hydration, same-ID PUT without POST, protected amounts/payments/identity/hidden fields, stale source/new payment detection, cancel, load/retry, server errors and double-save; English/Spanish.');
  console.log('PASS: actual Edit route, named custom confirmation, outside/cancel without writes, one selected DELETE, server 409/503, confirmed-only cache updates, unrelated records preserved and refresh failure without repeat deletion.');

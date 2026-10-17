@@ -2,8 +2,10 @@ import { localizedError } from "@/src/i18n/errors";
 import { useTranslation, useLang, type Lang } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useRef, useState } from "react";
-import { Alert, View, useWindowDimensions } from "react-native";
+import { View, useWindowDimensions } from "react-native";
+import { Alert } from "@/src/components/interaction-system";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -101,17 +103,15 @@ export default function Settings() {
   const email = typeof q.data?.email === "string" ? q.data.email.trim() : "";
 
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.pageBackground, paddingTop: insets.top + us(16), paddingHorizontal: us(spacing.lg) }}>
-    <Pressable accessibilityLabel={t("common.back")} onPress={() => router.back()} style={styles.backBtn}><Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} /></Pressable>
+    <MoneyFlowHeaderActions onBack={() => router.back()} />
     <Text>{fontError ? t("settings.loadError") : t("common.loading")}</Text>
   </View>;
 
   return (
     <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" style={{ flex: 1, backgroundColor: colors.pageBackground }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(100), paddingHorizontal: us(spacing.lg) }}>
       <View style={styles.header}>
-        <Pressable accessibilityLabel={t("common.back")} onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-        </Pressable>
-        <Text style={styles.title}>{t("settings.profileTitle")}</Text>
+        <Text style={[styles.title, { flex: 1 }]}>{t("settings.profileTitle")}</Text>
+        <MoneyFlowHeaderActions onBack={() => router.back()} />
       </View>
 
       {!q.data ? <View style={styles.card}>

@@ -2,8 +2,10 @@ import { localizedError } from "@/src/i18n/errors";
 import i18n, { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useEffect, useRef, useState } from "react";
-import { View, ScrollView, StyleSheet, Alert } from "react-native";
+import { View, ScrollView, StyleSheet } from "react-native";
+import { Alert, ContextActionsTrigger } from "@/src/components/interaction-system";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
@@ -111,11 +113,25 @@ export default function CategoryForm() {
   return (
     <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} pointerEvents={deletion.busy || saving ? "none" : "auto"} style={{ flex: 1, backgroundColor: colors.pageBackground }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-        </Pressable>
-        <Text style={styles.title}>{tr(params.id ? "ui.edit_category" : "ui.new_category")}</Text>
-        {params.id && <Pressable onPress={remove} disabled={deletion.busy || saving} style={styles.backBtn}><Ionicons name="trash-outline" size={us(22)} color={colors.expenseRed} /></Pressable>}
+        <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{tr(params.id ? "ui.edit_category" : "ui.new_category")}</Text>
+        <MoneyFlowHeaderActions
+          onBack={() => router.back()}
+          onSave={save}
+          saving={saving}
+          saveDisabled={deletion.busy || saveComplete.current}
+          backTestID="category-form-back"
+          saveTestID="save-category"
+          saveAccessibilityLabel={tr("headerActions.saveCategory")}
+          beforeActions={params.id ? <ContextActionsTrigger
+            testID="category-actions"
+            disabled={deletion.busy || saving}
+            style={styles.backBtn}
+            actions={[{ id: "delete", label: tr("ui.delete"), icon: "trash-outline", destructive: true, onPress: () => Alert.alert(tr("categories.deleteTitle"), tr("categories.deleteDescription"), [
+              { text: tr("ui.cancel"), style: "cancel" },
+              { text: tr("ui.delete"), style: "destructive", onPress: remove },
+            ]) }]}
+          /> : null}
+        />
       </View>
 
       <Text style={styles.label}>{tr("ui.name")}</Text>
@@ -170,9 +186,6 @@ export default function CategoryForm() {
         ))}
       </View>
 
-      <Pressable testID="save-category" onPress={save} disabled={saving || deletion.busy || saveComplete.current} style={styles.saveBtn}>
-        <Text style={styles.saveText}>{saving ? tr("ui.saving") : tr("ui.save")}</Text>
-      </Pressable>
     </ElasticScrollView>
   );
 }
@@ -185,6 +198,4 @@ const useStyles = makeStyles((colors) => ({
   typeBtn: { flex: 1, padding: 12, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, alignItems: "center", borderWidth: 1, borderColor: colors.border },
   iconOpt: { padding: 4, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSecondary },
   chip: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSecondary },
-  saveBtn: { marginTop: 28, backgroundColor: colors.primaryAction, padding: 16, borderRadius: radius.pill, alignItems: "center" },
-  saveText: { color: "#fff", fontWeight: "800", fontSize: 16 },
 }));

@@ -2,6 +2,7 @@ import { localizedError } from "@/src/i18n/errors";
 import { tr, useTranslation } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -122,10 +123,8 @@ export default function GoalForm() {
           contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
-            <Pressable testID="goal-form-back" onPress={() => router.back()} style={styles.backBtn}>
-              <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-            </Pressable>
-            <Text style={styles.title}>{editing ? t("goals.editGoal") : t("goals.newGoal")}</Text>
+            <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{editing ? t("goals.editGoal") : t("goals.newGoal")}</Text>
+            <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="goal-form-back" onSave={save} saving={saving} saveTestID="save-goal" saveAccessibilityLabel={t("headerActions.saveGoal")} />
           </View>
 
           {editing && goalQ.isLoading ? <ActivityIndicator color={colors.incomeGreen} /> : null}
@@ -239,14 +238,6 @@ export default function GoalForm() {
             </View>
           ) : null}
 
-          <Pressable
-            testID="save-goal"
-            onPress={save}
-            disabled={saving}
-            style={({ pressed }) => [styles.saveBtn, (pressed || saving) && { opacity: 0.75 }]}
-          >
-            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{editing ? t("goals.saveChanges") : t("goals.create")}</Text>}
-          </Pressable>
         </ElasticScrollView>
       </KeyboardAvoidingView>
 
@@ -290,8 +281,6 @@ const useStyles = makeStyles((colors) => ({
   swatch: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", borderWidth: 0, borderColor: "transparent" },
   errorBox: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16, padding: 12, borderRadius: radius.lg, backgroundColor: colors.expenseRed + "14" },
   errorText: { flex: 1, color: colors.expenseRed, fontSize: 13, fontWeight: "600" },
-  saveBtn: { marginTop: 22, backgroundColor: colors.primaryAction, padding: 16, minHeight: 54, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-  saveText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   sheetTitle: { fontSize: 16, fontWeight: "800", color: colors.onSurface, textAlign: "center", marginTop: 4, marginBottom: 8 },
   sheetRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.divider },
   sheetRowText: { flex: 1, fontSize: 14.5, color: colors.onSurface },

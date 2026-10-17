@@ -2,6 +2,7 @@ import { localizedError } from "@/src/i18n/errors";
 import { tr, useTranslation } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useMemo, useCallback, useEffect, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Switch } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -147,10 +148,8 @@ export default function RecurringPay() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
-            <Pressable testID="rp-pay-back" onPress={() => { screenEpoch.current++; router.back(); }} style={styles.backBtn}>
-              <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-            </Pressable>
-            <Text style={styles.title}>{t("rp.payTitle")}</Text>
+            <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("rp.payTitle")}</Text>
+            <MoneyFlowHeaderActions onBack={() => { screenEpoch.current++; router.back(); }} backTestID="rp-pay-back" />
           </View>
 
           {rpQ.isLoading || !r ? <ActivityIndicator color={colors.incomeGreen} /> : (

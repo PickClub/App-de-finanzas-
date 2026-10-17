@@ -1,5 +1,6 @@
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, ScrollView, ActivityIndicator, useWindowDimensions } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -568,11 +569,9 @@ export default function FinancialCalendar() {
       >
         {/* Header */}
         <View style={[styles.header, narrow && { flexWrap: "wrap" }]}>
-          <Pressable testID="cal-back" onPress={() => router.back()} style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}>
-            <Ionicons name="arrow-back" size={us(22)} color={colors.onSurface} />
-          </Pressable>
-          <Text style={[styles.title, mont()]} numberOfLines={1} adjustsFontSizeToFit>{t("calendar.title")}</Text>
+          <Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1} adjustsFontSizeToFit>{t("calendar.title")}</Text>
           {!narrow ? Segmented : null}
+          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="cal-back" />
         </View>
         {narrow ? <View style={{ marginBottom: us(spacing.md) }}>{Segmented}</View> : null}
 

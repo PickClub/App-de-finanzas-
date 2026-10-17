@@ -1,6 +1,7 @@
 import i18n, { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useState, useCallback } from "react";
 import { View, ScrollView } from "react-native";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
@@ -177,14 +178,10 @@ export default function Categories() {
       contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: us(10), marginBottom: us(spacing.lg) }}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-        </Pressable>
-        <Text style={styles.title}>{tr("ui.categories")}</Text>
-        <View pointerEvents="none" style={{ width: us(32), height: us(30) }} />
-        <Pressable testID="add-category" onPress={() => router.push("/categories/new")} style={[styles.backBtn, { backgroundColor: accentGreen, borderColor: accentGreen }]}>
+        <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{tr("ui.categories")}</Text>
+        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="categories-back" beforeActions={<Pressable testID="add-category" onPress={() => router.push("/categories/new")} style={[styles.backBtn, { backgroundColor: accentGreen, borderColor: accentGreen }]} accessibilityRole="button" accessibilityLabel={tr("common.add")}>
           <Ionicons name="add" size={us(22)} color="#fff" />
-        </Pressable>
+        </Pressable>} />
       </View>
 
       {renderSection("expense", colors.expenseRed, tr("ui.expenses"))}

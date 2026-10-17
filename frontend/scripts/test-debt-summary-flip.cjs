@@ -16,11 +16,11 @@ const listSource=source
  .replace(/                <Pressable testID=\{`debt-options-\$\{d.id\}`\}[\s\S]*?<\/Pressable>\n\n/,'')
  .replace('                  <View style={styles.debtProgress}>\n','').replace('                  </ProgressRing>\n                  </View>','                  </ProgressRing>')
  .replace('      {actionDebt && <DebtActions key={actionDebt.id} debt={actionDebt} onClose={() => setActionDebt(null)} />}\n','');
-const headerSource=source.replace('        <View style={styles.summarySpacing}>\n          <DebtSummaryCard front={oweSummary} back={lentSummary} entryT={entryT} />\n        </View>','        <DebtSummaryCard front={oweSummary} back={lentSummary} entryT={entryT} />');
 assert.equal(between(source,'function buildStat','export default'),between(old,'function buildStat','export default'),'Existing amount arithmetic/percentage rules preserved');
 assert.equal(between(listSource,'        {/* Filters','function FilterPill'),between(old,'        {/* Filters','function FilterPill'),'Filters, individual cards, add action and order preserved');
 assert.equal(between(source,'function FilterPill','function MetricRow'),between(old,'function FilterPill','function MetricRow'));
-assert.equal(between(headerSource,'        {/* Header','        <DebtSummaryCard'),between(old,'        {/* Header','        {/* Summary card'));
+assert(source.includes('<MoneyFlowHeaderActions onBack={() => router.back()} backTestID="debts-back" beforeActions='),'Shared Back controls retain the existing list route');
+assert.equal(between(source,'        <View style={styles.summarySpacing}>','        {/* Filters'),between(old,'        <View style={styles.summarySpacing}>','        {/* Filters'),'Summary card and its surrounding spacing remain unchanged');
 const engine=createInstance();engine.init({lng:'en-US',fallbackLng:'en-US',initImmediate:false,resources:{'en-US':{translation:require('../src/i18n/locales/en.json')},es:{translation:require('../src/i18n/locales/es.json')}}});
 let slots=[],index=0,cleanups=[],pending=[],reduced=false,dark=false,stateWrites=0,viewportWidth=460;
 const useRef=value=>{const i=index++;return slots[i]??(slots[i]={current:value});};
@@ -39,7 +39,7 @@ const mocks={react,'react/jsx-runtime':{jsx,jsxs:jsx,Fragment:'Fragment'},'react
  '@react-native-vector-icons/ionicons':{default:'Icon'},'expo-linear-gradient':{LinearGradient:'Gradient'},'react-native-safe-area-context':{},'expo-router':{},'@tanstack/react-query':{},'@/src/api':{},'@/src/components/debt-actions':{DebtActions:'DebtActions'},
  '@/src/theme':{useTheme:()=>({scheme:dark?'dark':'light'}),makeStyles:factory=>()=>factory({},dark?'dark':'light'),radius:{cardLg:28,pill:999},spacing:{lg:16,md:12,sm:8}},
  '@/src/format':{formatCurrencyInt:value=>new Intl.NumberFormat(engine.language==='es'?'es-US':'en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(value)},
- '@/src/components/ProgressRing':{ProgressRing:'Ring'},'@/src/components/ui':{IconTile:'IconTile'},'@/src/lock':{},'@/src/ui-scale':{us:x=>x,ufs:x=>x}};
+ '@/src/components/ProgressRing':{ProgressRing:'Ring'},'@/src/components/ui':{IconTile:'IconTile'},'@/src/components/header-actions':{MoneyFlowHeaderActions:'MoneyFlowHeaderActions'},'@/src/lock':{},'@/src/ui-scale':{us:x=>x,ufs:x=>x}};
 const context={exports:{},Math,require:name=>{assert(name in mocks,name);return mocks[name];}};
 vm.runInNewContext(ts.transpileModule(source+'\nexport {buildStat, DebtSummaryCard, SummaryFace, palette};',{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX}}).outputText,context);
 const {buildStat,DebtSummaryCard,SummaryFace}=context.exports;
@@ -106,6 +106,6 @@ for(viewportWidth of [320,360,393,460,800]) {
  }
 }
 assert(!source.includes('onCardLayout')&&!source.includes('cardScaleX')&&!source.includes('setLockH'));
-console.log('PASS: independent directional totals/payments/counts/percentages, zero and decimal amounts; original arithmetic, header/filters/list unchanged; English/Spanish light/dark faces, interpolated captions, four metrics and small hint.');
+console.log('PASS: independent directional totals/payments/counts/percentages, zero and decimal amounts; original arithmetic, summary card, filters and list unchanged; English/Spanish light/dark faces, interpolated captions, four metrics and small hint.');
 console.log('PASS: real 3D worklet transforms both directions, midpoint face gating, no mirrored resting face, fixed overlay bounds/no layout measurement, 440ms cubic inOut, rapid-tap exclusion, no per-frame React writes, Reduce Motion and unmount cleanup.');
 console.log('LIMIT: Samsung frame rate, GPU compositing, text fitting and touch/scroll behavior require Expo Go review.');

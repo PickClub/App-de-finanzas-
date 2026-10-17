@@ -1,6 +1,7 @@
 import i18n, { tr, useTranslation } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, ScrollView, Platform } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
@@ -226,12 +227,10 @@ export default function AllTransactions() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Pressable testID="all-tx-back" onPress={() => router.back()} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
-            <Ionicons name="chevron-back" size={us(24)} color={pal.ink} />
-          </Pressable>
-          <Text style={[styles.title, { color: pal.ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+          <Text style={[styles.title, { color: pal.ink, flex: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
             {tr("ui.all_transactions")}
           </Text>
+          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="all-tx-back" />
         </View>
 
         {/* Period card */}

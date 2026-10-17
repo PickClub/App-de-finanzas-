@@ -1,5 +1,6 @@
 import { ElasticFlatList } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useCallback, useRef, useState } from "react";
 import { View, FlatList, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
@@ -112,10 +113,8 @@ export default function BillsScreen() {
   const Header = (
     <View>
       <View style={styles.header}>
-        <Pressable testID="bills-back" onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-        </Pressable>
-        <Text style={[styles.title, mont()]} numberOfLines={1}>{t("bills.title")}</Text>
+        <Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1}>{t("bills.title")}</Text>
+        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="bills-back" />
       </View>
       <Text style={styles.subtitle}>{t("bills.subtitle")}</Text>
 

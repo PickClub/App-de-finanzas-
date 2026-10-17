@@ -1,13 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Modal, Animated, Easing, StyleSheet, Dimensions } from "react-native";
 import { Pressable } from "@/src/components/pressable";
-import { Text } from "@/src/components/typography";
-import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, radius, spacing } from "@/src/theme";
-import { useTranslation } from "@/src/i18n";
 
 import { us, scaleStyles } from "@/src/ui-scale";
+import { MoneyFlowConfirmDialog } from "./interaction-system";
 const { height: SCREEN_H } = Dimensions.get("window");
 
 /**
@@ -79,53 +77,9 @@ export function AppSheet({
   );
 }
 
-/**
- * Consistent confirmation sheet. Only the icon / accent / title / description /
- * primary action change between the different flows.
- */
-export function ConfirmSheet({
-  visible,
-  onClose,
-  icon,
-  accent,
-  title,
-  description,
-  confirmLabel,
-  onConfirm,
-  destructive,
-  confirmTestID,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  icon: string;
-  accent: string;
-  title: string;
-  description: string;
-  confirmLabel: string;
-  onConfirm: () => void;
-  destructive?: boolean;
-  confirmTestID?: string;
-}) {
-  const { colors } = useTheme();
-  const { t } = useTranslation();
-  const main = destructive ? colors.expenseRed : accent;
-  return (
-    <AppSheet visible={visible} onClose={onClose} testID="confirm-sheet">
-      <View style={s.confirmBody}>
-        <View style={[s.confirmIcon, { backgroundColor: main + "1F" }]}>
-          <Ionicons name={icon as any} size={us(30)} color={main} />
-        </View>
-        <Text style={[s.confirmTitle, { color: colors.onSurface }]}>{title}</Text>
-        <Text style={[s.confirmDesc, { color: colors.muted }]}>{description}</Text>
-        <Pressable testID={confirmTestID || "confirm-primary"} onPress={onConfirm} style={[s.primaryBtn, { backgroundColor: main }]}>
-          <Text style={s.primaryText}>{confirmLabel}</Text>
-        </Pressable>
-        <Pressable onPress={onClose} style={[s.cancelBtn, { backgroundColor: colors.surfaceTertiary }]}>
-          <Text style={[s.cancelText, { color: colors.onSurface }]}>{t("common.cancel")}</Text>
-        </Pressable>
-      </View>
-    </AppSheet>
-  );
+/** Compatibility name: existing handlers now use the unified centered dialog. */
+export function ConfirmSheet(props: React.ComponentProps<typeof MoneyFlowConfirmDialog>) {
+  return <MoneyFlowConfirmDialog {...props} />;
 }
 
 const s = StyleSheet.create(scaleStyles({
@@ -144,12 +98,4 @@ const s = StyleSheet.create(scaleStyles({
     elevation: 24,
   },
   grip: { alignSelf: "center", width: 40, height: 5, borderRadius: 3, marginBottom: 14 },
-  confirmBody: { alignItems: "center", paddingHorizontal: spacing.xs, paddingTop: 6 },
-  confirmIcon: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: 14 },
-  confirmTitle: { fontSize: 19, fontWeight: "800", textAlign: "center", letterSpacing: -0.3 },
-  confirmDesc: { fontSize: 13.5, textAlign: "center", marginTop: 8, lineHeight: 19, paddingHorizontal: 6 },
-  primaryBtn: { alignSelf: "stretch", marginTop: 22, paddingVertical: 15, borderRadius: radius.pill, alignItems: "center" },
-  primaryText: { color: "#fff", fontWeight: "800", fontSize: 15.5 },
-  cancelBtn: { alignSelf: "stretch", marginTop: 10, paddingVertical: 15, borderRadius: radius.pill, alignItems: "center" },
-  cancelText: { fontWeight: "800", fontSize: 15.5 },
 }));

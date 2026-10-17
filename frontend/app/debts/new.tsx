@@ -1,9 +1,11 @@
+import { Alert } from "@/src/components/interaction-system";
 import { localizedError } from "@/src/i18n/errors";
 import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useMemo, useRef, useState } from "react";
-import { View, ScrollView, Alert, KeyboardAvoidingView, Platform, Keyboard } from "react-native";
+import { View, ScrollView, KeyboardAvoidingView, Platform, Keyboard } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from "react-native-reanimated";
@@ -253,7 +255,10 @@ export default function NewDebt() {
   if (editing && loadedDebt?.id !== editId) {
     const failed = !editId || debtQ.isError || paymentsQ.isError || (debtQ.isSuccess && debtQ.data?.id !== editId) || (paymentsQ.isSuccess && !Array.isArray(paymentsQ.data));
     return <View style={{ flex: 1, backgroundColor: pal.bg, padding: us(spacing.lg), paddingTop: insets.top + us(16) }}>
-      <Pressable testID="debt-edit-back" onPress={() => router.back()}><Text>{tr("common.cancel")}</Text></Pressable>
+      <View style={styles.headerRow}>
+        <Text style={[styles.title, { flex: 1 }]}>{tr("debts.editDebt")}</Text>
+        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="debt-edit-back" />
+      </View>
       <Text testID="debt-edit-status">{failed ? tr("debts.editLoadFailed") : tr("ui.loading")}</Text>
       {failed && !!editId && <Pressable testID="debt-edit-retry" onPress={() => { void debtQ.refetch(); void paymentsQ.refetch(); }}><Text>{tr("ui.retry")}</Text></Pressable>}
     </View>;
@@ -263,11 +268,8 @@ export default function NewDebt() {
     return (
       <View style={{ flex: 1, backgroundColor: colors.pageBackground, paddingTop: insets.top + us(8) }}>
         <View style={styles.headerRow}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={us(24)} color={colors.onSurface} />
-          </Pressable>
-          <Text style={styles.title}>{tr("ui.new_debt")}</Text>
-          <View style={{ width: us(40) }} />
+          <Text style={[styles.title, { flex: 1 }]}>{tr("ui.new_debt")}</Text>
+          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="debt-form-back" />
         </View>
         <View style={styles.selWrap}>
           <View style={[styles.selIconTile, { backgroundColor: colors.incomeGreen + "1A" }]}>
@@ -317,11 +319,8 @@ export default function NewDebt() {
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(spacing.lg), paddingHorizontal: us(spacing.lg), gap: us(10) }}
       >
         <View style={[styles.headerRow, { marginBottom: us(spacing.xs) }]}>
-          <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: pal.card, borderColor: pal.border }]}>
-            <Ionicons name="chevron-back" size={us(24)} color={pal.onSurface} />
-          </Pressable>
-          <Text style={[styles.title, { color: pal.onSurface }]}>{editing ? tr("debts.editDebt") : iOwe ? tr("ui.i_owe") : tr("ui.owed_to_me")}</Text>
-          <View style={{ width: us(40) }} />
+          <Text style={[styles.title, { color: pal.onSurface, flex: 1 }]} numberOfLines={1}>{editing ? tr("debts.editDebt") : iOwe ? tr("ui.i_owe") : tr("ui.owed_to_me")}</Text>
+          <MoneyFlowHeaderActions onBack={() => router.back()} onSave={save} saving={saving} saveTestID="save-debt" saveAccessibilityLabel={tr("headerActions.saveDebt")} />
         </View>
 
         {/* B. Debt name */}
@@ -462,17 +461,6 @@ export default function NewDebt() {
         </View>
       </ElasticScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + us(12), backgroundColor: pal.bg }]}>
-        <Pressable
-          testID="save-debt"
-          onPress={save}
-          disabled={saving}
-          style={({ pressed }) => [styles.saveBtn, { backgroundColor: scheme === "dark" ? pal.forest : colors.primaryAction }, (pressed || saving) && { opacity: 0.85 }]}
-        >
-          <Text style={styles.saveText}>{saving ? tr("ui.saving") : tr("ui.save_debt")}</Text>
-        </Pressable>
-      </View>
-
       <AppSheet visible={catSheet} onClose={() => setCatSheet(false)} testID="debt-category-sheet">
         <View style={styles.sheetHeader}>
           <Text style={styles.sheetTitle}>{tr("ui.category")}</Text>
@@ -556,8 +544,6 @@ const useStyles = makeStyles((colors, scheme) => {
   input: { fontSize: 15, color: colors.onSurface, backgroundColor: colors.surfaceSecondary, padding: 14, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border },
   freqChip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
   iconOpt: { padding: 4, borderRadius: 14, borderWidth: 1, borderColor: p.border, backgroundColor: p.field },
-  saveBtn: { backgroundColor: colors.primaryAction, padding: 16, borderRadius: radius.pill, alignItems: "center" },
-  saveText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   // --- Step 2: redesigned form ---
   card: {
     backgroundColor: p.card, borderRadius: radius.lg, borderWidth: 1, borderColor: p.border, padding: 12,
@@ -595,7 +581,6 @@ const useStyles = makeStyles((colors, scheme) => {
   percentSuffix: { fontSize: 20, fontWeight: "800", color: p.muted, marginLeft: 6 },
   colorRing: { width: 42, height: 42, borderRadius: 21, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   colorDot: { width: 32, height: 32, borderRadius: 16 },
-  footer: { paddingHorizontal: spacing.lg, paddingTop: 10 },
   sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginBottom: 10, marginTop: 4 },
   sheetTitle: { fontSize: 20, fontWeight: "800", color: p.onSurface },
   sheetClose: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: p.mint },

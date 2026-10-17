@@ -18,6 +18,17 @@
     "error": "Error",
     "unknown": "Desconocido"
   },
+  "headerActions": {
+    "saveChanges": "Guardar cambios",
+    "saveAccount": "Guardar cuenta",
+    "saveTransaction": "Guardar movimiento",
+    "saveDebt": "Guardar deuda",
+    "saveBudget": "Guardar presupuesto",
+    "saveGoal": "Guardar meta de ahorro",
+    "saveBill": "Guardar factura",
+    "saveCategory": "Guardar categoría",
+    "saveRecurringPayment": "Guardar pago recurrente"
+  },
   "tabs": {
     "accounts": "Cuentas",
     "ai": "IA",
@@ -344,7 +355,9 @@
     "type": "Tipo",
     "expense": "Gasto",
     "income": "Ingreso",
-    "empty": "Aún no tienes categorías"
+    "empty": "Aún no tienes categorías",
+    "deleteTitle": "¿Eliminar esta categoría?",
+    "deleteDescription": "Solo se eliminará esta categoría. Si está en uso, MoneyFlow la conservará y explicará el motivo."
   },
   "budgets": {
     "title": "Presupuestos",

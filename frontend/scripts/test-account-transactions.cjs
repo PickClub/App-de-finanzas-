@@ -22,6 +22,9 @@ const d=inspect(detail,detailFile),l=inspect(list,listFile);
 function execute(code,context){vm.runInNewContext(ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,localeGlobals(context));}
 const plain=v=>JSON.parse(JSON.stringify(v));
 const allRange={start:Date.parse('2026-10-01T00:00:00Z'),end:Date.parse('2026-10-31T23:59:59.999Z')};
+const normalizedStyles=source=>source.slice(source.indexOf('const useStyles ='))
+  .replace(/^  editBtn: \{[\s\S]*?^  \},?\n/gm,'')
+  .replace(/^  editText: \{[^\n]*\},?\n/gm,'');
 const transaction=(id,type,account_id,to_account_id,date='2026-10-15T12:00:00Z',amount=100)=>({id,type,account_id,to_account_id,date,amount});
 const data=[
   ...['income','expense','debt_payment','loan_given','loan_received'].map((type,n)=>transaction('a-'+n,type,'A',null)),
@@ -78,7 +81,7 @@ async function runPaged(){
   q.close();
   for(const [file,source] of [[detailFile,detail],[listFile,list]]){
     const base=cp.execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),marker='const useStyles =';
-    assert.equal(source.slice(source.indexOf(marker)),base.slice(base.indexOf(marker)));
+    assert.equal(normalizedStyles(source),normalizedStyles(base));
   }
   console.log('PASS: absent account, all type/order combinations, identical style definitions and no financial handlers.');
 }
@@ -124,7 +127,7 @@ function run(){
 
   for(const [file,text] of [[detailFile,detail],[listFile,list]]){
     const base=cp.execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),marker='const useStyles =';
-    assert.equal(text.slice(text.indexOf(marker)),base.slice(base.indexOf(marker)));
+    assert.equal(normalizedStyles(text),normalizedStyles(base));
     const out=ts.transpileModule(text,{fileName:file,reportDiagnostics:true,compilerOptions:{jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2020}});
     assert.equal((out.diagnostics||[]).filter(x=>x.category===ts.DiagnosticCategory.Error).length,0);
   }

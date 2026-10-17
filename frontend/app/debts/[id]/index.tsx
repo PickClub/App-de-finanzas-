@@ -1,10 +1,12 @@
 import { DebtActions } from "@/src/components/debt-actions";
+import { ContextActionsTrigger, Alert } from "@/src/components/interaction-system";
 import { localizedError } from "@/src/i18n/errors";
 import i18n, { tr, useTranslation as useInterfaceLanguage, localeTag } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useEffect, useRef, useState } from "react";
-import { View, ScrollView, Alert, Platform } from "react-native";
+import { View, Platform } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
@@ -68,7 +70,7 @@ export default function DebtDetail() {
   const processing = useRef(false);
   const deleted = useRef(false);
   const [busy, setBusy] = useState(false);
-  const [showOptions, setShowOptions] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const debtQ = useQuery({ queryKey: ["debt", params.id], queryFn: () => api.getDebt(params.id as string), enabled: !!params.id });
   const paysQ = useQuery({ queryKey: ["debt-payments", params.id], queryFn: () => api.listDebtPayments(params.id as string), enabled: !!params.id });
   const missing = debtQ.error instanceof ApiError && debtQ.error.status === 404;
@@ -111,8 +113,8 @@ export default function DebtDetail() {
       const message = error instanceof ApiError && error.status === 409
         ? paymentId
           ? error.detail
-          : "Esta deuda tiene pagos o movimientos vinculados. Anúlalos desde el historial antes de eliminarla."
-        : error instanceof Error ? error.message : "No se pudo completar la operación. Inténtalo de nuevo.";
+          : tr("debts.deleteLinked")
+        : error instanceof Error ? error.message : tr("ui.could_not_complete_the_operation");
       Alert.alert(tr("ui.could_not_delete"), localizedError(message));
     } finally {
       if (!deleted.current) {
@@ -151,13 +153,11 @@ export default function DebtDetail() {
     <>
     <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} style={{ flex: 1, backgroundColor: pal.bg }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
       <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
-          <Ionicons name="chevron-back" size={us(24)} color={pal.forest} />
-        </Pressable>
-        <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest }]} numberOfLines={1}>{d.name}</Text>
-        <Pressable testID="debt-detail-options" accessibilityRole="button" accessibilityLabel={tr("ui.more_options")} onPress={() => setShowOptions(true)} disabled={busy} accessibilityState={{ disabled: busy, busy }} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]}>
-          <Ionicons name="ellipsis-horizontal" size={us(22)} color={pal.forest} />
-        </Pressable>
+        <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest, flex: 1 }]} numberOfLines={1}>{d.name}</Text>
+        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="debt-detail-back" beforeActions={<ContextActionsTrigger testID="debt-detail-options" accessibilityLabel={tr("ui.more_options")} disabled={busy} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]} iconColor={pal.forest} iconSize={us(22)} actions={[
+          { id: "edit", label: tr("ui.edit"), icon: "create-outline", onPress: () => router.push({ pathname: "/debts/new", params: { id: d.id } }) },
+          { id: "delete", label: tr("ui.delete"), icon: "trash-outline", destructive: true, onPress: () => setConfirmDelete(true) },
+        ]} />} />
       </View>
 
       {/* Resumen de la deuda */}
@@ -250,15 +250,9 @@ export default function DebtDetail() {
                 <Text style={[styles.histAmount, { color: pal.onSurface }]}>{formatCurrencyInt(p.amount)}</Text>
                 <Text style={[styles.histDate, { color: pal.muted }]}>{formatDateLong(p.date)}</Text>
               </View>
-              <Pressable
-                testID={`cancel-payment-${p.id}`}
-                onPress={() => cancelPayment(p.id)}
-                disabled={busy}
-                accessibilityState={{ disabled: busy, busy }}
-                style={[styles.cancelBtn, { backgroundColor: pal.coralSoft }]}
-              >
-                <Text style={[styles.cancelText, { color: pal.coral }]}>{tr("ui.cancel_payment")}</Text>
-              </Pressable>
+              <ContextActionsTrigger testID={`cancel-payment-${p.id}`} disabled={busy} iconColor={pal.coral} iconSize={us(18)} actions={[
+                { id: "cancel-payment", label: tr("ui.cancel_payment"), icon: "arrow-undo-outline", destructive: true, onPress: () => cancelPayment(p.id) },
+              ]} />
             </View>
           ))}
         </View>
@@ -278,12 +272,12 @@ export default function DebtDetail() {
         </View>
       )}
     </ElasticScrollView>
-    {showOptions && <DebtActions key={d.id} debt={d} onClose={() => setShowOptions(false)} onDeleted={() => {
+    <DebtActions key={d.id} visible={confirmDelete} debt={d} onClose={() => setConfirmDelete(false)} onDeleted={() => {
       deleted.current = true;
       processing.current = true;
-      setShowOptions(false);
+      setConfirmDelete(false);
       router.dismissTo("/debts");
-    }} />}
+    }} />
     </>
   );
 }
@@ -328,8 +322,6 @@ const useStyles = makeStyles(() => ({
   histRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
   histAmount: { fontSize: 15, fontWeight: "700" },
   histDate: { fontSize: 12, marginTop: 2 },
-  cancelBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.pill },
-  cancelText: { fontSize: 12, fontWeight: "700" },
   emptyCard: { alignItems: "center", paddingVertical: 22, paddingHorizontal: 20 },
   emptyArt: { width: 120, height: 76, alignItems: "center", justifyContent: "center", marginBottom: 10 },
   sparkle: { position: "absolute", width: 8, height: 8, borderRadius: 4 },

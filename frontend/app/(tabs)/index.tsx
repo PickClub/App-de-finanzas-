@@ -31,7 +31,7 @@ import { formatCurrency, formatCurrencyInt, formatDateLong, formatDateTime, tran
 import { IconTile } from "@/src/components/ui";
 import { useLock } from "@/src/lock";
 import { WalletIcon, ChartIcon, HandCoinIcon } from "@/src/components/animated-section-icons";
-import { DateRangeSheet, type DateRange, type DateRangeSheetHandle } from "@/src/components/date-range-sheet";
+import { DateRangeSheet, type DateRange, type DateRangeOrigin, type DateRangeSheetHandle } from "@/src/components/date-range-sheet";
 
 import { us, ufs } from "@/src/ui-scale";
 // --- HOME-ONLY color redesign (light mode only) ---------------------------
@@ -486,11 +486,12 @@ function MRIconPill({
 }: {
   testID: string;
   active: boolean;
-  onPress: () => void;
+  onPress: (origin?: DateRangeOrigin) => void;
   activeColor: string;
   idleColor: string;
   styles: any;
 }) {
+  const trigger = useRef<View>(null);
   const scale = useRef(new RNAnimated.Value(1)).current;
   const useNative = Platform.OS !== "web";
   const pressIn = () => {
@@ -502,8 +503,17 @@ function MRIconPill({
   return (
     <RNAnimated.View style={{ transform: [{ scale }], flexShrink: 0 }}>
       <Pressable
+        ref={trigger}
         testID={testID}
-        onPress={onPress}
+        onPress={() => {
+          const button = trigger.current;
+          if (!button) { onPress(); return; }
+          button.measureInWindow((x, y, width, height) => {
+            if (trigger.current !== button) return;
+            const valid = [x, y, width, height].every(Number.isFinite) && width > 0 && height > 0;
+            onPress(valid ? { x: x + width / 2, y: y + height / 2 } : undefined);
+          });
+        }}
         onPressIn={pressIn}
         onPressOut={pressOut}
         style={[styles.mrIconPill, active && styles.mrIconPillActive]}
@@ -1078,7 +1088,7 @@ export default function Home() {
           <MRIconPill
             testID="mr-filter-month"
             active={!!dateRange}
-            onPress={() => dateSheetRef.current?.open(dateRange)}
+            onPress={(origin) => dateSheetRef.current?.open(dateRange, origin)}
             activeColor={colors.brandPrimary}
             idleColor={colors.muted}
             styles={styles}

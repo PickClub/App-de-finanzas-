@@ -1,17 +1,19 @@
 import i18n, { localeTag, tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
 
-import React, { forwardRef, memo, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react";
+import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Modal, ScrollView, View, StyleSheet, useWindowDimensions } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text } from "@/src/components/typography";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, radius, spacing } from "@/src/theme";
+import Animated, { cancelAnimation, Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 import { us, scaleStyles } from "@/src/ui-scale";
 export type DateRange = { start: number; end: number };
+export type DateRangeOrigin = { x: number; y: number };
 export type DateRangeSheetHandle = {
-  open: (value: DateRange | null) => void;
+  open: (value: DateRange | null, origin?: DateRangeOrigin) => void;
   close: () => void;
 };
 
@@ -69,6 +71,64 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
   const presented = useRef(false);
   const closing = useRef(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [animated, setAnimated] = useState(false);
+  const modalRoot = useRef<View>(null);
+  const mounted = useRef(true);
+  const presentationId = useRef(0);
+  const transition = useRef<{
+    origin: DateRangeOrigin;
+    root?: { x: number; y: number; width: number; height: number };
+    card?: { x: number; y: number; width: number; height: number };
+    shown: boolean;
+    started: boolean;
+  } | null>(null);
+  const progress = useSharedValue(0);
+  const originOffset = useSharedValue({ x: 0, y: 0 });
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; presentationId.current++; cancelAnimation(progress); };
+  }, [progress]);
+
+  const finishClose = useCallback((id: number) => {
+    if (!mounted.current || presentationId.current !== id) return;
+    presented.current = false;
+    setIsOpen(false);
+  }, []);
+
+  // Native layout supplies the final, untransformed card bounds. Never measure an animated card.
+  const revealWhenReady = useCallback(() => {
+    const current = transition.current;
+    if (!current?.shown || !current.root || !current.card || closing.current || !presented.current) return;
+    const { root, card, origin } = current;
+    originOffset.value = {
+      x: Math.max(root.x, Math.min(origin.x, root.x + root.width)) - (root.x + card.x + card.width / 2),
+      y: Math.max(root.y, Math.min(origin.y, root.y + root.height)) - (root.y + card.y + card.height / 2),
+    };
+    if (current.started) return;
+    current.started = true;
+    progress.value = withTiming(1, { duration: 280, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System });
+  }, [originOffset, progress]);
+
+  const measureModalRoot = useCallback(() => {
+    const current = transition.current;
+    if (!current || closing.current) return;
+    modalRoot.current?.measureInWindow((x, y, width, measuredHeight) => {
+      if (!mounted.current || transition.current !== current || closing.current
+        || ![x, y, width, measuredHeight].every(Number.isFinite) || width <= 0 || measuredHeight <= 0) return;
+      current.root = { x, y, width, height: measuredHeight };
+      revealWhenReady();
+    });
+  }, [revealWhenReady]);
+
+  const cardAnimation = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [
+      { translateX: originOffset.value.x * (1 - progress.value) },
+      { translateY: originOffset.value.y * (1 - progress.value) },
+      { scale: 0.08 + 0.92 * progress.value },
+    ],
+  }));
+  const backdropAnimation = useAnimatedStyle(() => ({ opacity: progress.value }));
   const green = isDark ? "#2CA079" : "#126046";
   const mint = isDark ? "rgba(44,160,121,0.22)" : "#DCEBE0";
   const gridLine = colors.border;
@@ -80,12 +140,20 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
   const close = useCallback(() => {
     if (!presented.current || closing.current) return;
     closing.current = true;
-    presented.current = false;
-    setIsOpen(false);
-  }, []);
+    const id = presentationId.current;
+    if (!transition.current?.started) { finishClose(id); return; }
+    progress.value = withTiming(0, { duration: 220, easing: Easing.in(Easing.cubic), reduceMotion: ReduceMotion.System }, finished => {
+      if (finished) runOnJS(finishClose)(id);
+    });
+  }, [finishClose, progress]);
 
-  const open = useCallback((value: DateRange | null) => {
-    if (presented.current) return;
+  const open = useCallback((value: DateRange | null, origin?: DateRangeOrigin) => {
+    if (presented.current || !mounted.current) return;
+    const anchored = !!origin && Number.isFinite(origin.x) && Number.isFinite(origin.y);
+    presentationId.current++;
+    transition.current = anchored ? { origin, shown: false, started: false } : null;
+    progress.value = anchored ? 0 : 1;
+    setAnimated(anchored);
     // Prepare the draft before presenting; no post-open effect / second grid.
     let month: Date;
     if (value) {
@@ -105,7 +173,7 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
     presented.current = true;
     closing.current = false;
     setIsOpen(true);
-  }, []);
+  }, [progress]);
 
   useImperativeHandle(ref, () => ({ open, close }), [open, close]);
 
@@ -217,21 +285,39 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
       : longEs(selStart, language)
     : "Ninguna fecha seleccionada", [selStart, selEnd, language]);
   const kindLabel = !selStart ? "—" : isRange ? "Rango" : "Un solo día";
+  const Card = animated ? Animated.View : View;
+  const backdrop = <Pressable testID="date-modal-backdrop" onPress={close}
+    accessibilityRole="button" accessibilityLabel={tr("common.close")}
+    style={[StyleSheet.absoluteFill, st.backdrop, { opacity: 0.45 }]} />;
 
   return (
     <Modal visible={isOpen} transparent animationType="none" hardwareAccelerated onRequestClose={close}
+      onShow={animated ? () => {
+        if (transition.current) transition.current.shown = true;
+        measureModalRoot();
+        revealWhenReady();
+      } : undefined}
       statusBarTranslucent navigationBarTranslucent>
-      <View testID="date-modal-root" style={[st.modalRoot, {
+      <View ref={animated ? modalRoot : undefined} testID="date-modal-root" style={[st.modalRoot, {
         paddingTop: insets.top + us(16), paddingBottom: insets.bottom + us(16),
         paddingLeft: insets.left, paddingRight: insets.right,
-      }]} onLayout={(event) => setModalHeight(event.nativeEvent.layout.height)}>
-        <Pressable testID="date-modal-backdrop" onPress={close}
-          accessibilityRole="button" accessibilityLabel={tr("common.close")}
-          style={[StyleSheet.absoluteFill, st.backdrop, { opacity: 0.45 }]} />
-        <View testID="date-modal-card" accessibilityViewIsModal
+      }]} onLayout={(event) => {
+        setModalHeight(event.nativeEvent.layout.height);
+        measureModalRoot();
+      }}>
+        {animated ? <Animated.View style={[StyleSheet.absoluteFill, backdropAnimation]}>{backdrop}</Animated.View> : backdrop}
+        <Card testID="date-modal-card" accessibilityViewIsModal
+          onStartShouldSetResponderCapture={animated ? () => closing.current : undefined}
+          onLayout={animated ? (event) => {
+            const layout = event.nativeEvent.layout;
+            if (!transition.current || ![layout.x, layout.y, layout.width, layout.height].every(Number.isFinite)
+              || layout.width <= 0 || layout.height <= 0) return;
+            transition.current.card = layout;
+            revealWhenReady();
+          } : undefined}
           style={[st.sheetBackground, st.sheetShadow, {
             width: "92%", maxHeight, backgroundColor: colors.surface, borderColor: colors.border,
-          }]}>
+          }, ...(animated ? [cardAnimation] : [])]}>
           <ScrollView testID="date-range-sheet" style={st.scrollContent}
             contentContainerStyle={[st.sheetContent, { paddingBottom: insets.bottom + us(spacing.lg) }]}
             keyboardShouldPersistTaps="handled" bounces={false} overScrollMode="never">
@@ -317,7 +403,7 @@ export const DateRangeSheet = memo(forwardRef<DateRangeSheetHandle, {
         <Text style={st.applyText}>{tr("ui.apply")}</Text>
       </Pressable>
           </ScrollView>
-        </View>
+        </Card>
       </View>
     </Modal>
   );

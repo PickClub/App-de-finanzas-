@@ -5,10 +5,11 @@ import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
+  BackHandler,
   ScrollView,
   Modal,
   KeyboardAvoidingView,
@@ -222,6 +223,18 @@ function makeSeed(): Note[] {
 export default function Notes() {
   useInterfaceLanguage();
   const router = useRouter();
+  const handleBack = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/(tabs)/more");
+  }, [router]);
+  useFocusEffect(useCallback(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (router.canGoBack()) return false;
+      handleBack();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [router, handleBack]));
   const [editorFontsReady] = useFonts({
     NoteMontserrat: require("../../assets/fonts/Montserrat-Bold.ttf"),
     NoteMontserratRegular: require("../../assets/fonts/Montserrat-Regular.ttf"),
@@ -674,7 +687,7 @@ export default function Notes() {
         {/* Header */}
         <View style={styles.header}>
           <MoneyFlowHeaderActions
-            onBack={() => router.back()}
+            onBack={handleBack}
             backTestID="notes-back"
             title={
               <View style={{ flex: 1, minWidth: 0 }}>

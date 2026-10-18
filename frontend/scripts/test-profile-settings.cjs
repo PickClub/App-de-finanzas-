@@ -9,7 +9,7 @@ const i18n = createInstance();
 i18n.init({ lng: 'en-US', fallbackLng: 'en-US', initImmediate: false, resources: {
   'en-US': { translation: require('../src/i18n/locales/en.json') }, es: { translation: require('../src/i18n/locales/es.json') },
 } });
-const nodes = n => !n || typeof n !== 'object' ? [] : [n, ...[n.props?.children, ...headerActionNodes(n)].flat(Infinity).flatMap(nodes)];
+const nodes = n => !n || typeof n !== 'object' ? [] : [n, ...[n.props?.children, n.type === 'MoneyFlowHeaderActions' ? n.props.title : null, ...headerActionNodes(n)].flat(Infinity).flatMap(nodes)];
 function fixture(options = {}) {
   let cursor = 0;
   const cells = [], calls = [], alerts = [];
@@ -18,7 +18,12 @@ function fixture(options = {}) {
   const colors = new Proxy({}, { get: () => '#126046' });
   const mocks = {
     react, 'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
-    'react-native': { View: 'View', useWindowDimensions: () => ({ width: state.width ?? 393, fontScale: state.fontScale ?? 1 }), Alert: { alert: (...args) => alerts.push(args) } },
+    'react-native': { View: 'View', Platform: { OS: 'android' }, Animated: {
+      createAnimatedComponent: component => component,
+      Value: class { constructor(value) { this.value = value; } stopAnimation() {} setValue(value) { this.value = value; } },
+      spring: (value, config) => ({ start: () => { calls.push(['spring', config]); value.value = config.toValue; } }),
+    }, useWindowDimensions: () => ({ width: state.width ?? 393, fontScale: state.fontScale ?? 1 }), Alert: { alert: (...args) => alerts.push(args) } },
+    'react-native-reanimated': { useReducedMotion: () => !!state.reducedMotion },
     '@/src/components/interaction-system': { Alert: { alert: (...args) => alerts.push(args) } },
     '@/src/components/header-actions': { MoneyFlowHeaderActions: 'MoneyFlowHeaderActions' },
     '@/src/i18n': { useTranslation: () => ({ t: i18n.t.bind(i18n) }), useLang: () => ({ lang: state.lang, setLang: async lang => { calls.push(['language', lang]); state.lang = lang; await i18n.changeLanguage(lang); } }) },
@@ -59,6 +64,34 @@ async function main() {
       f = fixture(); f.find('currency-row').props.onPress(); f.find(`currency-${currency}`).props.onPress(); await f.find('save-settings').props.onPress(); assert.equal(JSON.stringify(f.calls.find(c => c[0] === 'update')[1]), JSON.stringify({ currency })); assert.equal(f.state.user.name, 'Custom ñ');
     }
     f = fixture(); f.find('theme-dark').props.onPress(); assert.equal(f.state.mode, 'dark'); assert(!f.calls.some(c => c[0] === 'update'));
+    for (const theme of ['light', 'dark', 'system']) {
+      const button = f.find(`theme-${theme}`);
+      button.props.onPressIn(); button.props.onPressOut(); button.props.onPress();
+      const springs = f.calls.filter(c => c[0] === 'spring').slice(-2).map(c => c[1]);
+      assert.equal(springs[0].toValue, 0.95); assert.equal(springs[0].speed, 50); assert.equal(springs[0].bounciness, 0);
+      assert.equal(springs[1].toValue, 1); assert.equal(springs[1].speed, 20); assert.equal(springs[1].bounciness, 12);
+      assert.equal(f.state.mode, theme);
+    }
+    const reduced = fixture({ reducedMotion: true }); reduced.find('theme-light').props.onPressIn(); reduced.find('theme-light').props.onPressOut(); assert(!reduced.calls.some(c => c[0] === 'spring'));
+    const anchored = fixture();
+    for (const field of ['name', 'currency', 'language']) {
+      const row = anchored.find(field === 'name' ? 'profile-name' : `${field}-row`);
+      row.props.ref.current = { measureInWindow: callback => callback(16, 240, 328, 48) };
+      row.props.onPress();
+      assert.equal(JSON.stringify(anchored.find(field === 'language' ? 'language-sheet' : 'profile-editor').props.origin), JSON.stringify({ x: 180, y: 264 }));
+      if (field === 'name') {
+        anchored.find('profile-name-input').props.onChangeText('Animated name draft');
+        anchored.find('profile-editor-cancel').props.onPress();
+        assert.equal(anchored.find('profile-editor').props.visible, false);
+        assert.equal(anchored.find('profile-name-input').props.value, 'Animated name draft', 'Keep the input throughout exit instead of flashing currency options');
+        assert(!anchored.calls.some(call => call[0] === 'update'));
+        row.props.onPress();
+        anchored.find('profile-name-input').props.onChangeText('Saved animated name');
+        await anchored.find('save-settings').props.onPress();
+        assert.equal(anchored.state.user.name, 'Saved animated name');
+        assert.equal(anchored.state.user.currency, 'USD');
+      }
+    }
     f.find('language-row').props.onPress(); const next = lang === 'es' ? 'en-US' : 'es'; await f.find(`language-option-${next}`).props.onPress(); assert.equal(f.state.lang, next); assert.equal(f.find('language-sheet').props.visible, false);
     f = fixture(); f.find('reseed').props.onPress(); assert(!f.calls.length); assert.equal(f.alerts[0][2][0].style, 'cancel'); await f.alerts[0][2][1].onPress(); assert.equal(f.calls.filter(c => c[0] === 'seed').length, 1); assert(!f.calls.some(c => c[0] === 'invalidate')); assert.equal(f.alerts.length, 2);
     f = fixture({ user: { name: 'Custom', currency: 'USD', email: 'real@example.invalid' } }); assert(f.find('profile-email')); assert(f.find('profile-email-row').props.disabled);

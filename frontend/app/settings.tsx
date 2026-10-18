@@ -4,7 +4,8 @@ import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
 import React, { useRef, useState } from "react";
-import { View, useWindowDimensions } from "react-native";
+import { Animated, Platform, View, useWindowDimensions } from "react-native";
+import { useReducedMotion } from "react-native-reanimated";
 import { Alert } from "@/src/components/interaction-system";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
@@ -15,12 +16,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing, type ThemeMode } from "@/src/theme";
 import { useFonts } from "expo-font";
-import { AppSheet } from "@/src/components/sheets";
+import { AppSheet, type SheetOrigin } from "@/src/components/sheets";
 import { us } from "@/src/ui-scale";
 
 const CURRENCIES = ["USD", "EUR", "MXN", "COP", "ARS", "CLP"];
 const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", MXN: "$", COP: "$", ARS: "$", CLP: "$" };
 const currencyLabel = (value: string) => CURRENCY_SYMBOLS[value] ? `${value} (${CURRENCY_SYMBOLS[value]})` : value;
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function Settings() {
   const [fontsLoaded, fontError] = useFonts({
@@ -46,6 +48,37 @@ export default function Settings() {
   const [languageSaving, setLanguageSaving] = useState(false);
   const languageBusy = useRef(false);
   const restoring = useRef(false);
+  const reduceMotion = useReducedMotion();
+  const themeScaleRef = useRef<Record<ThemeMode, Animated.Value> | null>(null);
+  if (!themeScaleRef.current) themeScaleRef.current = { light: new Animated.Value(1), dark: new Animated.Value(1), system: new Animated.Value(1) };
+  const themeScales = themeScaleRef.current;
+  const currencyRow = useRef<View>(null);
+  const languageRow = useRef<View>(null);
+  const nameRow = useRef<View>(null);
+  const editorField = useRef<"name" | "currency">("currency");
+  const selectorRequest = useRef(0);
+  const [editorOrigin, setEditorOrigin] = useState<SheetOrigin>();
+  const [languageOrigin, setLanguageOrigin] = useState<SheetOrigin>();
+  const animateThemePress = (theme: ThemeMode, pressed: boolean) => {
+    const scale = themeScales[theme];
+    scale.stopAnimation();
+    if (reduceMotion) { scale.setValue(1); return; }
+    Animated.spring(scale, { toValue: pressed ? 0.95 : 1, useNativeDriver: Platform.OS !== "web", speed: pressed ? 50 : 20, bounciness: pressed ? 0 : 12 }).start();
+  };
+  const openSelector = (field: "name" | "currency" | "language") => {
+    const request = ++selectorRequest.current;
+    const trigger = field === "name" ? nameRow.current : field === "currency" ? currencyRow.current : languageRow.current;
+    const open = (origin?: SheetOrigin) => {
+      if (field === "language") { setLanguageOrigin(origin); setLangOpen(true); }
+      else openEditor(field, origin);
+    };
+    if (!trigger) { open(); return; }
+    trigger.measureInWindow((x, y, width, height) => {
+      if (request !== selectorRequest.current) return;
+      if ((field === "name" ? nameRow.current : field === "currency" ? currencyRow.current : languageRow.current) !== trigger) return;
+      open([x, y, width, height].every(Number.isFinite) && width > 0 && height > 0 ? { x: x + width / 2, y: y + height / 2 } : undefined);
+    });
+  };
 
   const THEMES: { id: ThemeMode; label: string }[] = [
     { id: "light", label: t("settings.themeLight") },
@@ -56,7 +89,10 @@ export default function Settings() {
     { id: "en-US", label: t("settings.english") },
     { id: "es", label: t("settings.spanish") },
   ];
-  const openEditor = (field: "name" | "currency") => {
+  const openEditor = (field: "name" | "currency", origin?: SheetOrigin) => {
+    setEditorOrigin(origin);
+    // Keep the name input and keyboard mounted throughout the exit transition.
+    editorField.current = field;
     setName(q.data?.name ?? "");
     setCurrency(q.data?.currency ?? "USD");
     setEditor(field);
@@ -91,7 +127,7 @@ export default function Settings() {
   ]);
 
   const row = (id: string, icon: string, label: string, value?: string, onPress?: () => void, divider = false) => (
-    <Pressable testID={id} accessibilityRole={onPress ? "button" : "text"} accessibilityLabel={value ? `${label}: ${value}` : label}
+    <Pressable ref={id === "profile-name" ? nameRow : id === "currency-row" ? currencyRow : id === "language-row" ? languageRow : undefined} testID={id} accessibilityRole={onPress ? "button" : "text"} accessibilityLabel={value ? `${label}: ${value}` : label}
       disabled={!onPress} onPress={onPress} style={styles.row}>
       {divider && <View pointerEvents="none" style={styles.divider} />}
       <Ionicons name={icon as any} size={us(20)} color={colors.identityAccent} />
@@ -133,23 +169,23 @@ export default function Settings() {
 
         <Text style={styles.section}>{t("settings.personalInformation")}</Text>
         <View style={styles.card}>
-          {row("profile-name", "person-outline", t("settings.name"), q.data.name, () => openEditor("name"))}
+          {row("profile-name", "person-outline", t("settings.name"), q.data.name, () => openSelector("name"))}
           {email !== "" && row("profile-email-row", "mail-outline", t("settings.email"), email, undefined, true)}
         </View>
 
         <Text style={styles.section}>{t("settings.preferences")}</Text>
         <View style={styles.card}>
-          {row("currency-row", "cash-outline", t("settings.currency"), currencyLabel(q.data.currency || "USD"), () => openEditor("currency"))}
+          {row("currency-row", "cash-outline", t("settings.currency"), currencyLabel(q.data.currency || "USD"), () => openSelector("currency"))}
           <View testID="profile-appearance" style={[styles.appearance, inlineAppearance && styles.appearanceInline]}>
             <View pointerEvents="none" style={styles.divider} />
             <View style={styles.appearanceLabel}><Ionicons name="sunny-outline" size={us(20)} color={colors.identityAccent} /><Text style={styles.rowLabel}>{t("settings.appearance")}</Text></View>
             <View accessibilityRole="radiogroup" style={[styles.segment, inlineAppearance && { flex: 1 }]}>
-              {THEMES.map(theme => <Pressable key={theme.id} testID={`theme-${theme.id}`} accessibilityRole="radio" accessibilityState={{ checked: mode === theme.id }} onPress={() => setMode(theme.id)} style={[styles.themeBtn, mode === theme.id && styles.selected]}>
+              {THEMES.map(theme => <AnimatedPressable key={theme.id} testID={`theme-${theme.id}`} accessibilityRole="radio" accessibilityState={{ checked: mode === theme.id }} onPressIn={() => animateThemePress(theme.id, true)} onPressOut={() => animateThemePress(theme.id, false)} onPress={() => setMode(theme.id)} style={[styles.themeBtn, mode === theme.id && styles.selected, { transform: [{ scale: themeScales[theme.id] }] }]}>
                 <Text style={[styles.themeText, mode === theme.id && styles.selectedText]}>{theme.label}</Text>
-              </Pressable>)}
+              </AnimatedPressable>)}
             </View>
           </View>
-          {row("language-row", "language-outline", t("settings.language"), lang === "es" ? t("settings.spanish") : t("settings.english"), () => setLangOpen(true), true)}
+          {row("language-row", "language-outline", t("settings.language"), lang === "es" ? t("settings.spanish") : t("settings.english"), () => openSelector("language"), true)}
         </View>
       </>}
 
@@ -162,9 +198,9 @@ export default function Settings() {
         </Pressable>
       </View>
 
-      <AppSheet visible={editor !== null} onClose={closeEditor} testID="profile-editor">
-        <Text style={styles.sheetTitle}>{editor === "name" ? t("settings.editName") : t("settings.currency")}</Text>
-        {editor === "name" ? <TextInput testID="profile-name-input" accessibilityLabel={t("settings.name")} value={name} onChangeText={setName} editable={!saving} placeholder={t("settings.namePlaceholder")} placeholderTextColor={colors.muted} style={styles.input} /> : <View style={styles.currencyOptions}>
+      <AppSheet visible={editor !== null} onClose={closeEditor} testID="profile-editor" origin={editorOrigin}>
+        <Text style={styles.sheetTitle}>{editorField.current === "name" ? t("settings.editName") : t("settings.currency")}</Text>
+        {editorField.current === "name" ? <TextInput testID="profile-name-input" accessibilityLabel={t("settings.name")} value={name} onChangeText={setName} editable={!saving} placeholder={t("settings.namePlaceholder")} placeholderTextColor={colors.muted} style={styles.input} /> : <View style={styles.currencyOptions}>
           {CURRENCIES.map(c => <Pressable key={c} testID={`currency-${c}`} accessibilityRole="radio" accessibilityState={{ checked: currency === c }} disabled={saving} onPress={() => setCurrency(c)} style={[styles.currency, currency === c && styles.selected]}><Text style={[styles.rowLabel, currency === c && styles.selectedText]}>{currencyLabel(c)}</Text></Pressable>)}
         </View>}
         <View style={styles.editorActions}>
@@ -173,7 +209,7 @@ export default function Settings() {
         </View>
       </AppSheet>
 
-      <AppSheet visible={langOpen} onClose={() => { if (!languageBusy.current) setLangOpen(false); }} testID="language-sheet">
+      <AppSheet visible={langOpen} onClose={() => { if (!languageBusy.current) setLangOpen(false); }} testID="language-sheet" origin={languageOrigin}>
         <Text style={styles.sheetTitle}>{t("settings.chooseLanguage")}</Text>
         {LANGUAGES.map(l => <Pressable key={l.id} testID={`language-option-${l.id}`} disabled={languageSaving} accessibilityRole="radio" accessibilityState={{ checked: lang === l.id, disabled: languageSaving }}
           onPress={async () => {

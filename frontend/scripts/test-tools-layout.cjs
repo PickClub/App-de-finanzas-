@@ -50,7 +50,7 @@ for (const language of ['en', 'es']) for (const scheme of ['light', 'dark']) {
   const notes = planningRows[1];
   assert.equal(notes.props.testID, `more-${t('tabs.notes')}`);
   assert.equal(notes.props.children[1].props.children[1].props.children, t('more.subNotes'));
-  notes.props.onPress(); assert.equal(calls.at(-1), '/(tabs)/notes');
+  notes.props.onPress(); assert.equal(calls.at(-1), '/tools-notes');
   find('more-settings-btn').props.onPress(); assert.equal(calls.at(-1), '/settings');
   for (const key of ['moneyManagement', 'paymentsObligations', 'planning']) assert(nodes.some(n => n.props?.children === t(`more.${key}`)));
   // Rows wrap naturally; fixed icon plus flexible copy fits narrow Android widths.
@@ -72,4 +72,49 @@ for (const language of ['en', 'es']) for (const scheme of ['light', 'dark']) {
   }
 }
 
-console.log('PASS: Tools EN/ES light/dark rendering; 3 permanently visible groups with 4/3/2 rows; eight unchanged tool routes, existing Notes route and Settings; no arrows, greeting, banner or expandable controls; bold titles and regular descriptions; wrapping constraints at 320/360/393/430. Native appearance requires Expo Go review.');
+// Exercise the actual Notes Back handlers with and without navigation history.
+const layoutSource = fs.readFileSync(`${root}/app/_layout.tsx`, 'utf8');
+assert.match(layoutSource, /animationDuration: 100/);
+assert(!layoutSource.includes('name="tools-notes"'), 'Notes inherits the same native transition as other tools');
+assert.match(fs.readFileSync(`${root}/app/tools-notes.tsx`, 'utf8'), /export \{ default \} from "\.\/\(tabs\)\/notes"/);
+const notesSource = fs.readFileSync(`${root}/app/(tabs)/notes.tsx`, 'utf8');
+const tree = ts.createSourceFile('notes.tsx', notesSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let handler, focus;
+function visit(node) {
+  if (ts.isVariableStatement(node) && node.declarationList.declarations.some(d => d.name.getText(tree) === 'handleBack')) handler = node.getText(tree);
+  if (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression) && node.expression.expression.getText(tree) === 'useFocusEffect') focus = node.getText(tree);
+  ts.forEachChild(node, visit);
+}
+visit(tree);
+assert(handler && focus);
+for (const initialHistory of [false, true]) {
+  let history = initialHistory, hardwareBack, cleanup, removed = 0;
+  const calls = [];
+  const context = {
+    exports: {}, useCallback: fn => fn, useFocusEffect: fn => { cleanup = fn(); },
+    router: {
+      canGoBack: () => history,
+      back: () => { assert(history, 'Never dispatch an unhandled GO_BACK'); calls.push('back'); history = false; },
+      replace: route => calls.push(route),
+    },
+    BackHandler: { addEventListener: (event, fn) => {
+      assert.equal(event, 'hardwareBackPress'); hardwareBack = fn;
+      return { remove: () => removed++ };
+    } },
+  };
+  vm.runInNewContext(compile(`${handler}\n${focus}\nexport { handleBack };`), context);
+  assert.equal(calls.length, 0, 'Mount/focus must not navigate');
+  if (history) {
+    assert.equal(hardwareBack(), false, 'Native stack handles Android Back when history exists');
+    assert.equal(calls.length, 0);
+  }
+  context.exports.handleBack();
+  assert.equal(calls[0], initialHistory ? 'back' : '/(tabs)/more');
+  assert.equal(hardwareBack(), true, 'Cold entry falls back safely to Tools');
+  assert.equal(calls.at(-1), '/(tabs)/more');
+  context.exports.handleBack();
+  assert.equal(calls.at(-1), '/(tabs)/more', 'Repeated taps cannot dispatch GO_BACK without history');
+  cleanup(); assert.equal(removed, 1);
+}
+assert.match(notesSource, /onBack=\{handleBack\}/);
+console.log('PASS: Tools EN/ES light/dark; unchanged layout and other destinations; root-stack Notes inherits native transitions. Actual Notes header/Android Back handlers preserve valid history, fall back to Tools without history, never navigate on mount and clean up on blur. Device animation requires Expo Go review.');

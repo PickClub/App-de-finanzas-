@@ -77,7 +77,7 @@ export default function More() {
     { icon: "sync", label: t("more.recurringPayments"), subtitle: t("more.subRecurring"), ...PALETTE.violet, route: "/recurring" },
     { icon: "document-text", label: t("more.invoices"), subtitle: t("more.subInvoices"), ...PALETTE.blue, route: "/bills" },
     { icon: "calendar", label: t("more.financialCalendar"), subtitle: t("more.subCalendar"), ...PALETTE.mint, route: "/calendar" },
-    { icon: "document-text", label: t("tabs.notes"), subtitle: t("more.subNotes"), ...PALETTE.mint, route: "/(tabs)/notes" },
+    { icon: "document-text", label: t("tabs.notes"), subtitle: t("more.subNotes"), ...PALETTE.mint, route: "/tools-notes" },
   ];
 
   const groups = [

@@ -112,8 +112,7 @@ function PayDebtForm({ debtId }: { debtId: string | undefined }) {
     <View style={{ flex: 1, backgroundColor: pal.bg }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
         <View style={styles.headerRow}>
-          <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest, flex: 1 }]}>{tr("ui.debt_payment")}</Text>
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="debt-pay-back" />
+          <MoneyFlowHeaderActions title={<Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest, flex: 1 }]}>{tr("ui.debt_payment")}</Text>} onBack={() => router.back()} backTestID="debt-pay-back" />
         </View>
         {resourceState === "loading" ? <ActivityIndicator testID="debt-pay-loading" color={pal.forest} /> : (
           <View style={[styles.card, { backgroundColor: pal.card, borderColor: pal.border }]} testID="debt-pay-query-error">
@@ -244,8 +243,7 @@ function PayDebtForm({ debtId }: { debtId: string | undefined }) {
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, backgroundColor: pal.bg }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
         <View style={styles.headerRow}>
-          <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest, flex: 1 }]}>{view.title}</Text>
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="debt-pay-back" />
+          <MoneyFlowHeaderActions title={<Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest, flex: 1 }]}>{view.title}</Text>} onBack={() => router.back()} backTestID="debt-pay-back" />
         </View>
 
         {/* Deuda */}

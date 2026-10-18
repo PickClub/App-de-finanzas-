@@ -313,8 +313,7 @@ export default function NewTransaction() {
     return (
       <View style={{ flex: 1, backgroundColor: pal.bg }}>
         <View style={[styles.header, { paddingTop: insets.top + us(8) }]}>
-          <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{tr(params.id ? "ui.edit_transaction" : "ui.new_transaction")}</Text>
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="back-btn" />
+          <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{tr(params.id ? "ui.edit_transaction" : "ui.new_transaction")}</Text>} onBack={() => router.back()} backTestID="back-btn" />
         </View>
         <Text testID="transaction-source-state" style={{ color: colors.muted, textAlign: "center", marginTop: us(40) }}>
           {missing || deletion.deleted.current ? tr("ui.transaction_not_found") : sourceQ.isError
@@ -392,8 +391,7 @@ export default function NewTransaction() {
       style={{ flex: 1, backgroundColor: pal.bg }}
     >
       <View style={[styles.header, { paddingTop: insets.top + us(8) }]}>
-        <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{tr(params.id ? "ui.edit_transaction" : "ui.new_transaction")}</Text>
-        <MoneyFlowHeaderActions
+        <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{tr(params.id ? "ui.edit_transaction" : "ui.new_transaction")}</Text>}
           onBack={() => router.back()}
           onSave={save}
           saving={saving}

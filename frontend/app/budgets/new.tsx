@@ -162,8 +162,7 @@ export default function BudgetForm() {
           contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
-            <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{editing ? t("budgets.editBudget") : t("budgets.newBudget")}</Text>
-            <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="budget-form-back" onSave={save} saving={saving} saveTestID="save-budget" saveAccessibilityLabel={t("headerActions.saveBudget")} />
+            <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{editing ? t("budgets.editBudget") : t("budgets.newBudget")}</Text>} onBack={() => router.back()} backTestID="budget-form-back" onSave={save} saving={saving} saveTestID="save-budget" saveAccessibilityLabel={t("headerActions.saveBudget")} />
           </View>
 
           {editing && budgetsQ.isLoading ? <ActivityIndicator color={colors.incomeGreen} /> : null}

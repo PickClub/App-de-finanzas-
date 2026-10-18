@@ -112,8 +112,7 @@ export default function RecurringDetail() {
     <View style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(60), paddingHorizontal: us(spacing.lg) }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
-          <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("rp.detail")}</Text>
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="rp-detail-back" beforeActions={r && <ContextActionsTrigger testID="rp-actions" disabled={busy} style={styles.backBtn} iconSize={us(20)} actions={[
+          <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("rp.detail")}</Text>} onBack={() => router.back()} backTestID="rp-detail-back" beforeActions={r && <ContextActionsTrigger testID="rp-actions" disabled={busy} style={styles.backBtn} iconSize={us(20)} actions={[
             { id: "edit", label: t("rp.edit"), icon: "create-outline", onPress: () => router.push(`/recurring/new?id=${r.id}` as any) },
             ...(r.state === "active" ? [{ id: "pause", label: t("rp.pause"), icon: "pause-outline", onPress: () => doAction("pause") }]
               : r.state === "paused" ? [{ id: "resume", label: t("rp.resume"), icon: "play-outline", onPress: () => doAction("resume") }] : []),

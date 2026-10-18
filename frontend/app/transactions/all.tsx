@@ -227,10 +227,9 @@ export default function AllTransactions() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: pal.ink, flex: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+          <MoneyFlowHeaderActions title={<Text style={[styles.title, { color: pal.ink, flex: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
             {tr("ui.all_transactions")}
-          </Text>
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="all-tx-back" />
+          </Text>} onBack={() => router.back()} backTestID="all-tx-back" />
         </View>
 
         {/* Period card */}

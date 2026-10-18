@@ -153,8 +153,7 @@ export default function DebtDetail() {
     <>
     <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} style={{ flex: 1, backgroundColor: pal.bg }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}>
       <View style={styles.headerRow}>
-        <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest, flex: 1 }]} numberOfLines={1}>{d.name}</Text>
-        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="debt-detail-back" beforeActions={<ContextActionsTrigger testID="debt-detail-options" accessibilityLabel={tr("ui.more_options")} disabled={busy} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]} iconColor={pal.forest} iconSize={us(22)} actions={[
+        <MoneyFlowHeaderActions title={<Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest, flex: 1 }]} numberOfLines={1}>{d.name}</Text>} onBack={() => router.back()} backTestID="debt-detail-back" beforeActions={<ContextActionsTrigger testID="debt-detail-options" accessibilityLabel={tr("ui.more_options")} disabled={busy} style={[styles.circleBtn, { backgroundColor: pal.card, borderColor: pal.border }, shadow]} iconColor={pal.forest} iconSize={us(22)} actions={[
           { id: "edit", label: tr("ui.edit"), icon: "create-outline", onPress: () => router.push({ pathname: "/debts/new", params: { id: d.id } }) },
           { id: "delete", label: tr("ui.delete"), icon: "trash-outline", destructive: true, onPress: () => setConfirmDelete(true) },
         ]} />} />

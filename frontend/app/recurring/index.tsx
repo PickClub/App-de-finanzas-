@@ -90,8 +90,7 @@ export default function RecurringPayments() {
         showsVerticalScrollIndicator={false}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
-          <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("rp.title")}</Text>
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="recurring-back" beforeActions={<Pressable testID="add-rp" onPress={openNew} style={[styles.backBtn, { backgroundColor: forest }]} accessibilityRole="button" accessibilityLabel={t("common.add")}>
+          <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("rp.title")}</Text>} onBack={() => router.back()} backTestID="recurring-back" beforeActions={<Pressable testID="add-rp" onPress={openNew} style={[styles.backBtn, { backgroundColor: forest }]} accessibilityRole="button" accessibilityLabel={t("common.add")}>
             <Ionicons name="add" size={us(22)} color="#fff" />
           </Pressable>} />
         </View>

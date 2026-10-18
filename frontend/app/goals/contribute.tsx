@@ -120,8 +120,7 @@ export default function GoalContribution() {
           contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
-            <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{isDeposit ? t("goals.addSaving") : t("goals.withdraw")}</Text>
-            <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="contrib-back" />
+            <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{isDeposit ? t("goals.addSaving") : t("goals.withdraw")}</Text>} onBack={() => router.back()} backTestID="contrib-back" />
           </View>
 
           {goalQ.isLoading ? (

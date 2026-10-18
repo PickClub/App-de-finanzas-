@@ -113,8 +113,7 @@ export default function BillsScreen() {
   const Header = (
     <View>
       <View style={styles.header}>
-        <Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1}>{t("bills.title")}</Text>
-        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="bills-back" />
+        <MoneyFlowHeaderActions title={<Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1}>{t("bills.title")}</Text>} onBack={() => router.back()} backTestID="bills-back" />
       </View>
       <Text style={styles.subtitle}>{t("bills.subtitle")}</Text>
 

@@ -256,8 +256,7 @@ export default function NewDebt() {
     const failed = !editId || debtQ.isError || paymentsQ.isError || (debtQ.isSuccess && debtQ.data?.id !== editId) || (paymentsQ.isSuccess && !Array.isArray(paymentsQ.data));
     return <View style={{ flex: 1, backgroundColor: pal.bg, padding: us(spacing.lg), paddingTop: insets.top + us(16) }}>
       <View style={styles.headerRow}>
-        <Text style={[styles.title, { flex: 1 }]}>{tr("debts.editDebt")}</Text>
-        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="debt-edit-back" />
+        <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]}>{tr("debts.editDebt")}</Text>} onBack={() => router.back()} backTestID="debt-edit-back" />
       </View>
       <Text testID="debt-edit-status">{failed ? tr("debts.editLoadFailed") : tr("ui.loading")}</Text>
       {failed && !!editId && <Pressable testID="debt-edit-retry" onPress={() => { void debtQ.refetch(); void paymentsQ.refetch(); }}><Text>{tr("ui.retry")}</Text></Pressable>}
@@ -268,8 +267,7 @@ export default function NewDebt() {
     return (
       <View style={{ flex: 1, backgroundColor: colors.pageBackground, paddingTop: insets.top + us(8) }}>
         <View style={styles.headerRow}>
-          <Text style={[styles.title, { flex: 1 }]}>{tr("ui.new_debt")}</Text>
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="debt-form-back" />
+          <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]}>{tr("ui.new_debt")}</Text>} onBack={() => router.back()} backTestID="debt-form-back" />
         </View>
         <View style={styles.selWrap}>
           <View style={[styles.selIconTile, { backgroundColor: colors.incomeGreen + "1A" }]}>
@@ -319,8 +317,7 @@ export default function NewDebt() {
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(spacing.lg), paddingHorizontal: us(spacing.lg), gap: us(10) }}
       >
         <View style={[styles.headerRow, { marginBottom: us(spacing.xs) }]}>
-          <Text style={[styles.title, { color: pal.onSurface, flex: 1 }]} numberOfLines={1}>{editing ? tr("debts.editDebt") : iOwe ? tr("ui.i_owe") : tr("ui.owed_to_me")}</Text>
-          <MoneyFlowHeaderActions onBack={() => router.back()} onSave={save} saving={saving} saveTestID="save-debt" saveAccessibilityLabel={tr("headerActions.saveDebt")} />
+          <MoneyFlowHeaderActions title={<Text style={[styles.title, { color: pal.onSurface, flex: 1 }]} numberOfLines={1}>{editing ? tr("debts.editDebt") : iOwe ? tr("ui.i_owe") : tr("ui.owed_to_me")}</Text>} onBack={() => router.back()} onSave={save} saving={saving} saveTestID="save-debt" saveAccessibilityLabel={tr("headerActions.saveDebt")} />
         </View>
 
         {/* B. Debt name */}

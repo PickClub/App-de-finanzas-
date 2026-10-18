@@ -124,8 +124,7 @@ export default function BillPay() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
-            <Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1}>{t("bills.payTitle")}</Text>
-            <MoneyFlowHeaderActions onBack={() => { screenEpoch.current++; router.back(); }} backTestID="bill-pay-back" />
+            <MoneyFlowHeaderActions title={<Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1}>{t("bills.payTitle")}</Text>} onBack={() => { screenEpoch.current++; router.back(); }} backTestID="bill-pay-back" />
           </View>
 
           {resourceState === "loading" ? <ActivityIndicator testID="bill-pay-loading" color={forest} /> : resourceState !== "ready" ? (

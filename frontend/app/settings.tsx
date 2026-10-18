@@ -110,8 +110,7 @@ export default function Settings() {
   return (
     <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" style={{ flex: 1, backgroundColor: colors.pageBackground }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(100), paddingHorizontal: us(spacing.lg) }}>
       <View style={styles.header}>
-        <Text style={[styles.title, { flex: 1 }]}>{t("settings.profileTitle")}</Text>
-        <MoneyFlowHeaderActions onBack={() => router.back()} />
+        <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]}>{t("settings.profileTitle")}</Text>} onBack={() => router.back()} />
       </View>
 
       {!q.data ? <View style={styles.card}>

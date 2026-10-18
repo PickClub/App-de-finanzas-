@@ -4,6 +4,8 @@ import { localizedError } from "@/src/i18n/errors";
 import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
+import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
@@ -219,6 +221,7 @@ function makeSeed(): Note[] {
 
 export default function Notes() {
   useInterfaceLanguage();
+  const router = useRouter();
   const [editorFontsReady] = useFonts({
     NoteMontserrat: require("../../assets/fonts/Montserrat-Bold.ttf"),
     NoteMontserratRegular: require("../../assets/fonts/Montserrat-Regular.ttf"),
@@ -670,17 +673,22 @@ export default function Notes() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headIconTile}>
-            <Ionicons name="document-text" size={us(22)} color={accent} />
-          </View>
-          <View style={{ flex: 1, marginLeft: us(12) }}>
-            <Text style={styles.title}>{tr("ui.notes")}</Text>
-            <Text style={styles.subtitle}>{tr("ui.your_ideas_tasks_and_reminders_in_one_place")}</Text>
-          </View>
-          <Pressable testID="notes-new-btn" onPress={() => openEditor(null)} style={styles.newBtn}>
-            <Ionicons name="add" size={us(18)} color="#FFFFFF" />
-            <Text style={styles.newBtnText}>{tr("ui.new_note")}</Text>
-          </Pressable>
+          <MoneyFlowHeaderActions
+            onBack={() => router.back()}
+            backTestID="notes-back"
+            title={
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.title} numberOfLines={1}>{tr("ui.notes")}</Text>
+                <Text style={styles.subtitle}>{tr("ui.your_ideas_tasks_and_reminders_in_one_place")}</Text>
+              </View>
+            }
+            beforeActions={
+              <Pressable testID="notes-new-btn" onPress={() => openEditor(null)} style={styles.newBtn}>
+                <Ionicons name="add" size={us(18)} color="#FFFFFF" />
+                <Text style={styles.newBtnText}>{tr("ui.new_note")}</Text>
+              </Pressable>
+            }
+          />
         </View>
 
         {/* Search */}

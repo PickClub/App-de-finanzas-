@@ -131,8 +131,7 @@ export default function TransactionDetail() {
     return (
       <View style={[styles.screen, { paddingTop: insets.top + us(8) }]}>
         <View style={styles.header}>
-          <Text style={[styles.headerTitle, { flex: 1 }]}>{tr("ui.transaction_detail")}</Text>
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="back-btn" />
+          <MoneyFlowHeaderActions title={<Text style={[styles.headerTitle, { flex: 1 }]}>{tr("ui.transaction_detail")}</Text>} onBack={() => router.back()} backTestID="back-btn" />
         </View>
         <Text style={{ color: colors.muted, textAlign: "center", marginTop: us(40) }}>
           {txQ.isLoading ? tr("ui.loading") : missing || !params.id || deletion.deleted.current
@@ -262,8 +261,7 @@ export default function TransactionDetail() {
     <View pointerEvents={deletion.busy ? "none" : "auto"} style={[styles.screen, { paddingTop: insets.top + us(8) }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.headerTitle, { flex: 1 }]}>{tr("ui.transaction_detail")}</Text>
-        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="back-btn" beforeActions={<ContextActionsTrigger testID="more-btn" actions={menu} disabled={deletion.busy} style={styles.circleBtn} iconColor={colors.onSurface} iconSize={us(20)} />} />
+        <MoneyFlowHeaderActions title={<Text style={[styles.headerTitle, { flex: 1 }]}>{tr("ui.transaction_detail")}</Text>} onBack={() => router.back()} backTestID="back-btn" beforeActions={<ContextActionsTrigger testID="more-btn" actions={menu} disabled={deletion.busy} style={styles.circleBtn} iconColor={colors.onSurface} iconSize={us(20)} />} />
       </View>
 
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} contentContainerStyle={{ padding: us(spacing.lg), paddingBottom: insets.bottom + us(40) }}>

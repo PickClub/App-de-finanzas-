@@ -131,8 +131,7 @@ export default function RecurringForm() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
-            <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{editing ? t("rp.editPayment") : t("rp.newPayment")}</Text>
-            <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="rp-form-back" onSave={save} saving={saving} saveTestID="save-rp" saveAccessibilityLabel={t("headerActions.saveRecurringPayment")} />
+            <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{editing ? t("rp.editPayment") : t("rp.newPayment")}</Text>} onBack={() => router.back()} backTestID="rp-form-back" onSave={save} saving={saving} saveTestID="save-rp" saveAccessibilityLabel={t("headerActions.saveRecurringPayment")} />
           </View>
           {editing && rpQ.isLoading ? <ActivityIndicator color={colors.incomeGreen} /> : null}
 

@@ -123,8 +123,7 @@ export default function GoalForm() {
           contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
-            <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{editing ? t("goals.editGoal") : t("goals.newGoal")}</Text>
-            <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="goal-form-back" onSave={save} saving={saving} saveTestID="save-goal" saveAccessibilityLabel={t("headerActions.saveGoal")} />
+            <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{editing ? t("goals.editGoal") : t("goals.newGoal")}</Text>} onBack={() => router.back()} backTestID="goal-form-back" onSave={save} saving={saving} saveTestID="save-goal" saveAccessibilityLabel={t("headerActions.saveGoal")} />
           </View>
 
           {editing && goalQ.isLoading ? <ActivityIndicator color={colors.incomeGreen} /> : null}

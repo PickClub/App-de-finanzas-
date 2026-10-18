@@ -569,9 +569,8 @@ export default function FinancialCalendar() {
       >
         {/* Header */}
         <View style={[styles.header, narrow && { flexWrap: "wrap" }]}>
-          <Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1} adjustsFontSizeToFit>{t("calendar.title")}</Text>
-          {!narrow ? Segmented : null}
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="cal-back" />
+
+          <MoneyFlowHeaderActions title={<Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1} adjustsFontSizeToFit>{t("calendar.title")}</Text>} trailingContent={!narrow ? Segmented : null} onBack={() => router.back()} backTestID="cal-back" />
         </View>
         {narrow ? <View style={{ marginBottom: us(spacing.md) }}>{Segmented}</View> : null}
 

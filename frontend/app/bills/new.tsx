@@ -125,8 +125,7 @@ export default function BillForm() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(24), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
-            <Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1}>{editing ? t("bills.editBill") : t("bills.newBill")}</Text>
-            <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="bill-form-back" onSave={save} saving={saving} saveTestID="save-bill" saveAccessibilityLabel={t("headerActions.saveBill")} />
+            <MoneyFlowHeaderActions title={<Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1}>{editing ? t("bills.editBill") : t("bills.newBill")}</Text>} onBack={() => router.back()} backTestID="bill-form-back" onSave={save} saving={saving} saveTestID="save-bill" saveAccessibilityLabel={t("headerActions.saveBill")} />
           </View>
           {editing && billQ.isLoading ? <ActivityIndicator color={forest} /> : null}
 

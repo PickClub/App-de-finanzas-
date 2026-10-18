@@ -113,8 +113,7 @@ export default function CategoryForm() {
   return (
     <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} pointerEvents={deletion.busy || saving ? "none" : "auto"} style={{ flex: 1, backgroundColor: colors.pageBackground }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
-        <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{tr(params.id ? "ui.edit_category" : "ui.new_category")}</Text>
-        <MoneyFlowHeaderActions
+        <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{tr(params.id ? "ui.edit_category" : "ui.new_category")}</Text>}
           onBack={() => router.back()}
           onSave={save}
           saving={saving}

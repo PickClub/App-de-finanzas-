@@ -92,8 +92,8 @@ export default function BillDetail() {
   if (!b) {
     return (
       <View style={[styles.center, { backgroundColor: colors.pageBackground, paddingTop: insets.top }]}>
+        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="bill-back" style={{ alignSelf: "stretch", marginTop: us(12) }} />
         <Text style={styles.muted}>{t("bills.notFound")}</Text>
-        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="bill-back" style={{ alignSelf: "flex-end", marginTop: us(12) }} />
       </View>
     );
   }
@@ -116,8 +116,7 @@ export default function BillDetail() {
         contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40), paddingHorizontal: us(spacing.lg) }}
       >
         <View style={styles.header}>
-          <Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1}>{t("bills.title")}</Text>
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="bill-back" beforeActions={<ContextActionsTrigger testID="bill-actions" disabled={busy} style={styles.backBtn} iconSize={us(20)} actions={[
+          <MoneyFlowHeaderActions title={<Text style={[styles.title, mont(), { flex: 1 }]} numberOfLines={1}>{t("bills.title")}</Text>} onBack={() => router.back()} backTestID="bill-back" beforeActions={<ContextActionsTrigger testID="bill-actions" disabled={busy} style={styles.backBtn} iconSize={us(20)} actions={[
             { id: "edit", label: t("bills.edit"), icon: "create-outline", onPress: () => router.push({ pathname: "/bills/new", params: { id: b.id } } as any) },
             { id: "delete", label: t("bills.delete"), icon: "trash-outline", destructive: true, onPress: () => setConfirm("delete") },
           ]} />} />

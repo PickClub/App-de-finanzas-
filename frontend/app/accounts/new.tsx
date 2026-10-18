@@ -146,8 +146,7 @@ export default function AccountForm() {
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: pal.bg }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
     <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} pointerEvents={deletion.busy ? "none" : "auto"} keyboardShouldPersistTaps="handled" style={{ flex: 1, backgroundColor: pal.bg }} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(32), paddingHorizontal: us(spacing.lg) }}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest, flex: 1 }]} numberOfLines={1}>{params.id ? t("accounts.editAccount") : t("accounts.newAccount")}</Text>
-        <MoneyFlowHeaderActions
+        <MoneyFlowHeaderActions title={<Text style={[styles.title, { color: pal.dark ? pal.onSurface : pal.forest, flex: 1 }]} numberOfLines={1}>{params.id ? t("accounts.editAccount") : t("accounts.newAccount")}</Text>}
           onBack={() => router.back()}
           onSave={save}
           saving={saving}

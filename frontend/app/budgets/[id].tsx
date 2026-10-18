@@ -82,8 +82,7 @@ export default function BudgetDetail() {
     <View style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(60), paddingHorizontal: us(spacing.lg) }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
-          <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("budgets.detail")}</Text>
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="budget-detail-back" beforeActions={b && <ContextActionsTrigger
+          <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("budgets.detail")}</Text>} onBack={() => router.back()} backTestID="budget-detail-back" beforeActions={b && <ContextActionsTrigger
             testID="budget-actions"
             style={styles.backBtn}
             disabled={deleting}

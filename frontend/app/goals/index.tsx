@@ -113,8 +113,7 @@ export default function Goals() {
       >
         {/* Header (unchanged) */}
         <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.lg) }}>
-          <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("goals.title")}</Text>
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="goals-back" beforeActions={<Pressable testID="add-goal" onPress={openNew} style={[styles.backBtn, { backgroundColor: forest }]} accessibilityRole="button" accessibilityLabel={t("common.add")}>
+          <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("goals.title")}</Text>} onBack={() => router.back()} backTestID="goals-back" beforeActions={<Pressable testID="add-goal" onPress={openNew} style={[styles.backBtn, { backgroundColor: forest }]} accessibilityRole="button" accessibilityLabel={t("common.add")}>
             <Ionicons name="add" size={us(22)} color="#fff" />
           </Pressable>} />
         </View>

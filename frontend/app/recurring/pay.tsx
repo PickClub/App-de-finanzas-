@@ -148,8 +148,7 @@ export default function RecurringPay() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ElasticScrollView {...NATIVE_VERTICAL_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(40), paddingHorizontal: us(spacing.lg) }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: us(12), marginBottom: us(spacing.md) }}>
-            <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("rp.payTitle")}</Text>
-            <MoneyFlowHeaderActions onBack={() => { screenEpoch.current++; router.back(); }} backTestID="rp-pay-back" />
+            <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{t("rp.payTitle")}</Text>} onBack={() => { screenEpoch.current++; router.back(); }} backTestID="rp-pay-back" />
           </View>
 
           {rpQ.isLoading || !r ? <ActivityIndicator color={colors.incomeGreen} /> : (

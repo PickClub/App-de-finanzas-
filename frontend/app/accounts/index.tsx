@@ -60,8 +60,7 @@ export default function Accounts() {
       contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: insets.bottom + us(40) }}
     >
       <View style={styles.header}>
-        <Text style={[styles.title, { color: pal.dark ? colors.onSurface : pal.ink, flex: 1 }]} numberOfLines={1}>{t("accounts.title")}</Text>
-        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="accounts-back" beforeActions={<Pressable testID="add-account" onPress={() => router.push("/accounts/new")} style={[styles.circleBtn, styles.addBtn, { backgroundColor: pal.dark ? pal.forest : pal.ink, borderColor: "transparent" }, shadow]} accessibilityRole="button" accessibilityLabel={t("common.add")}>
+        <MoneyFlowHeaderActions title={<Text style={[styles.title, { color: pal.dark ? colors.onSurface : pal.ink, flex: 1 }]} numberOfLines={1}>{t("accounts.title")}</Text>} onBack={() => router.back()} backTestID="accounts-back" beforeActions={<Pressable testID="add-account" onPress={() => router.push("/accounts/new")} style={[styles.circleBtn, styles.addBtn, { backgroundColor: pal.dark ? pal.forest : pal.ink, borderColor: "transparent" }, shadow]} accessibilityRole="button" accessibilityLabel={t("common.add")}>
           <Ionicons name="add" size={us(26)} color={pal.dark ? colors.onSuccess : "#fff"} />
         </Pressable>} />
       </View>

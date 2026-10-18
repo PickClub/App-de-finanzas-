@@ -184,11 +184,10 @@ export default function Debts() {
       >
         {/* Header — compact, title + subtitle, lock + add */}
         <View style={styles.headerRow}>
-          <View style={{ flex: 1 }}>
+          <MoneyFlowHeaderActions title={<View style={{ flex: 1 }}>
             <Text style={styles.title}>{tr("ui.debts_loans")}</Text>
             <Text style={styles.subtitle}>{tr("ui.your_debts_in_one_place")}</Text>
-          </View>
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="debts-back" beforeActions={<Pressable
+          </View>} onBack={() => router.back()} backTestID="debts-back" beforeActions={<Pressable
             testID="add-debt"
             onPress={() => router.push("/debts/new")}
             style={[styles.addBtn, { backgroundColor: P.green }]}

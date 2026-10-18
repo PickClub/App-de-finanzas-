@@ -178,8 +178,7 @@ export default function Categories() {
       contentContainerStyle={{ paddingTop: insets.top + us(8), paddingBottom: us(140), paddingHorizontal: us(spacing.lg) }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: us(10), marginBottom: us(spacing.lg) }}>
-        <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{tr("ui.categories")}</Text>
-        <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="categories-back" beforeActions={<Pressable testID="add-category" onPress={() => router.push("/categories/new")} style={[styles.backBtn, { backgroundColor: accentGreen, borderColor: accentGreen }]} accessibilityRole="button" accessibilityLabel={tr("common.add")}>
+        <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>{tr("ui.categories")}</Text>} onBack={() => router.back()} backTestID="categories-back" beforeActions={<Pressable testID="add-category" onPress={() => router.push("/categories/new")} style={[styles.backBtn, { backgroundColor: accentGreen, borderColor: accentGreen }]} accessibilityRole="button" accessibilityLabel={tr("common.add")}>
           <Ionicons name="add" size={us(22)} color="#fff" />
         </Pressable>} />
       </View>

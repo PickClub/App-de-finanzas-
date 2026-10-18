@@ -35,15 +35,6 @@ function accountColor(a: any, scheme: string): string {
   const key = (a.name || "").trim().toLowerCase();
   return HOME_ACCOUNT_COLORS[key] || a.color || "#4C83EA";
 }
-const ACCOUNT_ICON: Record<string, string> = {
-  cash: "cash-outline",
-  checking: "card-outline",
-  savings: "wallet-outline",
-  credit_card: "card-outline",
-  wallet: "phone-portrait-outline",
-  other: "ellipsis-horizontal-outline",
-};
-
 function InfoRow({ styles, tileBg, iconColor, icon, label, value, rightNode }: any) {
   return (
     <View style={styles.infoRow}>
@@ -115,8 +106,6 @@ export default function AccountDetail() {
     );
   }
 
-  const iconName = account.icon || ACCOUNT_ICON[account.type] || "wallet-outline";
-
   return (
     <View style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <ElasticScrollView {...NATIVE_VERTICAL_SCROLL}
@@ -129,24 +118,17 @@ export default function AccountDetail() {
       >
         {/* 1. Header */}
         <View style={styles.headerRow}>
-          <View style={{ flex: 1 }} />
-          <MoneyFlowHeaderActions onBack={() => router.back()} backTestID="acc-detail-back" beforeActions={<ContextActionsTrigger testID="acc-detail-options" style={styles.backBtn} iconColor={forest} actions={[
+          <MoneyFlowHeaderActions title={
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.accName} numberOfLines={1}>{account.name}</Text>
+              <View style={styles.typeRow}>
+                <View style={[styles.typeDot, { backgroundColor: ac }]} />
+                <Text style={[styles.typeLabel, { flexShrink: 1 }]} numberOfLines={1}>{t(`accounts.types.${account.type}`, { defaultValue: t("common.unknown") })}</Text>
+              </View>
+            </View>
+          } onBack={() => router.back()} backTestID="acc-detail-back" beforeActions={<ContextActionsTrigger testID="acc-detail-options" style={styles.backBtn} iconColor={forest} actions={[
             { id: "edit", label: t("accounts.editAccount"), icon: "create-outline", onPress: () => router.push(`/accounts/new?id=${account.id}`) },
           ]} />} />
-        </View>
-
-        {/* Identity */}
-        <View style={styles.identityRow}>
-          <View style={[styles.identityIcon, { backgroundColor: ac }]}>
-            <Ionicons name={iconName as any} size={us(30)} color="#fff" />
-          </View>
-          <View style={{ flex: 1, marginLeft: us(16), minWidth: 0 }}>
-            <Text style={styles.accName}>{account.name}</Text>
-            <View style={styles.typeRow}>
-              <View style={[styles.typeDot, { backgroundColor: ac }]} />
-              <Text style={styles.typeLabel}>{t(`accounts.types.${account.type}`, { defaultValue: t("common.unknown") })}</Text>
-            </View>
-          </View>
         </View>
 
         {/* 2. Current balance */}

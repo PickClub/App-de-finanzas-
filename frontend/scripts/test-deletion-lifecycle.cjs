@@ -92,7 +92,7 @@ async function main() {
     visitCatalog(tree);
     assert.equal(automaticInitialization, false, `${file}: navigation must not initialize the catalog`);
   }
-  // Exercise the actual local-note handler: persistence failure must keep its editor/data.
+  // Exercise the actual note handler with isolated storage and session fixtures.
   const noteSource = fs.readFileSync(path.join(root, 'app/(tabs)/notes.tsx'), 'utf8');
   const noteTree = ts.createSourceFile('notes.tsx', noteSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let handler;
@@ -101,26 +101,73 @@ async function main() {
     ts.forEachChild(node, visit);
   }
   visit(noteTree); assert(handler);
-  for (const success of [true, false]) {
-    const states = {}, alerts = [], noteDeleting = { current: false };
-    let finish, writes = 0;
-    const context = { noteDeleting, confirmedNotes: { current: [{ id: 'n' }] }, deletedNotes: { current: new Set() }, notes: [{ id: 'n' }], STORAGE_KEY: 'synthetic',
-      storage: { setItem: () => { writes++; return new Promise(r => finish = r); } },
-      Alert: { alert: (...args) => alerts.push(args) } };
-    for (const key of ['DeleteBusy', 'Notes', 'EditorOpen', 'Editing', 'MenuNote', 'PreviewNote', 'ConfirmDelete']) context['set' + key] = v => states[key] = v;
-    const code = ts.transpileModule(`const handler = ${handler};`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-    vm.runInNewContext(code + '\nglobalThis.run = handler;', localeGlobals(context));
-    const pending = context.run('n'); await context.run('n'); assert.equal(writes, 1);
-    finish(success); await pending;
-    assert.equal(noteDeleting.current, false);
-    if (success) {
-      assert.equal(states.Notes.length, 0); assert.equal(states.EditorOpen, false); assert.equal(states.Editing, null);
-      await context.run('n'); assert.equal(writes, 1);
+  const code = ts.transpileModule(`const handler = ${handler};`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+  for (const scenario of ['local success', 'storage false', 'storage rejection', 'private success',
+    'API rejection', 'stale session before request', 'session changed during request']) {
+    const privateMode = !['local success', 'storage false', 'storage rejection'].includes(scenario);
+    const success = scenario.endsWith('success');
+    const original = [{ id: 'n' }, { id: 'keep' }];
+    const states = { Notes: original, EditorOpen: true, Editing: original[0], PreviewNote: original[0] };
+    const alerts = [], writes = [], requests = [];
+    const noteDeleting = { current: false };
+    const confirmedNotes = { current: original };
+    const deletedNotes = { current: new Set() };
+    let currentSession = scenario === 'stale session before request' ? 'B' : 'A';
+    const privateScope = privateMode ? { assertCurrent() {
+      if (currentSession !== 'A') throw Error('Synthetic session changed');
+    } } : undefined;
+    let finish, fail;
+    const persist = () => new Promise((resolve, reject) => { finish = resolve; fail = reject; });
+    const context = {
+      noteDeleting, confirmedNotes, deletedNotes, privateScope, STORAGE_KEY: 'synthetic',
+      storage: { setItem: (key, value) => { writes.push([key, value]); return persist(); } },
+      api: { deleteNote: id => { requests.push([currentSession, id]); return persist(); } },
+      Alert: { alert: (...args) => alerts.push(args) },
+    };
+    for (const key of ['DeleteBusy', 'Notes', 'EditorOpen', 'Editing', 'MenuNote', 'PreviewNote', 'ConfirmDelete']) {
+      context['set' + key] = value => { states[key] = value; };
     }
-    else { assert.equal(states.Notes, undefined); assert.equal(states.EditorOpen, undefined); assert.equal(alerts.length, 1); }
+    vm.runInNewContext(code + '\nglobalThis.run = handler;', localeGlobals(context));
+    const pending = context.run('n');
+    if (scenario !== 'stale session before request') {
+      assert.equal(noteDeleting.current, true, scenario);
+      await context.run('n');
+      assert.equal(states.Notes, original, scenario);
+      assert.equal(states.EditorOpen, true, scenario);
+      assert.deepEqual(writes, privateMode ? [] : [['synthetic', JSON.stringify([original[1]])]], scenario);
+      assert.deepEqual(requests, privateMode ? [['A', 'n']] : [], scenario);
+      if (scenario === 'session changed during request') currentSession = 'B';
+      if (scenario === 'storage rejection' || scenario === 'API rejection') fail(Error(scenario));
+      else finish(privateMode ? undefined : success);
+    }
+    await pending;
+    assert.equal(noteDeleting.current, false, scenario);
+    assert.equal(states.DeleteBusy, false, scenario);
+    if (success) {
+      assert.equal(states.Notes.length, 1, scenario);
+      assert.equal(states.Notes[0], original[1], scenario);
+      assert.equal(confirmedNotes.current, states.Notes, scenario);
+      assert.equal(states.EditorOpen, false, scenario);
+      assert.equal(states.Editing, null, scenario);
+      assert.equal(deletedNotes.current.has('n'), true, scenario);
+      await context.run('n');
+      assert.equal(writes.length + requests.length, 1, scenario);
+      assert.equal(alerts.length, 0, scenario);
+    } else {
+      assert.equal(states.Notes, original, scenario);
+      assert.equal(confirmedNotes.current, original, scenario);
+      assert.equal(states.EditorOpen, true, scenario);
+      assert.equal(states.Editing, original[0], scenario);
+      assert.equal(states.PreviewNote, original[0], scenario);
+      assert.equal(deletedNotes.current.size, 0, scenario);
+      assert.equal(alerts.length, 1, scenario);
+      if (scenario === 'stale session before request') {
+        assert.equal(writes.length + requests.length, 0, scenario);
+      }
+    }
   }
   console.log('PASS: 3 destinations × success, double press, pending refresh, 409, 404, missing resource; TSX syntax.');
-  console.log('PASS: local-note deletion commits storage before closing; double press and storage failure controlled.');
+  console.log('PASS: local and private note deletion, duplicate presses, persistence failures and session isolation.');
   console.log('PASS: catalog queries and navigation never initialize or restore empty/legacy categories.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

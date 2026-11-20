@@ -1,4 +1,36 @@
 {
+  "accountDeletion": {
+    "title": "Eliminar cuenta",
+    "warning": "Esto elimina permanentemente tu cuenta de PickWallet y sus registros financieros. Ingresa tu contraseña actual para confirmar. Las copias de seguridad caducan por separado.",
+    "invalid": "Verifica tu contraseña y vuelve a iniciar sesión si la sesión caducó.",
+    "unknown": "No pudimos confirmar la eliminación. Si aún puedes iniciar sesión, puedes volver a intentarlo. Contacta a soporte si necesitas verificar el resultado.",
+    "confirmed": "Se eliminaron tu cuenta y sus datos de la base de datos activa de PickWallet.",
+    "devicePending": "Se eliminó tu cuenta de la base de datos activa de PickWallet. Puede quedar información en este dispositivo. PickWallet vuelve a intentar la limpieza al abrir la app."
+  },
+  "auth": {
+    "brand": "PickWallet",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "signIn": "Iniciar sesión",
+    "signingIn": "Iniciando sesión…",
+    "signOut": "Cerrar sesión",
+    "invalid": "Comprueba tu correo y contraseña.",
+    "unavailable": "No se puede iniciar sesión. Comprueba la conexión e inténtalo de nuevo.",
+    "signOutUnconfirmed": "La pantalla de sesión se cerró. No se pudo confirmar la eliminación de la sesión.",
+    "notesUnavailable": "No se pudieron cargar tus notas.",
+    "invitationCode": "Código de invitación",
+    "recoveryCode": "Código de recuperación",
+    "accountCode": "Código de cuenta",
+    "operatorCodeHelp": "Solicita un código de invitación o recuperación al responsable de la beta cerrada. Introduce el código enviado a tu correo.",
+    "passwordPolicy": "Usa entre 15 y 128 caracteres para tu nueva contraseña.",
+    "confirmPassword": "Confirmar nueva contraseña",
+    "accountReady": "Contraseña guardada. Inicia sesión con tu correo y tu nueva contraseña.",
+    "codeInvalid": "Revisa el código, la longitud de la contraseña y su confirmación. El código puede haber caducado o haberse utilizado.",
+    "setPassword": "Guardar contraseña",
+    "backToSignIn": "Volver al inicio de sesión",
+    "useInvitation": "Usar código de invitación",
+    "recoverAccount": "Recuperar cuenta"
+  },
   "common": {
     "save": "Guardar",
     "cancel": "Cancelar",
@@ -114,6 +146,19 @@
     "retry": "Reintentar"
   },
   "more": {
+    "previewSettingsAccount": "Ajustes y cuenta",
+    "previewProfile": "Mi perfil",
+    "previewProfileDescription": "Nombre, foto y correo electrónico.",
+    "previewLanguage": "Idioma",
+    "previewLanguageDescription": "Español / English",
+    "previewCurrency": "Moneda y formato",
+    "previewCurrencyDescription": "USD, separadores de miles y decimales.",
+    "previewNotifications": "Notificaciones",
+    "previewNotificationsDescription": "Alertas de pagos y deudas.",
+    "previewSecurity": "Seguridad y privacidad",
+    "previewSecurityDescription": "Contraseña, sesiones y eliminar cuenta.",
+    "previewLogout": "Cerrar sesión",
+
     "subNotes": "Escribe y organiza tus notas",
     "moneyManagement": "Gestión del dinero",
     "paymentsObligations": "Pagos y obligaciones",
@@ -197,6 +242,9 @@
     }
   },
   "transactions": {
+    "revisionConflict": "La transacción cambió después de abrirla. Tu borrador se conserva. Revisa la versión actual antes de abrir una nueva edición.",
+    "reviewCurrent": "Revisar versión actual",
+    "currentMovement": "Descripción: {{name}}\nImporte: {{amount}}\nCuenta: {{account}}\nCategoría: {{category}}\nNotas: {{notes}}",
     "selectAccount": "Seleccionar cuenta",
     "selectCategory": "Seleccionar categoría",
     "title": "Movimientos",
@@ -266,6 +314,17 @@
     "expenseSourceRequired": "Selecciona una cuenta de origen válida para este gasto."
   },
   "debts": {
+    "noAccount": "Sin cuenta",
+    "paymentSource": "Origen del pago",
+    "receiptDestination": "Destino del cobro",
+    "accountSettlement": "Cuenta registrada",
+    "externalPayment": "Pago externo",
+    "externalReceipt": "Cobro externo",
+    "externalPaymentExplanation": "El dinero proviene de una fuente no registrada en PickWallet.",
+    "externalReceiptExplanation": "El dinero se recibe fuera de las cuentas registradas en PickWallet.",
+    "settlementRequired": "Elige una cuenta o una operación externa.",
+    "historicalSettlement": "Registro histórico: origen no especificado",
+
     "title": "Deudas y préstamos",
     "iOwe": "Yo debo",
     "owedToMe": "Me deben",

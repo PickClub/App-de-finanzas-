@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const ts = require('typescript');
 const read = file => fs.readFileSync(`${__dirname}/../${file}`, 'utf8');
 const compile = text => ts.transpileModule(text, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
-const nodes = n => !n || typeof n !== 'object' ? [] : [n, ...[n.props?.children].flat(Infinity).flatMap(nodes)];
+const nodes = n => !n || typeof n !== 'object' ? [] : [n, ...[n.props?.children, n.props?.beforeActions].flat(Infinity).flatMap(nodes)];
 function accountsFixture(count) {
   let cursor = 0, effects = [], accounts = Array.from({ length: count }, (_, i) => ({ id: String(i), name: `Account ${i}`, current_balance: i + 1 }));
   const cells = [], navigations = [];
@@ -21,11 +21,14 @@ function accountsFixture(count) {
     '@/src/format': { formatCurrency: v => `money:${v}` }, '@/src/i18n': { useTranslation: () => ({ t: key => key }) },
     '@/src/lock': { useLock: () => ({ guard: fn => fn }) }, '@/src/ui-scale': { us: n => n },
     '@/src/components/elastic-scroll-view': { ElasticScrollView: 'Scroll' }, '@/src/native-scroll': { NATIVE_VERTICAL_SCROLL: {} },
+    '@/src/components/header-actions': {
+      MoneyFlowHeaderActions: 'MoneyFlowHeaderActions',
+    },
     '@/src/components/pressable': { Pressable: 'Pressable' }, '@/src/components/typography': { Text: 'Text' },
     'react-native-svg': { default: 'Svg', Path: 'Path' }, '@react-native-vector-icons/ionicons': { default: 'Icon' },
   };
   const loaded = { exports: {} };
-  vm.runInNewContext(compile(read('app/accounts/index.tsx')), { require: name => { assert(name in mocks, name); return mocks[name]; }, module: loaded, exports: loaded.exports });
+  vm.runInNewContext(compile(read('app/accounts/index.tsx')), { require: name => { assert(Object.hasOwn(mocks, name), name); return mocks[name]; }, module: loaded, exports: loaded.exports });
   let tree;
   const render = () => { cursor = 0; effects = []; tree = loaded.exports.default(); effects.forEach(fn => fn()); return nodes(tree); };
   return { render, setCount(n) { accounts = Array.from({ length: n }, (_, i) => ({ id: String(i), name: `Account ${i}`, current_balance: i + 1 })); }, navigations };

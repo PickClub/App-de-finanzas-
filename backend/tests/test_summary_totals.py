@@ -132,13 +132,6 @@ def load_summary(db, *, limits=None, now=None):
     node = next(n for n in ast.parse((Path(__file__).parents[1] / 'server.py').read_text()).body
                 if isinstance(n, ast.AsyncFunctionDef) and n.name == 'summary')
     node.decorator_list = []
-    # Shrink only the resource ceilings in memory for boundary tests, never files.
-    if limits is not None:
-        assignment = next(n for n in node.body if isinstance(n, ast.Assign)
-                          and isinstance(n.targets[0], ast.Tuple)
-                          and n.targets[0].elts[0].id == 'timeout')
-        assignment.value = ast.Tuple(elts=[ast.Constant(v) for v in limits], ctx=ast.Load())
-        ast.fix_missing_locations(node)
     class Clock(datetime):
         @classmethod
         def now(cls, tz=None):
@@ -148,7 +141,17 @@ def load_summary(db, *, limits=None, now=None):
               ReadConcern=ReadConcern, WriteConcern=WriteConcern, PyMongoError=PyMongoError,
               logger=logging.getLogger('offline-summary'))
     exec(compile(ast.Module(body=[node], type_ignores=[]), '<actual summary>', 'exec'), ns)
-    return ns['summary']
+    if limits is None:
+        return ns['summary']
+
+    async def run_with_limits():
+        from unittest.mock import patch
+        from backend import financial_summary
+
+        with patch.object(financial_summary, "SUMMARY_LIMITS", limits):
+            return await ns['summary']()
+
+    return run_with_limits
 
 
 NOW = datetime(2026, 10, 14, 12, tzinfo=timezone.utc)

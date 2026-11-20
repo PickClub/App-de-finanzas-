@@ -35,14 +35,29 @@ async function main(){
     const base=cp.execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),marker='const useStyles =';
     assert.equal(text.slice(text.indexOf(marker)),base.slice(base.indexOf(marker)));
     if(file.includes('transactions/new')){
-      function protectedHandlers(source){const tree=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),out=[];
-        function visit(n){if(ts.isVariableDeclaration(n)&&['save','remove'].includes(n.name.getText(tree)))out.push(n.initializer.getText(tree));ts.forEachChild(n,visit);}visit(tree);return out;}
-      const approvedStart=text.indexOf('    if (params.id && sourceQ.data?.id === sourceId\n');
-      const approvedEnd=text.indexOf('    savingRef.current = true;',approvedStart);
-      const approved=approvedStart>=0?text.slice(approvedStart,approvedEnd):'';
-      if(approved)assert(approved.includes('delete payload[field]')&&approved.includes('original.amount'));
-      const normalized=text.replace(approved,'').replace('params.id ? name : name.trim() || "Sin descripción"','name.trim() || "Sin descripción"');
-      assert.deepEqual(protectedHandlers(normalized).map(normalizeUI),protectedHandlers(base).map(normalizeUI));
+      function protectedHandlers(source, file, draftMarker, feedbackMarker){
+        const tree=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),out=[];
+        function visit(n){
+          if(ts.isVariableDeclaration(n)&&['save','remove'].includes(n.name.getText(tree))){
+            let handler=n.initializer.getText(tree);
+            if(n.name.getText(tree)==='save'){
+              const draft=handler.indexOf(draftMarker);
+              const saving=handler.indexOf('    savingRef.current = true;',draft);
+              const feedback=handler.indexOf(feedbackMarker,saving);
+              assert(draft>=0&&saving>draft&&feedback>saving);
+              // Revision handling has behavioral coverage in the direct-read fixture.
+              handler=handler.slice(0,draft)+handler.slice(saving,feedback);
+            }
+            out.push(handler);
+          }
+          ts.forEachChild(n,visit);
+        }
+        visit(tree);return out;
+      }
+      assert.deepEqual(
+        protectedHandlers(text, file, '    const original = draftSource', '      if (e instanceof ApiError').map(normalizeUI),
+        protectedHandlers(base, file, '    if (params.id && sourceQ.data', '      Alert.alert').map(normalizeUI),
+      );
     }
     const out=ts.transpileModule(text,{fileName:file,reportDiagnostics:true,compilerOptions:{jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2020}});
     assert.equal((out.diagnostics||[]).filter(d=>d.category===ts.DiagnosticCategory.Error).length,0);

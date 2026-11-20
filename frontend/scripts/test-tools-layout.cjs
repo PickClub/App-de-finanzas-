@@ -13,7 +13,7 @@ for (const language of ['en', 'es']) for (const scheme of ['light', 'dark']) {
   const catalog = require(`${root}/src/i18n/locales/${language}.json`);
   const t = key => key.split('.').reduce((v, k) => v?.[k], catalog);
   const calls = [];
-  const colors = { pageBackground: '#E8EFE7', surfaceSecondary: '#FFFFFF', border: '#DCE5DE', onSurface: '#13201A', muted: '#7A847E', incomeGreen: '#2FA47C' };
+  const colors = { pageBackground: '#E8EFE7', surfaceSecondary: '#FFFFFF', border: '#DCE5DE', onSurface: '#13201A', identityAccent: '#126046', muted: '#7A847E', incomeGreen: '#2FA47C' };
   const mocks = {
     react: {}, 'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
     'react-native': { View: 'View' }, 'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 24, bottom: 24 }) },
@@ -31,7 +31,7 @@ for (const language of ['en', 'es']) for (const scheme of ['light', 'dark']) {
   });
   const tree = loaded.exports.default(), nodes = walk(tree), find = id => nodes.find(n => n.props?.testID === id);
   assert(!find('more-profile')); assert(!find('tools-banner'));
-  for (const [id, count] of [['money', 4], ['obligations', 3], ['planning', 2]]) {
+  for (const [id, count] of [['settings', 6], ['money', 4], ['obligations', 3], ['planning', 2]]) {
     const section = find(`tools-section-${id}`);
     assert(section);
     const rows = section.props.children[1].props.children;
@@ -40,7 +40,20 @@ for (const language of ['en', 'es']) for (const scheme of ['light', 'dark']) {
     assert.equal(section.props.onPress, undefined);
     assert.equal(section.props.accessibilityState?.expanded, undefined);
   }
-  assert(!nodes.some(n => n.type === 'Icon' && /chevron|arrow/.test(n.props.name)));
+  const settingsRows = find('tools-section-settings').props.children[1].props.children;
+  for (const row of settingsRows) {
+    assert.equal(row.props.disabled, true);
+    assert.equal(row.props.accessibilityState.disabled, true);
+    row.props.onPress();
+  }
+  assert.equal(calls.length, 0);
+  for (const section of ['settings', 'money', 'obligations', 'planning']) {
+    for (const row of find('tools-section-' + section).props.children[1].props.children) {
+      assert(row.props.children.some(node => node?.props?.name === 'chevron-forward'));
+      assert.equal(flatten(row.props.children[1].props.children[0].props.style).color,
+        row === settingsRows.at(-1) ? '#DB4F4C' : colors.identityAccent);
+    }
+  }
   const tools = ['accounts', 'categories', 'budgets', 'savingsGoals', 'debtsAndLoans', 'recurringPayments', 'invoices', 'financialCalendar'];
   const expected = ['/accounts', '/categories', '/budgets', '/goals', '/debts', '/recurring', '/bills', '/calendar'];
   for (const key of tools) { const card = find(`more-${t(`more.${key}`)}`); assert(card); card.props.onPress(); }
@@ -66,7 +79,7 @@ for (const language of ['en', 'es']) for (const scheme of ['light', 'dark']) {
       assert.equal(flatten(title.props.style).fontFamily, 'Montserrat-Bold');
       assert.equal(flatten(description.props.style).fontWeight, '400');
       assert.equal(title.props.numberOfLines, undefined); assert.equal(description.props.numberOfLines, undefined);
-      const divider = row.props.children[2];
+      const divider = row.props.children.find(node => node?.props?.pointerEvents === 'none');
       if (divider) assert(flatten(divider.props.style).left >= style.paddingHorizontal + icon.width);
     }
   }

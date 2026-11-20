@@ -1,3 +1,4 @@
+import { erasePrivateJournal } from "@/src/private-journal";
 import { localizedError } from "@/src/i18n/errors";
 import { useTranslation, useLang, type Lang } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
@@ -13,6 +14,7 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AuthSessionError, authEnabled, deleteAccount, signOut } from "@/src/auth-session";
 import { api } from "@/src/api";
 import { useTheme, makeStyles, radius, spacing, type ThemeMode } from "@/src/theme";
 import { useFonts } from "expo-font";
@@ -39,6 +41,36 @@ export default function Settings() {
   const { lang, setLang } = useLang();
   const styles = useStyles();
   const q = useQuery({ queryKey: ["user"], queryFn: api.getUser });
+  const [deletionOpen, setDeletionOpen] = useState(false);
+  const [deletionPassword, setDeletionPassword] = useState("");
+  const [deletionError, setDeletionError] = useState<"invalid" | "unknown">();
+  const [deleting, setDeleting] = useState(false);
+  const deletionBusy = useRef(false);
+
+  async function confirmDeletion() {
+    if (deletionBusy.current || !deletionPassword) return;
+    deletionBusy.current = true;
+    setDeleting(true);
+    setDeletionError(undefined);
+    try {
+      await deleteAccount(deletionPassword, erasePrivateJournal);
+      setDeletionOpen(false);
+    } catch (error) {
+      setDeletionError(error instanceof AuthSessionError && error.reason === "invalid" ? "invalid" : "unknown");
+    } finally {
+      setDeletionPassword("");
+      setDeleting(false);
+      deletionBusy.current = false;
+    }
+  }
+
+  function closeDeletion() {
+    if (deletionBusy.current) return;
+    setDeletionPassword("");
+    setDeletionError(undefined);
+    setDeletionOpen(false);
+  }
+
   const [editor, setEditor] = useState<"name" | "currency" | null>(null);
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("USD");
@@ -149,6 +181,14 @@ export default function Settings() {
         <MoneyFlowHeaderActions title={<Text style={[styles.title, { flex: 1 }]}>{t("settings.profileTitle")}</Text>} onBack={() => router.back()} />
       </View>
 
+      {authEnabled && <Pressable accessibilityRole="button" onPress={() => void signOut()} style={styles.cancelBtn}>
+        <Text style={styles.status}>{t("auth.signOut")}</Text>
+      </Pressable>}
+
+      {authEnabled && <Pressable testID="open-account-deletion" accessibilityRole="button" onPress={() => setDeletionOpen(true)} style={styles.cancelBtn}>
+        <Text style={styles.status}>{t("accountDeletion.title")}</Text>
+      </Pressable>}
+
       {!q.data ? <View style={styles.card}>
         <Text style={styles.status}>{q.isError ? t("settings.loadError") : t("common.loading")}</Text>
         {q.isError && <Pressable testID="profile-retry" onPress={() => { void q.refetch(); }} style={styles.saveBtn}><Text style={styles.saveText}>{t("settings.retry")}</Text></Pressable>}
@@ -189,6 +229,7 @@ export default function Settings() {
         </View>
       </>}
 
+      {!authEnabled && <>
       <Text style={styles.section}>{t("settings.dataStorage")}</Text>
       <View style={styles.card}>
         <Pressable testID="reseed" accessibilityRole="button" onPress={confirmRestore} style={styles.row}>
@@ -198,7 +239,28 @@ export default function Settings() {
         </Pressable>
       </View>
 
-      <AppSheet visible={editor !== null} onClose={closeEditor} testID="profile-editor" origin={editorOrigin}>
+      </>}
+
+      {authEnabled && <AppSheet visible={deletionOpen} onClose={closeDeletion} testID="account-deletion" avoidKeyboard>
+        <Text style={styles.sheetTitle}>{t("accountDeletion.title")}</Text>
+        <Text style={styles.status}>{t("accountDeletion.warning")}</Text>
+        <TextInput testID="account-deletion-password" accessibilityLabel={t("auth.password")} autoComplete="current-password" secureTextEntry
+          editable={!deleting} value={deletionPassword} onChangeText={setDeletionPassword}
+          maxLength={256} style={styles.input} />
+        {deletionError && <Text accessibilityLiveRegion="polite" style={styles.status}>
+          {t(deletionError === "invalid" ? "accountDeletion.invalid" : "accountDeletion.unknown")}
+        </Text>}
+        <View style={styles.editorActions}>
+          <Pressable disabled={deleting} accessibilityRole="button" onPress={closeDeletion} style={styles.cancelBtn}>
+            <Text style={styles.rowLabel}>{t("common.cancel")}</Text>
+          </Pressable>
+          <Pressable testID="confirm-account-deletion" disabled={deleting || !deletionPassword} accessibilityRole="button" onPress={confirmDeletion} style={styles.saveBtn}>
+            <Text style={styles.saveText}>{deleting ? t("common.loading") : t("accountDeletion.title")}</Text>
+          </Pressable>
+        </View>
+      </AppSheet>}
+
+      <AppSheet visible={editor !== null} onClose={closeEditor} testID="profile-editor" origin={editorOrigin} avoidKeyboard={editorField.current === "name"}>
         <Text style={styles.sheetTitle}>{editorField.current === "name" ? t("settings.editName") : t("settings.currency")}</Text>
         {editorField.current === "name" ? <TextInput testID="profile-name-input" accessibilityLabel={t("settings.name")} value={name} onChangeText={setName} editable={!saving} placeholder={t("settings.namePlaceholder")} placeholderTextColor={colors.muted} style={styles.input} /> : <View style={styles.currencyOptions}>
           {CURRENCIES.map(c => <Pressable key={c} testID={`currency-${c}`} accessibilityRole="radio" accessibilityState={{ checked: currency === c }} disabled={saving} onPress={() => setCurrency(c)} style={[styles.currency, currency === c && styles.selected]}><Text style={[styles.rowLabel, currency === c && styles.selectedText]}>{currencyLabel(c)}</Text></Pressable>)}

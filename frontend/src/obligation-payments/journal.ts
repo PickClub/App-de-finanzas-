@@ -1,6 +1,6 @@
 // Financial context consistency only: default-user/single_user is NOT authentication.
 export type Target = { kind: "bill" | "recurring"; id: string; due: string };
-export type Context = { environment_id: string; user_id: "default-user"; mode: "single_user" };
+export type Context = { environment_id: string; user_id: string; mode: "single_user" | "authenticated_user" };
 export type Resolution = { status: "matched" | "cancelled" | "tracking_removed"; financial_state: "active" | "annulled" | "none" };
 export type Record = { version: 1; key: string; target: Target; context: Context;
   payload: { [field: string]: any }; state: "pending" | "conflict" | "confirmed" | "reconciled"; receipt?: any; resolution?: Resolution };
@@ -19,9 +19,11 @@ const positive = (value: any) => typeof value === "number" && Number.isFinite(va
 const keys = (value: any, allowed: string[]) => value && typeof value === "object" && !Array.isArray(value) &&
   Object.keys(value).sort().join() === allowed.sort().join();
 const fail = (): never => { throw Error("No se puede verificar el registro de pago; no se enviará ni eliminará."); };
+const validOwner = (value: Context) => value.mode === "single_user"
+  ? value.user_id === "default-user"
+  : value.mode === "authenticated_user" && uuid.test(value.user_id);
 export function verifiedContext(value: any): Context {
-  if (!value || value.version !== 1 || !uuid.test(value.environment_id) || value.user_id !== "default-user" ||
-      value.mode !== "single_user" || value.capabilities?.bill_payment_context_headers !== true ||
+  if (!value || value.version !== 1 || !uuid.test(value.environment_id) || !validOwner(value) || value.capabilities?.bill_payment_context_headers !== true ||
       value.capabilities?.recurring_payment_context_headers !== true) {
     throw Error("El backend no ofrece un contexto verificable para estos pagos. No se enviará el pago.");
   }
@@ -37,7 +39,7 @@ export function verifiedDeletionContext(value: any, kind: Target["kind"], expect
 function validate(record: Record): Record {
   if (!record || record.version !== 1 || !id(record.key) || record.key.length > 128 ||
       !keys(record, record.state === "reconciled" ? ["version","key","target","context","payload","state","receipt","resolution"] : record.state === "confirmed" ? ["version","key","target","context","payload","state","receipt"] : ["version","key","target","context","payload","state"]) ||
-      !keys(record.context,["environment_id","user_id","mode"]) || !uuid.test(record.context.environment_id) || record.context.user_id !== "default-user" || record.context.mode !== "single_user" ||
+      !keys(record.context,["environment_id","user_id","mode"]) || !uuid.test(record.context.environment_id) || !validOwner(record.context) ||
       !keys(record.target,["kind","id","due"]) || !["bill","recurring"].includes(record.target.kind) || !id(record.target.id) || !/^\d{4}-\d{2}-\d{2}$/.test(record.target.due) || !Number.isFinite(Date.parse(record.target.due + "T00:00:00Z")) || new Date(record.target.due + "T00:00:00Z").toISOString().slice(0,10) !== record.target.due ||
       !["pending","conflict","confirmed","reconciled"].includes(record.state)) return fail();
   const p = record.payload;

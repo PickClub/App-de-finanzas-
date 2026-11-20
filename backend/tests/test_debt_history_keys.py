@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from pymongo.errors import OperationFailure
+from backend import debt_operations
 from backend.history_keys import inspect_history_keys
 from backend.tests import test_payment_consistency as memory
 
@@ -138,18 +139,18 @@ class DebtKeyCases:
         self.assertEqual(await self.balance(), 930)
 
     async def test_create_edit_delete_rollback_after_partial_writes(self):
-        recompute = self.ns["recompute_debt"]
+        recompute = debt_operations.recompute_debt
         async def fail(*args, **kwargs):
             await recompute(*args, **kwargs)
             raise OperationFailure("Synthetic after-write failure")
         before = await self.snapshot()
-        with patch.dict(self.ns, {"recompute_debt": fail}):
+        with patch.object(debt_operations, "recompute_debt", fail):
             await self.pay(expected=503)
         self.assertEqual(await self.snapshot(), before)
         p = await self.pay()
         for action in ("edit", "delete"):
             before = await self.snapshot()
-            with patch.dict(self.ns, {"recompute_debt": fail}):
+            with patch.object(debt_operations, "recompute_debt", fail):
                 if action == "edit":
                     await self.edit(p, amount=80, expected=503)
                 else:
@@ -210,7 +211,7 @@ class DebtKeyMemoryTests(DebtKeyCases, unittest.IsolatedAsyncioTestCase):
 
     async def test_transient_edit_retries_with_updated_session(self):
         p = await self.pay()
-        original = self.ns["recompute_debt"]
+        original = debt_operations.recompute_debt
         calls = []
         async def once(*args, **kwargs):
             await original(*args, **kwargs)
@@ -232,7 +233,7 @@ class DebtKeyMemoryTests(DebtKeyCases, unittest.IsolatedAsyncioTestCase):
                             raise
             session.with_transaction = with_transaction
             return session
-        with patch.dict(self.ns, {"recompute_debt": once}), patch.object(self.client, "start_session", side_effect=start_with_driver_retry):
+        with patch.object(debt_operations, "recompute_debt", once), patch.object(self.client, "start_session", side_effect=start_with_driver_retry):
             await self.edit(p, amount=80)
         self.assertEqual(len(calls), 2)
         self.assertEqual(inspect_history_keys(await self.stored(p), 1), "ready")

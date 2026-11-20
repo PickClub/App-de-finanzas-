@@ -842,7 +842,7 @@ export default function Home() {
                         </View>
                         <View style={styles.walletTextWrap}>
                           <Text style={styles.walletName} numberOfLines={2}>{a.name}</Text>
-                          <View style={[styles.balancePill, { backgroundColor: darken(ac, 0.1) }]}>
+                          <View style={[styles.balancePill, { backgroundColor: darken(ac, 0.19) }]}>
                             <View style={styles.dollarCircle}>
                               <Text style={styles.dollarSymbol}>{balanceParts(a.current_balance).symbol}</Text>
                             </View>
@@ -1493,9 +1493,10 @@ const useStyles = makeStyles((colors, scheme) => {
     marginRight: 0,
   },
   walletName: { color: "#F4F1E8", fontSize: 12.5, fontWeight: "600", letterSpacing: 0.1 },
-  walletBalance: { color: "#F4F1E8", fontSize: 12.5, fontWeight: "600" },
+  walletBalance: { color: "#F4F1E8", fontSize: 13.75, fontWeight: "600", flexShrink: 1, minWidth: 0 },
   // Compact color-matched balance pill: "$" in a thin outlined circle + amount.
   balancePill: {
+    maxWidth: "100%",
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",

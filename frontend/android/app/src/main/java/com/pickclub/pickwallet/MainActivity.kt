@@ -1,4 +1,4 @@
-package com.emergent.moneyflowpreview.p1r033
+package com.pickclub.pickwallet
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

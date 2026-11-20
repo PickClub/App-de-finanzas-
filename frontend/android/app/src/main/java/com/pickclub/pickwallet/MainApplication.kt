@@ -1,4 +1,4 @@
-package com.emergent.moneyflowpreview.p1r033
+package com.pickclub.pickwallet
 
 import android.app.Application
 import android.content.res.Configuration

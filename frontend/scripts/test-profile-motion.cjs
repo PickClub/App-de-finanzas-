@@ -12,8 +12,11 @@ assert.equal(profile.slice(profile.indexOf('const useStyles =')), oldProfile.sli
 const saveHandler = text => text.slice(text.indexOf('  const save ='), text.indexOf('  const confirmRestore ='));
 assert.equal(saveHandler(profile), saveHandler(oldProfile), 'Name/currency persistence remains identical');
 assert.equal(source.slice(source.indexOf('const s =')), baseline.slice(baseline.indexOf('const s =')), 'All final sheet styles remain identical');
-assert.equal(source.slice(source.indexOf('function SlidingAppSheet'), source.indexOf('/** Compatibility')),
-  baseline.slice(baseline.indexOf('export function AppSheet'), baseline.indexOf('/** Compatibility')).replace('export function AppSheet', 'function SlidingAppSheet'), 'Existing non-Profile sheet animation is unchanged');
+const legacySheet = source.slice(source.indexOf('function SlidingAppSheet'), source.indexOf('/** Keyboard avoidance'))
+  .replace('  avoidKeyboard,\n', '').replace('  avoidKeyboard?: boolean;\n', '')
+  .replace('        <SheetKeyboardBoundary enabled={avoidKeyboard}>\n', '').replace('        </SheetKeyboardBoundary>\n', '');
+assert.equal(legacySheet,
+  baseline.slice(baseline.indexOf('export function AppSheet'), baseline.indexOf('/** Compatibility')).replace('export function AppSheet', 'function SlidingAppSheet'), 'Legacy animation/style/handlers unchanged apart from opt-in keyboard boundary');
 const walk = node => !node || typeof node !== 'object' ? [] : [node, ...[node.props?.children].flat(Infinity).flatMap(walk)];
 const flat = styles => Object.assign({}, ...[styles].flat(Infinity).filter(Boolean));
 function fixture(reduced = false) {
@@ -40,7 +43,7 @@ function fixture(reduced = false) {
   const jsx = (type, props) => ({ type, props });
   const mocks = {
     react: { useEffect, useRef, useState }, 'react/jsx-runtime': { jsx, jsxs: jsx },
-    'react-native': { View: 'View', Modal: 'Modal', Animated: {}, Easing: {}, StyleSheet: { create: v => v, absoluteFill: {} }, Dimensions: { get: () => ({ height: 800 }) } },
+    'react-native': { View: 'View', KeyboardAvoidingView: 'KeyboardAvoidingView', Modal: 'Modal', Animated: {}, Easing: {}, StyleSheet: { create: v => v, absoluteFill: {} }, Dimensions: { get: () => ({ height: 800 }) } },
     '@/src/components/pressable': { Pressable: 'Pressable' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ bottom: 24 }) },
     '@/src/theme': { useTheme: () => ({ colors: { surface: 'white', border: 'gray', borderStrong: 'gray' } }), radius: { cardLg: 28 }, spacing: { lg: 16 } },
@@ -49,9 +52,9 @@ function fixture(reduced = false) {
       withTiming: (to, config, done) => ({ timing: true, to, config, done }), Easing: { cubic: 'cubic', out: v => `out-${v}`, in: v => `in-${v}` }, ReduceMotion: { System: 'system' } },
   };
   const context = { exports: {}, require: name => { assert(name in mocks, name); return mocks[name]; } };
-  vm.runInNewContext(ts.transpileModule(source + '\nexport { AnchoredAppSheet };', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, context);
+  vm.runInNewContext(ts.transpileModule(source + '\nexport { AnchoredAppSheet, SheetKeyboardBoundary };', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, context);
   const render = () => { cursor = 0; const tree = context.exports.AnchoredAppSheet({ visible, onClose: () => { visible = false; }, origin: { x: 180, y: 264 }, testID: 'panel', children: 'Original content' }); const pending = effects; effects = []; pending.forEach(fn => { const cleanup = fn(); if (cleanup) cleanups.push(cleanup); }); return tree; };
-  return { render, timings, setVisible: value => { visible = value; }, unmount: () => cleanups.forEach(fn => fn()), wrapper: context.exports.AppSheet };
+  return { render, timings, setVisible: value => { visible = value; }, unmount: () => cleanups.forEach(fn => fn()), wrapper: context.exports.AppSheet, keyboardBoundary: context.exports.SheetKeyboardBoundary };
 }
 for (const reduced of [false, true]) {
   const f = fixture(reduced);
@@ -97,3 +100,14 @@ for (const dismiss of ['backdrop', 'android']) {
   f.unmount();
 }
 console.log('PASS: unchanged final styles and legacy sheets; anchored hidden preparation, validated layout, 280/220ms curves, Reduced Motion, rapid reversal, retained exit, Android Back before layout and cleanup. Device animation remains unverified.');
+
+const keyboardFixture = fixture();
+const enabledBoundary = keyboardFixture.keyboardBoundary({ enabled: true, children: 'Name editor' });
+assert.equal(enabledBoundary.type, 'KeyboardAvoidingView');
+assert.equal(enabledBoundary.props.behavior, 'padding');
+assert.equal(flat(enabledBoundary.props.style).flex, 1);
+assert.equal(flat(enabledBoundary.props.style).justifyContent, 'flex-end');
+const plainBoundary = keyboardFixture.keyboardBoundary({ children: 'Currency/language unchanged' });
+assert.notEqual(plainBoundary.type, 'KeyboardAvoidingView');
+assert.equal(plainBoundary.props.children, 'Currency/language unchanged');
+console.log('PASS: keyboard boundary is opt-in, preserves content and uses native padding avoidance. Native IME geometry requires device evidence.');

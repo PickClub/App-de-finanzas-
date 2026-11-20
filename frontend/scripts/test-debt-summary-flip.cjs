@@ -19,7 +19,22 @@ const listSource=source
 assert.equal(between(source,'function buildStat','export default'),between(old,'function buildStat','export default'),'Existing amount arithmetic/percentage rules preserved');
 assert.equal(between(listSource,'        {/* Filters','function FilterPill'),between(old,'        {/* Filters','function FilterPill'),'Filters, individual cards, add action and order preserved');
 assert.equal(between(source,'function FilterPill','function MetricRow'),between(old,'function FilterPill','function MetricRow'));
-assert(source.includes('<MoneyFlowHeaderActions onBack={() => router.back()} backTestID="debts-back" beforeActions='),'Shared Back controls retain the existing list route');
+// Inspect named JSX properties so a title/property-order change cannot mask navigation.
+const headerTree=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+let debtHeader;
+function findHeader(node){
+ if((ts.isJsxOpeningElement(node)||ts.isJsxSelfClosingElement(node))&&node.tagName.getText(headerTree)==='MoneyFlowHeaderActions'){
+  const props=Object.fromEntries(node.attributes.properties.filter(p=>ts.isJsxAttribute(p)).map(p=>[p.name.getText(headerTree),p.initializer]));
+  if(props.backTestID&&ts.isStringLiteral(props.backTestID)&&props.backTestID.text==='debts-back')debtHeader=props;
+ }
+ ts.forEachChild(node,findHeader);
+}
+findHeader(headerTree);assert(debtHeader,'Debt list uses the shared Back control');
+assert(debtHeader.title&&debtHeader.beforeActions,'Title and existing actions remain present');
+assert(ts.isJsxExpression(debtHeader.onBack));
+const backHandler=ts.transpileModule('globalThis.back='+debtHeader.onBack.expression.getText(headerTree),{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText;
+const backContext={router:{back:()=>backContext.calls++},calls:0};vm.runInNewContext(backHandler,backContext);backContext.back();
+assert.equal(backContext.calls,1,'Shared Back invokes the existing navigation handler once');
 assert.equal(between(source,'        <View style={styles.summarySpacing}>','        {/* Filters'),between(old,'        <View style={styles.summarySpacing}>','        {/* Filters'),'Summary card and its surrounding spacing remain unchanged');
 const engine=createInstance();engine.init({lng:'en-US',fallbackLng:'en-US',initImmediate:false,resources:{'en-US':{translation:require('../src/i18n/locales/en.json')},es:{translation:require('../src/i18n/locales/es.json')}}});
 let slots=[],index=0,cleanups=[],pending=[],reduced=false,dark=false,stateWrites=0,viewportWidth=460;

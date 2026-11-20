@@ -1,15 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { authEnabled } from "../auth-session";
+import { privateJournal } from "../private-journal";
 import { api } from "../api";
 import { newKey } from "../recurring/shared";
 import { createObligationPayments, type Record, type Target, type Context } from "./journal";
 
-export const obligationPayments = createObligationPayments({
-  storage: AsyncStorage, readContext: api.getFinancialContext, newKey: () => newKey("obligation"),
-  send: (target,payload,key,context) => target.kind === "bill" ? api.contextBillPay(target.id,payload,key,context) : api.contextRecurringPay(target.id,payload,key,context),
-  reconcile: (target,payload,key,context) => target.kind === "bill" ? api.reconcileBillPayment(target.id,payload,key,context) : api.reconcileRecurringPayment(target.id,payload,key,context),
-});
+function paymentJournal() {
+  const scope = authEnabled ? privateJournal() : undefined;
+  const assertCurrent = () => scope?.assertCurrent();
+  return createObligationPayments({
+  storage: scope?.storage ?? AsyncStorage,
+  readContext: () => { assertCurrent(); return api.getFinancialContext(); },
+  newKey: () => newKey("obligation"),
+  send: (target,payload,key,context) => { assertCurrent(); return target.kind === "bill" ? api.contextBillPay(target.id,payload,key,context) : api.contextRecurringPay(target.id,payload,key,context); },
+  reconcile: (target,payload,key,context) => { assertCurrent(); return target.kind === "bill" ? api.reconcileBillPayment(target.id,payload,key,context) : api.reconcileRecurringPayment(target.id,payload,key,context); },
+  });
+}
 export function useObligationPayment(target: Target) {
+  const obligationPayments = useMemo(paymentJournal, []);
   const [record,setRecord] = useState<Record | null>(null);
   const [ready,setReady] = useState(false);
   const [problem,setProblem] = useState<string | null>(null);

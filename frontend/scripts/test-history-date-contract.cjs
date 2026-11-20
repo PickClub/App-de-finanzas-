@@ -1,5 +1,4 @@
-// C3/R9 stage 1. Actual expressions, controlled TZ/clock, no API or storage.
-// Expected defects are strict: an unexpected pass requires updating the test.
+// Actual date expressions and helpers, controlled TZ/clock, no API or storage.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -22,15 +21,8 @@ function run(source, context) {
     target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS,
   }}).outputText, context);
 }
-let passed = 0, defects = 0;
+let passed = 0;
 function check(name, action) { action(); passed++; console.log('PASS:', name); }
-function pending(name, action) {
-  try { action(); } catch (error) {
-    if (!(error instanceof assert.AssertionError)) throw error;
-    defects++; console.log('EXPECTED DEFECT:', name); return;
-  }
-  throw Error('Unexpected pass; review/remove expected-defect classification: ' + name);
-}
 function clock(iso) {
   const Native = Date;
   return class extends Native {
@@ -78,25 +70,58 @@ function main() {
     assert.deepEqual(rows.filter(x=>x.account_id===context.result.account_id || (x.type==='transfer'&&x.to_account_id===context.result.account_id)).map(x=>x.id).sort(), ['a','b']);
     assert.equal(rows.length,3);
   });
-  if (zone === 'America/Chicago') {
-    const rp = variables('frontend/app/recurring/[id].tsx');
-    pending('recurring today must use local date at month/year boundary', () => {
-      const context = {Date:clock('2026-01-01T05:30:00Z')};
-      run('globalThis.result=' + rp.todayIso, context);
-      assert.equal(context.result,'2025-12-31');
-    });
-    pending('generic formatDateLong must preserve an all-day debt due date', () => {
-      const context = {exports:{}, require:()=>({default:{language:'en'},localeTag:()=> 'en-US'})};
-      run(read('frontend/src/format.ts'), context);
-      assert.equal(context.exports.formatDateLong('2026-01-01'), 'January 01, 2026');
-    });
-    pending('7-day calendar filter cannot subtract fixed 24-hour intervals across spring DST', () => {
-      const context = {Date:clock('2026-03-09T05:30:00Z'),useMemo:f=>f(),
-        period:'7d',DAY:86400000,cursor:new Date(2026,2,1),custom:null};
+  const rp = variables('frontend/app/recurring/[id].tsx');
+  const helperFile = 'frontend/src/goals/shared.tsx';
+  const helperTree = ts.createSourceFile(helperFile, read(helperFile), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const helper = helperTree.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === 'toYmd');
+  assert(helper, 'Recurring payments must reuse the existing local-day helper');
+  assert.match(read('frontend/src/recurring/shared.tsx'), /export \{[^}]*toYmd[^}]*\} from "@\/src\/goals\/shared"/);
+  assert.match(read('frontend/app/recurring/[id].tsx'), /import \{[^}]*toYmd[^}]*\} from "@\/src\/recurring\/shared"/);
+  const localDay = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const boundaries = [
+    {instant:'2026-01-01T05:30:00Z', today:zone==='America/Chicago'?'2025-12-31':'2026-01-01', start:zone==='America/Chicago'?'2025-12-25':'2025-12-26'},
+    {instant:'2026-03-09T05:30:00Z', today:'2026-03-09', start:'2026-03-03'},
+    {instant:'2026-11-02T06:30:00Z', today:'2026-11-02', start:'2026-10-27'},
+    {instant:'2024-03-01T12:00:00Z', today:zone==='Pacific/Kiritimati'?'2024-03-02':'2024-03-01', start:zone==='Pacific/Kiritimati'?'2024-02-25':'2024-02-24'},
+    {instant:'2026-12-31T12:30:00Z', today:zone==='Pacific/Kiritimati'?'2027-01-01':'2026-12-31', start:zone==='Pacific/Kiritimati'?'2026-12-26':'2026-12-25'},
+  ];
+  check('recurring today uses local day at midnight, leap and year boundaries', () => {
+    for (const fixture of boundaries) {
+      const context = {Date:clock(fixture.instant),exports:{}};
+      run(helper.getText(helperTree),context);
+      context.toYmd = context.exports.toYmd;
+      run('globalThis.result=' + rp.todayIso,context);
+      assert.equal(context.result,fixture.today,fixture.instant);
+    }
+  });
+  check('seven-day history preserves exactly seven calendar days across DST and boundaries', () => {
+    for (const fixture of boundaries) {
+      const context = {Date:clock(fixture.instant),useMemo:f=>f(),period:'7d',DAY:86400000,cursor:new Date(2026,2,1),custom:null};
       run(`const startOfDay=${all.startOfDay};const endOfDay=${all.endOfDay};globalThis.result=${all.range};`,context);
-      assert.equal(new Date(context.result.start).getDate(),3);
-    });
-  }
-  console.log(`RESULT ${zone}: ${passed} passing checks, ${defects} strict expected defects`);
+      const start = new Date(context.result.start), end = new Date(context.result.end);
+      assert.equal(localDay(start),fixture.start,fixture.instant);
+      assert.equal(localDay(end),fixture.today,fixture.instant);
+      assert.deepEqual([start.getHours(),start.getMinutes(),start.getSeconds(),start.getMilliseconds()],[0,0,0,0]);
+      assert.deepEqual([end.getHours(),end.getMinutes(),end.getSeconds(),end.getMilliseconds()],[23,59,59,999]);
+    }
+  });
+  check('long date preserves all-day values and actual instant semantics in English and Spanish', () => {
+    let language = 'en-US';
+    const context = {exports:{},require:()=>({default:{get language(){return language;}},localeTag:()=>language==='es'?'es-US':'en-US'})};
+    run(read('frontend/src/format.ts'),context);
+    for (language of ['en-US','es']) {
+      const tag=language==='es'?'es-US':'en-US', options={day:'2-digit',month:'long',year:'numeric'};
+      for (const iso of ['2026-01-01','2024-02-29','2026-12-31','0099-01-01']) {
+        const [year,month,day]=iso.split('-').map(Number), expected=new Date(0);
+        expected.setFullYear(year,month-1,day);expected.setHours(0,0,0,0);
+        assert.equal(context.exports.formatDateLong(iso),expected.toLocaleDateString(tag,options),`${tag}:${iso}`);
+      }
+      for (const iso of ['2026-01-01T00:00:00.000Z','2026-01-01T12:30:45-06:00','2026-01-01T12:30:45']) {
+        assert.equal(context.exports.formatDateLong(iso),new Date(iso).toLocaleDateString(tag,options),`${tag}:${iso}`);
+      }
+      assert.equal(context.exports.formatCurrencyInt(2679),'$2,679');
+    }
+  });
+  console.log(`RESULT ${zone}: ${passed} passing checks, 0 expected defects`);
 }
 try { main(); } catch (error) { console.error(error); process.exitCode=1; }

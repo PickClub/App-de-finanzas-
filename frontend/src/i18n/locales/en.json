@@ -1,4 +1,36 @@
 {
+  "accountDeletion": {
+    "title": "Delete account",
+    "warning": "This permanently deletes your PickWallet account and its financial records. Enter your current password to confirm. Backup copies expire separately.",
+    "invalid": "Check your password and sign in again if your session has expired.",
+    "unknown": "We could not confirm deletion. If you can still sign in, you can try again. Contact support if you need to verify the result.",
+    "confirmed": "Your account and its data were deleted from PickWallet’s active database.",
+    "devicePending": "Your account was deleted from PickWallet’s active database. Some data may still be on this device. PickWallet retries cleanup when the app opens again."
+  },
+  "auth": {
+    "brand": "PickWallet",
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "signOut": "Sign out",
+    "invalid": "Check your email and password.",
+    "unavailable": "Sign-in is unavailable. Check the connection and try again.",
+    "signOutUnconfirmed": "You have been signed out on this screen. Session removal could not be confirmed.",
+    "notesUnavailable": "Could not load your notes.",
+    "invitationCode": "Invitation code",
+    "recoveryCode": "Recovery code",
+    "accountCode": "Account code",
+    "operatorCodeHelp": "Request an invitation or recovery code from the closed beta operator. Enter the code sent to your email.",
+    "passwordPolicy": "Use 15–128 characters for your new password.",
+    "confirmPassword": "Confirm new password",
+    "accountReady": "Password saved. Sign in with your email and new password.",
+    "codeInvalid": "Check the code, password length and password confirmation. The code may have expired or already been used.",
+    "setPassword": "Save password",
+    "backToSignIn": "Back to sign in",
+    "useInvitation": "Use invitation code",
+    "recoverAccount": "Recover account"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
@@ -114,6 +146,19 @@
     "retry": "Try again"
   },
   "more": {
+    "previewSettingsAccount": "Settings & Account",
+    "previewProfile": "My profile",
+    "previewProfileDescription": "Name, photo and email.",
+    "previewLanguage": "Language",
+    "previewLanguageDescription": "Español / English",
+    "previewCurrency": "Currency & format",
+    "previewCurrencyDescription": "USD, thousand separators and decimals.",
+    "previewNotifications": "Notifications",
+    "previewNotificationsDescription": "Payment and debt alerts.",
+    "previewSecurity": "Security & privacy",
+    "previewSecurityDescription": "Password, sessions and delete account.",
+    "previewLogout": "Log out",
+
     "subNotes": "Write and organize your notes",
     "moneyManagement": "Money management",
     "paymentsObligations": "Payments & obligations",
@@ -197,6 +242,9 @@
     }
   },
   "transactions": {
+    "revisionConflict": "This transaction changed after you opened it. Your draft is still here. Review the latest version before opening a fresh edit.",
+    "reviewCurrent": "Review current version",
+    "currentMovement": "Description: {{name}}\nAmount: {{amount}}\nAccount: {{account}}\nCategory: {{category}}\nNotes: {{notes}}",
     "selectAccount": "Select account",
     "selectCategory": "Select category",
     "title": "Transactions",
@@ -266,6 +314,17 @@
     "expenseSourceRequired": "Select a valid source account for this expense."
   },
   "debts": {
+    "noAccount": "No account",
+    "paymentSource": "Payment source",
+    "receiptDestination": "Receipt destination",
+    "accountSettlement": "Registered account",
+    "externalPayment": "External payment",
+    "externalReceipt": "External receipt",
+    "externalPaymentExplanation": "The money comes from a source not registered in PickWallet.",
+    "externalReceiptExplanation": "The money is received outside the accounts registered in PickWallet.",
+    "settlementRequired": "Choose an account or an external settlement.",
+    "historicalSettlement": "Historical record: source unspecified",
+
     "title": "Debts & loans",
     "iOwe": "I owe",
     "owedToMe": "Owed to me",

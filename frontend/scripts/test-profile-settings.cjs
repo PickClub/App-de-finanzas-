@@ -35,6 +35,8 @@ function fixture(options = {}) {
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 24, bottom: 16 }) },
     'expo-router': { useRouter: () => ({ back: () => calls.push(['back']) }) },
     '@tanstack/react-query': { useQuery: () => ({ data: state.user, isError: !!state.loadError, refetch: () => calls.push(['retry']) }), useQueryClient: () => ({ setQueryData: (_, user) => { state.user = user; }, invalidateQueries: () => calls.push(['invalidate']) }) },
+    '@/src/auth-session': { authEnabled: !!state.authEnabled, deleteAccount: async password => { calls.push(['delete', password]); } },
+    '@/src/private-journal': { erasePrivateJournal: async () => {} },
     '@/src/api': { api: { updateUser: async payload => { calls.push(['update', payload]); if (state.fail) throw Error('Save failed'); return { ...state.user, ...payload }; }, seed: async () => { calls.push(['seed']); throw Error('Demo disabled'); } } },
     '@/src/theme': { useTheme: () => ({ colors, mode: state.mode, setMode: mode => { state.mode = mode; calls.push(['theme', mode]); } }), makeStyles: fn => () => fn(colors), radius: { lg: 20, md: 12, cardLg: 28, pill: 999 }, spacing: { lg: 16 } },
     '@/src/components/sheets': { AppSheet: 'Sheet' }, '@/src/ui-scale': { us: value => value },
@@ -54,6 +56,18 @@ async function main() {
       assert.equal(!!appearance.props.style[1], width >= 380 && fontScale <= 1.15);
       assert(nodes(responsive.render()).some(n => n.props?.testID === 'theme-system'));
     }
+    const deletion = fixture({ authEnabled: true });
+    deletion.find('open-account-deletion').props.onPress();
+    assert.equal(deletion.find('account-deletion').props.visible, true);
+    assert(nodes(deletion.render()).some(n => n.props?.children === i18n.t('accountDeletion.warning')));
+    assert.equal(deletion.find('confirm-account-deletion').props.disabled, true);
+    assert.equal(deletion.find('account-deletion-password').props.secureTextEntry, true);
+    deletion.find('account-deletion-password').props.onChangeText('synthetic password');
+    await deletion.find('confirm-account-deletion').props.onPress();
+    assert.deepEqual(deletion.calls, [['delete', 'synthetic password']]);
+    assert.equal(deletion.find('account-deletion-password').props.value, '');
+    assert.equal(deletion.find('account-deletion').props.visible, false);
+    assert.equal(fixture().find('open-account-deletion'), undefined);
     let f = fixture(); assert(!f.find('profile-email')); assert(nodes(f.render()).some(n => n.props?.children === i18n.t('settings.profileTitle')));
     f.find('profile-name').props.onPress(); assert.equal(f.find('profile-name-input').props.value, 'Custom ñ');
     f.find('profile-name-input').props.onChangeText('Edited'); await f.find('save-settings').props.onPress();
@@ -78,6 +92,7 @@ async function main() {
       const row = anchored.find(field === 'name' ? 'profile-name' : `${field}-row`);
       row.props.ref.current = { measureInWindow: callback => callback(16, 240, 328, 48) };
       row.props.onPress();
+      assert.equal(anchored.find(field === 'language' ? 'language-sheet' : 'profile-editor').props.avoidKeyboard, field === 'name' ? true : field === 'currency' ? false : undefined);
       assert.equal(JSON.stringify(anchored.find(field === 'language' ? 'language-sheet' : 'profile-editor').props.origin), JSON.stringify({ x: 180, y: 264 }));
       if (field === 'name') {
         anchored.find('profile-name-input').props.onChangeText('Animated name draft');

@@ -298,7 +298,13 @@ export default function TransactionDetail() {
             icon={account?.icon || "card-outline"}
             tint={account?.color || colors.accountsBlue}
             label={tr("ui.account")}
-            value={account?.name || "Sin cuenta"}
+            value={tx.debt_payment_id
+              ? tx.settlement_source === "external"
+                ? tr(tx.type === "income" ? "debts.externalReceipt" : "debts.externalPayment")
+                : tx.settlement_source === "account"
+                  ? account?.name || tr("ui.no_accounts_available")
+                  : account?.name || tr("debts.historicalSettlement")
+              : account?.name || tr("debts.noAccount")}
             styles={styles}
             colors={colors}
           />

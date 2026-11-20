@@ -14,7 +14,12 @@ const mod = { exports: {} };
 const journal = {};
 vm.runInNewContext(compile('src/debt-payments/journal-v2.ts'), localeGlobals({ exports: journal }));
 vm.runInNewContext(compile('src/debt-payments/pending.ts'), localeGlobals({ exports: mod.exports, module: mod,
-  require: name => name === './journal-v2' ? journal : name.includes('async-storage') ? {} : { ApiError, api: {}, debtPaymentBackend: () => '' },
+  require: name => {
+    if (name === './journal-v2') return journal;
+    if (name === '@react-native-async-storage/async-storage') return {};
+    if (name === '../api') return { ApiError, api: {}, debtPaymentBackend: () => '' };
+    throw Error(`Unexpected isolated import: ${name}`);
+  },
   Map, Error, JSON, Date, Math, Array, Promise,
 }));
 const create = mod.exports.createPaymentCoordinator;

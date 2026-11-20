@@ -20,7 +20,7 @@ import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatCurrencyInt, formatDateTime } from "@/src/format";
 import { ConfirmSheet } from "@/src/components/sheets";
 import { catLabel } from "@/src/category-labels";
-import { FOREST, useMontserrat, pastel, deepen, safeHex, longDate, statusTint } from "@/src/recurring/shared";
+import { FOREST, useMontserrat, pastel, deepen, safeHex, longDate, statusTint, toYmd } from "@/src/recurring/shared";
 
 import { us } from "@/src/ui-scale";
 
@@ -60,7 +60,7 @@ export default function RecurringDetail() {
   const items: any[] = (occ.data?.pages || []).flatMap((p: any) => p.items || []);
   const base = safeHex(r?.color);
   const strong = deepen(base, isDark);
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = toYmd(Date.now());
   const oldestOverdue = [...items].reverse().find((o) => o.status === "overdue");
   const payTarget = oldestOverdue || r?.next_due;
 

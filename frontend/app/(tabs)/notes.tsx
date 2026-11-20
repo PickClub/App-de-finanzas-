@@ -24,6 +24,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatDateTime } from "@/src/format";
 import { useFonts } from "expo-font";
+import { api } from "@/src/api";
+import { authEnabled, privateSession } from "@/src/auth-session";
 import { storage } from "@/src/utils/storage";
 import { Alert, ContextActionsTrigger } from "@/src/components/interaction-system";
 
@@ -300,8 +302,28 @@ export default function Notes() {
   }, [revealItem]);
 
 
+  const privateScope = useMemo(() => authEnabled ? privateSession() : undefined, []);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const loadPrivateNotes = useCallback(async () => {
+    setLoadFailed(false);
+    try {
+      privateScope?.assertCurrent();
+      const rows = await api.listNotes<Note>();
+      privateScope?.assertCurrent();
+      confirmedNotes.current = rows;
+      setNotes(rows);
+      notesReady.current = true;
+    } catch {
+      setLoadFailed(true);
+    }
+  }, [privateScope]);
+
   // Load (or seed on first run).
   useEffect(() => {
+    if (privateScope) {
+      void loadPrivateNotes();
+      return;
+    }
     (async () => {
       const raw = await storage.getItem(STORAGE_KEY, "");
       if (raw) {
@@ -328,14 +350,28 @@ export default function Notes() {
         notesReady.current = true;
       }
     })();
-  }, []);
+  }, [loadPrivateNotes, privateScope]);
 
   const persist = useCallback(async (next: Note[]) => {
     const available = next.filter((note) => !deletedNotes.current.has(note.id));
+    if (privateScope) {
+      privateScope.assertCurrent();
+      const previous = new Map(confirmedNotes.current.map(note => [note.id, note]));
+      const changed = available.filter(note => previous.get(note.id) !== note);
+      if (changed.length !== 1) throw new Error("Expected one note mutation");
+      const note = changed[0];
+      const { id, createdAt, updatedAt, ...body } = note;
+      const saved = previous.has(id) ? await api.updateNote<Note>(id, body) : await api.createNote<Note>(body);
+      privateScope.assertCurrent();
+      const confirmed = available.map(row => row.id === id ? saved : row);
+      confirmedNotes.current = confirmed;
+      setNotes(confirmed);
+      return;
+    }
     if (await storage.setItem(STORAGE_KEY, JSON.stringify(available)) !== true) throw new Error("No se pudo guardar la nota. Tu borrador se conserva; vuelve a pulsar Guardar.");
     confirmedNotes.current = available;
     setNotes(available);
-  }, []);
+  }, [privateScope]);
 
   const tintOf = useCallback((c: string) => c + (isDark ? "22" : "14"), [isDark]);
 
@@ -515,6 +551,8 @@ export default function Notes() {
     setDeleteBusy(true);
     try {
       await persist(confirmedNotes.current.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
+      const confirmed = confirmedNotes.current.find((note) => note.id === id);
+      if (confirmed) setPreviewNote((current) => current?.id === id ? confirmed : current);
     } catch {
       Alert.alert(tr("ui.could_not_pin_note"), tr("ui.the_change_was_not_saved_please_try_again"));
     } finally {
@@ -529,7 +567,11 @@ export default function Notes() {
     setDeleteBusy(true);
     try {
       const next = confirmedNotes.current.filter((n) => n.id !== id);
-      if (await storage.setItem(STORAGE_KEY, JSON.stringify(next)) !== true) throw new Error("No se pudo guardar la eliminación de la nota.");
+      if (privateScope) {
+        privateScope.assertCurrent();
+        await api.deleteNote(id);
+        privateScope.assertCurrent();
+      } else if (await storage.setItem(STORAGE_KEY, JSON.stringify(next)) !== true) throw new Error("No se pudo guardar la eliminación de la nota.");
       deletedNotes.current.add(id);
       setPreviewNote(null);
       confirmedNotes.current = next;
@@ -703,6 +745,9 @@ export default function Notes() {
             }
           />
         </View>
+        {loadFailed && <Pressable onPress={() => void loadPrivateNotes()}>
+          <Text>{tr("auth.notesUnavailable")} {tr("ui.retry")}</Text>
+        </Pressable>}
 
         {/* Search */}
         <View style={styles.searchBox}>
@@ -724,7 +769,7 @@ export default function Notes() {
           )}
         </View>
 
-        {notes.length === 0 ? (
+        {loadFailed ? null : notes.length === 0 ? (
           <View style={styles.empty}>
             <View style={styles.emptyIcon}>
               <Ionicons name="document-text-outline" size={us(30)} color={accent} />

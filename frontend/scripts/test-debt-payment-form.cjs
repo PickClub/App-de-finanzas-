@@ -36,7 +36,7 @@ function fixture(version = 1) {
       return payment ? { status: 'matched', original_request_matches: true, current_payment: payment } : { status: 'not_found' };
     },
   });
-  const react = { useRef: value => { const i = cursor++; return cells[i] ??= { current: value }; }, useState: value => { const i = cursor++; if (!(i in cells)) cells[i] = value; return [cells[i], next => { cells[i] = next; }]; }, useEffect: (fn, values) => { const i = cursor++; if (!deps[i] || values.some((v, j) => v !== deps[i][j])) { deps[i] = values; effects.push(() => { cleanups[i]?.(); cleanups[i] = fn(); }); } } };
+  const react = { useMemo: fn => fn(), useRef: value => { const i = cursor++; return cells[i] ??= { current: value }; }, useState: value => { const i = cursor++; if (!(i in cells)) cells[i] = value; return [cells[i], next => { cells[i] = next; }]; }, useEffect: (fn, values) => { const i = cursor++; if (!deps[i] || values.some((v, j) => v !== deps[i][j])) { deps[i] = values; effects.push(() => { cleanups[i]?.(); cleanups[i] = fn(); }); } } };
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   for (const debt of ['A', 'B']) {
     const history = () => [...ledger.values()].filter(payment => payment.debt_id === debt);
@@ -47,6 +47,7 @@ function fixture(version = 1) {
   }
   const colors = new Proxy({}, { get: () => '#126046' });
   const mocks = {
+    '@/src/components/debt-settlement-selector': { DebtSettlementSelector: 'SettlementSelector' },
     react, 'react/jsx-runtime': { jsx: (type, props, key) => ({ type, props, key }), jsxs: (type, props, key) => ({ type, props, key }) },
     'react-native': { View: 'View', ScrollView: 'Scroll', KeyboardAvoidingView: 'Keyboard', ActivityIndicator: 'Loading', Platform: { OS: 'android', select: v => v.default }, Alert: { alert: (...v) => alerts.push(v) } },
     '@/src/i18n': { tr: engine.t.bind(engine), useTranslation: () => ({ t: engine.t.bind(engine) }) }, '@/src/i18n/errors': { localizedError: e => e },
@@ -57,7 +58,7 @@ function fixture(version = 1) {
     '@react-native-vector-icons/ionicons': { default: 'Icon' }, 'expo-router': { useLocalSearchParams: () => ({ id }), useRouter: () => ({ back() {}, push: route => routes.push(route), dismissTo: route => routes.push(route) }) },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
     '@tanstack/react-query': { useQuery: ({ queryKey }) => ({ data: queryKey[0] === 'debt' ? cache.getQueryData(['debt', id]) : [{ id: 'source', name: 'Source', current_balance: 1000 }] }), useQueryClient: () => ({ invalidateQueries(options) { invalidations.push(options); return flags.refresh ? Promise.reject(Error('Refresh unavailable')) : cache.invalidateQueries(options, { throwOnError: true }); } }) },
-    '@/src/api': { ApiError, api: { listAccounts() {}, getDebt() {} } }, '@/src/debt-payments/local-flow': { localPaymentFlow: flow }, '@/src/debt-payments/view': presentation,
+    '@/src/api': { ApiError, api: { listAccounts() {}, getDebt() {} } }, '@/src/debt-payments/local-flow': { paymentFlowForSession: () => flow }, '@/src/debt-payments/view': presentation,
     '@/src/theme': { useTheme: () => ({ colors, scheme: 'light' }), makeStyles: f => () => f(colors), radius: { pill: 999 }, spacing: { lg: 16 } },
     '@/src/format': { formatCurrency: String, formatCurrencyInt: String }, '@/src/components/ui': { IconTile: 'Icon' }, '@/src/components/sheets': { AppSheet: 'Sheet' }, '@/src/ui-scale': { us: x => x },
   };
@@ -73,16 +74,23 @@ function fixture(version = 1) {
     return tree;
   };
   const find = testID => all(render()).find(n => n.props?.testID === testID);
-  return { flow, flags, calls, ledger, disk, routes, alerts, invalidations, cache, render, find, async open(next) { cleanups.filter(Boolean).forEach(fn => fn()); cells = []; deps = []; cleanups = []; effects = []; mountedKey = undefined; id = next; render(); await tick(); render(); } };
+  return { selectSource(value) { all(render()).find(node => node.type === 'SettlementSelector').props.onChange(value); }, flow, flags, calls, ledger, disk, routes, alerts, invalidations, cache, render, find, async open(next) { cleanups.filter(Boolean).forEach(fn => fn()); cells = []; deps = []; cleanups = []; effects = []; mountedKey = undefined; id = next; render(); await tick(); render(); } };
 }
 async function main() {
   for (const version of [1, 2]) for (const lang of ['en-US', 'es']) {
     await engine.changeLanguage(lang);
     let f = fixture(version); await f.open('A'); assert.equal(f.find('pay-amount').props.editable, true);
-    f.find('pay-amount').props.onChangeText('100'); f.find('pay-account-select').props.onPress(); f.find('pay-acc-source').props.onPress();
+    assert.equal(f.find('confirm-pay').props.disabled, true);
+    f.find('pay-amount').props.onChangeText('100');
+    assert.equal(f.find('confirm-pay').props.disabled, true);
+    await f.find('confirm-pay').props.onPress();
+    assert.equal(f.calls.length, 0);
+    f.selectSource('account');
+    assert.equal(f.find('confirm-pay').props.disabled, true);
+     f.selectSource('account'); f.find('pay-account-select').props.onPress(); f.find('pay-acc-source').props.onPress();
     await f.open('B'); assert.equal(f.find('pay-amount').props.value, '', 'A draft amount must not leak to B');
     assert.equal(f.calls.length, 0); assert(!f.find('pay-account-sheet').props.visible);
-    f.find('pay-amount').props.onChangeText('50'); f.find('pay-account-select').props.onPress(); f.find('pay-acc-source').props.onPress();
+    f.find('pay-amount').props.onChangeText('50'); f.selectSource('account'); f.find('pay-account-select').props.onPress(); f.find('pay-acc-source').props.onPress();
     const click = f.find('confirm-pay').props.onPress; await Promise.all([click(), click()]);
     assert.equal(f.ledger.size, 1); assert.equal(f.calls[0].payload.debt_id, 'B'); assert.equal(f.calls[0].payload.account_id, 'source');
     await tick(); assert.equal(f.cache.getQueryData(['debt', 'B']).remaining_amount, 450); assert.equal(f.cache.getQueryData(['debt', 'B']).total_paid, 50); assert.equal(f.cache.getQueryData(['debt-payments', 'B']).length, 1); await click(); assert.equal(f.calls.length, 1);
@@ -93,17 +101,17 @@ async function main() {
     await f.open('B'); assert.equal(f.find('pay-amount').props.value, ''); assert.equal(f.find('pay-amount').props.editable, true);
     await f.open('A'); assert.equal(f.find('pay-amount').props.editable, true); assert.equal(f.find('pay-amount').props.value, ''); assert.equal(f.calls.length, 1); assert.equal(JSON.stringify([...f.ledger]), receiptBytes);
     for (const invalid of ['', '0', '-1', '501', 'abc', '12oops', 'Infinity']) { f.find('pay-amount').props.onChangeText(invalid); await f.find('confirm-pay').props.onPress(); assert.equal(f.calls.length, 1, invalid); assert.equal(await f.flow.recover(), null); }
-    f.find('pay-amount').props.onChangeText('20'); await f.find('confirm-pay').props.onPress(); assert.equal(f.calls.at(-1).payload.debt_id, 'A'); assert.equal(f.calls.at(-1).payload.account_id, null, 'B account must not leak to A');
-    f = fixture(version); f.flags.reject = true; await f.open('A'); f.find('pay-amount').props.onChangeText('30'); f.find('pay-account-select').props.onPress(); f.find('pay-acc-source').props.onPress();
+    f.find('pay-amount').props.onChangeText('20'); f.selectSource('external'); await f.find('confirm-pay').props.onPress(); assert.equal(f.calls.at(-1).payload.debt_id, 'A'); assert.equal(f.calls.at(-1).payload.account_id, null, 'B account must not leak to A');
+    f = fixture(version); f.flags.reject = true; await f.open('A'); f.find('pay-amount').props.onChangeText('30'); f.selectSource('account'); f.find('pay-account-select').props.onPress(); f.find('pay-acc-source').props.onPress();
     all(f.render()).find(n => n.type === 'Input' && !n.props.testID).props.onChangeText('Keep these notes');
     await f.find('confirm-pay').props.onPress(); assert.equal(f.routes.length, 0); assert.equal(f.find('pay-amount').props.value, '30'); assert.equal((await f.flow.recover()).payload.account_id, 'source'); assert.equal((await f.flow.recover()).payload.notes, 'Keep these notes'); assert.equal(f.ledger.size, 0);
-    f = fixture(version); f.flags.refresh = true; await f.open('A'); f.find('pay-amount').props.onChangeText('15'); await f.find('confirm-pay').props.onPress(); await tick(); assert.equal(f.routes.at(-1), '/debts/A'); assert.equal(f.ledger.size, 1); assert(f.alerts.length); await f.find('confirm-pay').props.onPress(); assert.equal(f.calls.length, 1);
-    f = fixture(version); f.flags.lost = true; await f.open('A'); f.find('pay-amount').props.onChangeText('25'); await f.find('confirm-pay').props.onPress();
+    f = fixture(version); f.flags.refresh = true; await f.open('A'); f.find('pay-amount').props.onChangeText('15'); f.selectSource('external'); await f.find('confirm-pay').props.onPress(); await tick(); assert.equal(f.routes.at(-1), '/debts/A'); assert.equal(f.ledger.size, 1); assert(f.alerts.length); await f.find('confirm-pay').props.onPress(); assert.equal(f.calls.length, 1);
+    f = fixture(version); f.flags.lost = true; await f.open('A'); f.find('pay-amount').props.onChangeText('25'); f.selectSource('external'); await f.find('confirm-pay').props.onPress();
     assert.equal(f.routes.length, 0); const pendingBytes = JSON.stringify([...f.disk]); await f.open('B'); assert.equal(f.find('pay-amount').props.editable, false); await f.find('confirm-pay').props.onPress();
     assert.equal(JSON.stringify([...f.disk]), pendingBytes); assert.equal(f.calls.length, 1); assert(f.alerts.at(-1)[2]?.some(button => button.onPress), 'Unresolved foreign debt must offer a non-writing review action');
     const review = f.alerts.at(-1)[2].find(button => button.onPress); review.onPress(); assert(f.routes.at(-1).includes('/A/pay')); assert.equal(f.calls.length, 1);
-    f = fixture(version); f.flags.conflict = true; await f.open('A'); f.find('pay-amount').props.onChangeText('20'); await f.find('confirm-pay').props.onPress(); await f.open('B'); assert.equal(f.find('pay-amount').props.editable, false); assert.equal((await f.flow.recover()).state, 'conflict');
-    f = fixture(version); await f.open('A'); f.find('pay-amount').props.onChangeText('10'); await f.find('confirm-pay').props.onPress(); f.flags.remove = true; await f.open('B'); assert.equal(f.find('pay-amount').props.editable, false); assert.equal((await f.flow.recover()).state, 'confirmed'); assert.equal(f.calls.length, 1);
+    f = fixture(version); f.flags.conflict = true; await f.open('A'); f.find('pay-amount').props.onChangeText('20'); f.selectSource('external'); await f.find('confirm-pay').props.onPress(); await f.open('B'); assert.equal(f.find('pay-amount').props.editable, false); assert.equal((await f.flow.recover()).state, 'conflict');
+    f = fixture(version); await f.open('A'); f.find('pay-amount').props.onChangeText('10'); f.selectSource('external'); await f.find('confirm-pay').props.onPress(); f.flags.remove = true; await f.open('B'); assert.equal(f.find('pay-amount').props.editable, false); assert.equal((await f.flow.recover()).state, 'confirmed'); assert.equal(f.calls.length, 1);
   }
   console.log('PASS: actual payment form EN/ES with legacy and v2 flows; draft isolation A/B, blank form on entry and same-debt dismissal after success, original-debt review for unresolved/conflicting payments, amount validation, correct source account, double-tap protection, unchanged ledger and cleanup failure. Synthetic data only.');
 }

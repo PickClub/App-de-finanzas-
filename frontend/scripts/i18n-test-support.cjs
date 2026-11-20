@@ -13,6 +13,8 @@ function localeGlobals(context){
   context.require??=name=>{
     if(name==='@/src/i18n')return {tr,useTranslation:()=>({t:tr,i18n:engine})};
     if(name==='@/src/i18n/errors')return {localizedError};
+    if(name==='./auth-session')return {authEnabled:false,authGeneration:()=>0};
+    if(name==='./runtime-config')return {apiTarget:()=>({origin:context.process?.env?.EXPO_PUBLIC_BACKEND_URL ?? ''})};
     throw Error(`Unexpected isolated import: ${name}`);
   };
   return context;
@@ -21,6 +23,7 @@ function localeMocks(mocks){
   mocks['@/src/i18n']={default:{language:'es'},tr,localeTag:()=> 'es-US',useTranslation:()=>({t:key=>key,i18n:{language:'es'}}),...mocks['@/src/i18n']};
   if(integration)Object.assign(mocks['@/src/i18n'],{default:engine,tr,localeTag:()=>engine.language==='es'?'es-US':'en-US',useTranslation:()=>({t:tr,i18n:engine})});
   mocks['@/src/i18n/errors']={localizedError};
+  mocks['@/src/components/debt-settlement-selector']={DebtSettlementSelector:'SettlementSelector',...mocks['@/src/components/debt-settlement-selector']};
   mocks['@/src/components/header-actions']={MoneyFlowHeaderActions:'MoneyFlowHeaderActions',...mocks['@/src/components/header-actions']};
   const nativeAlert=mocks['react-native']?.Alert;
   mocks['@/src/components/interaction-system']={Alert:nativeAlert||{alert(){}},ContextActionsTrigger:'ContextActionsTrigger',MoneyFlowConfirmDialog:'MoneyFlowConfirmDialog',...mocks['@/src/components/interaction-system']};
@@ -70,4 +73,21 @@ function normalizeHomeColors(source){
   .replace(/\bcolors\.primaryAction\b/g,'colors.brandPrimary')
   .replace(/\bcolors\.identityAccent\b/g,'colors.brandPrimary');
 }
-module.exports={localeGlobals,localeMocks,normalizeUI,visualContract,normalizeHomeColors,setTestLocale,tr,localizedError,headerActionNodes};
+
+// Keep every Home property protected except the explicitly approved balance-pill delta.
+function approvedHomeBalanceBaseline(source, current = false) {
+ const assert = require('node:assert/strict');
+ if (current) {
+  assert.match(source, /styles\.balancePill, \{ backgroundColor: darken\(ac, 0\.19\) \}/);
+  assert.match(source, /walletBalance: \{ color: "#F4F1E8", fontSize: 13\.75, fontWeight: "600", flexShrink: 1, minWidth: 0 \}/);
+  assert.match(source, /balancePill: \{\n    maxWidth: "100%",/);
+  assert.match(source, /style=\{styles.walletBalance\} numberOfLines=\{1\} adjustsFontSizeToFit/);
+ }
+ return source
+  .replace('styles.balancePill, { backgroundColor: darken(ac, 0.19) }', 'styles.balancePill, { backgroundColor: darken(ac, 0.1) }')
+  .replace('walletBalance: { color: "#F4F1E8", fontSize: 13.75, fontWeight: "600", flexShrink: 1, minWidth: 0 }',
+           'walletBalance: { color: "#F4F1E8", fontSize: 12.5, fontWeight: "600" }')
+  .replace('balancePill: {\n    maxWidth: "100%",', 'balancePill: {');
+}
+
+module.exports={approvedHomeBalanceBaseline,localeGlobals,localeMocks,normalizeUI,visualContract,normalizeHomeColors,setTestLocale,tr,localizedError,headerActionNodes};

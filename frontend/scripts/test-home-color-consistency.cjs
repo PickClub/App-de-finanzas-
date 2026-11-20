@@ -1,5 +1,5 @@
 // Color-only contracts. Optional task-start baseline proves structural preservation.
-const assert=require('node:assert/strict'),fs=require('node:fs'),cp=require('node:child_process'),vm=require('node:vm'),ts=require('typescript');
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript');
 const themeSource=fs.readFileSync('frontend/src/theme.ts','utf8');
 function ast(file,text){return ts.createSourceFile(file,text,ts.ScriptTarget.Latest,true,file.endsWith('.tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS);}
 function palettes(text){
@@ -12,7 +12,17 @@ assert.equal(themes.light.pageBackground,'#E8EFE7');assert.equal(themes.dark.pag
 assert(home.includes('"#146448"'));assert.equal(themes.light.primaryAction,'#146448');assert.equal(themes.light.identityAccent,'#126046');
 assert.equal(themes.light.secondaryActionBackground,'#DFEBDD');assert(home.includes('\"#DFEBDD\"'));
 assert.equal(themes.dark.primaryAction,themes.dark.brandPrimary);assert.equal(themes.dark.identityAccent,themes.dark.brandPrimary);
-const files=cp.execFileSync('rg',['--files','frontend/app','frontend/src/screens','-g','*.tsx'],{encoding:'utf8'}).trim().split('\n');
+function tsxFiles(directory) {
+ const files=[];
+ for(const entry of fs.readdirSync(directory,{withFileTypes:true})){
+  if(entry.name.startsWith('.'))continue;
+  const file=path.join(directory,entry.name);
+  if(entry.isDirectory())files.push(...tsxFiles(file));
+  else if(entry.isFile()&&entry.name.endsWith('.tsx'))files.push(file);
+ }
+ return files;
+}
+const files=['frontend/app','frontend/src/screens'].flatMap(tsxFiles).sort();
 let pageUses=0;
 for(const file of files){const source=fs.readFileSync(file,'utf8'),tree=ast(file,source);
  function visit(n){

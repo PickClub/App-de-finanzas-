@@ -90,7 +90,7 @@ export function createV2PaymentFlow(deps: {
         if (error instanceof ApiError && error.status === 409) await journal.save({ ...record, state: "conflict" });
         throw error;
       }
-      if (!payment || ["debt_id", "amount", "account_id", "notes"].some(k => payment[k] !== record!.payload[k as keyof PaymentPayload]) ||
+      if (!payment || ["debt_id", "amount", "account_id", "notes", "settlement_source"].some(k => (k === "settlement_source" ? payment[k] ?? undefined : payment[k]) !== record!.payload[k as keyof PaymentPayload]) ||
           (record.payload.date !== null && payment.date !== record.payload.date)) throw new Error("Respuesta de pago no verificable. Se conserva la intención.");
       return confirm(record, payment);
     });

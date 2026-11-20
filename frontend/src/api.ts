@@ -1,3 +1,5 @@
+import { apiTarget } from "./runtime-config";
+import { AuthSessionError, accessToken, assertAuthGeneration, authEnabled, authGeneration, refreshAccess } from "./auth-session";
 import type { FinancialContext } from "./debt-payments/journal-v2";
 
 export type TransactionPageFilters = {
@@ -16,7 +18,7 @@ export type TransactionPage = {
 };
 
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "";
-export const debtPaymentBackend = () => BASE || (typeof location !== "undefined" ? location.origin : "");
+export const debtPaymentBackend = () => apiTarget().origin;
 
 export class ApiError extends Error {
   readonly detail: string;
@@ -31,21 +33,46 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}/api${path}`, {
+  apiTarget();
+  const epoch = authGeneration();
+  const initial = authEnabled ? accessToken() : undefined;
+  if (authEnabled && !initial) throw new ApiError(401, "");
+  const send = (token?: string) => fetch(`${BASE}/api${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...(options.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
+    ...(authEnabled ? { redirect: "error" } : {}),
   });
+  let res = await send(initial);
+  if (authEnabled) assertAuthGeneration(epoch);
+  if (initial && res.status === 401) {
+    let renewed: string;
+    try {
+      renewed = await refreshAccess(epoch, initial);
+    } catch (error) {
+      throw new ApiError(error instanceof AuthSessionError && error.reason !== "unavailable" ? 401 : 503, "");
+    }
+    assertAuthGeneration(epoch);
+    if (!options.method || options.method === "GET") res = await send(renewed);
+  }
   if (!res.ok) {
     const text = await res.text();
+    if (authEnabled) assertAuthGeneration(epoch);
     throw new ApiError(res.status, text);
   }
-  return res.json();
+  const data = res.status === 204 ? undefined : await res.json();
+  if (authEnabled) assertAuthGeneration(epoch);
+  return data as T;
 }
 
 export const api = {
+  listNotes<T>() { return request<T[]>("/notes"); },
+  createNote<T>(data: object) { return request<T>("/notes", { method: "POST", body: JSON.stringify(data) }); },
+  updateNote<T>(id: string, data: object) { return request<T>(`/notes/${id}`, { method: "PUT", body: JSON.stringify(data) }); },
+  deleteNote: (id: string) => request<void>(`/notes/${id}`, { method: "DELETE" }),
   // Read-only context: default-user/single_user is an effective identity, not authentication.
   getFinancialContext: () => request<FinancialContext>("/financial-context"),
   createContextProtectedDebtPayment: (d: any, key: string, context: FinancialContext) => request<any>("/debt-payments", {

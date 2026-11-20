@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eliminar tu cuenta de PickWallet</title>
+  <link rel="stylesheet" href="/privacy-assets/pages.css">
+  <script defer src="/privacy-assets/delete.js"></script>
+</head>
+<body>
+  <nav><a href="/privacy/es">Privacidad</a> <a href="/delete-account" hreflang="en">English</a></nav>
+  <main>
+    <h1>Eliminar tu cuenta de PickWallet</h1>
+    <p class="notice">Introduce el correo de tu cuenta y tu contraseña actual. La eliminación borra permanentemente tu cuenta y sus datos de la base activa. Las copias de seguridad caducan por separado.</p>
+    <noscript><p>Activa JavaScript para usar este formulario.</p></noscript>
+    <form id="deletion" method="post">
+      <label>Correo electrónico<input id="email" type="email" autocomplete="username" required maxlength="512"></label>
+      <label>Contraseña actual<input id="password" type="password" autocomplete="current-password" required maxlength="256"></label>
+      <label><input id="confirmed" type="checkbox" required> Confirmo que quiero eliminar mi cuenta permanentemente.</label>
+      <button id="submit" type="submit" disabled>Eliminar cuenta</button>
+    </form>
+    <p id="status" role="status" data-pending="Verificando tu solicitud…" data-complete="Se eliminaron tu cuenta y sus datos asociados de la base activa." data-unconfirmed="No pudimos verificar tus credenciales o confirmar la eliminación. Revisa tus datos antes de volver a intentarlo."></p>
+    <p>¿Necesitas ayuda para iniciar sesión? El contacto de soporte está pendiente de confirmación.</p>
+  </main>
+</body>
+</html>

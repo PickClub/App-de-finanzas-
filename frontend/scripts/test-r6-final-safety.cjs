@@ -77,11 +77,13 @@ async function main(){
  const screen=fs.readFileSync(path.join(root,'app/debts/[id]/pay.tsx'),'utf8'),source=ts.createSourceFile('pay.tsx',screen,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let handler;
  function visit(n){if(ts.isVariableDeclaration(n)&&n.name.getText(source)==='save')handler=n.initializer.getText(source);ts.forEachChild(n,visit)}visit(source);
  f=fixture();f.flags.lost=true;await assert.rejects(f.modern().submit(payload));f.flags.lost=false;f.flags.context=true;
- const ui={exports:{},pendingDebtPayments:f.modern(),operation:null,d:{id:'d'},amt:100,accountId:'a',notes:'',recoveryReady:{current:false},recoveryError:{current:Error('previous failure')},savingRef:{current:false},
+ const ui={exports:{},pendingDebtPayments:f.modern(),operation:null,d:{id:'d'},amt:100,accountId:'a',notes:'',recoveryReady:{current:false},recoveryError:{current:Error('previous failure')},savingRef:{current:false},completedRef:{current:false},router:{dismissTo:route=>ui.dismissed=route},
   qc:{invalidateQueries(){}},setOperation:r=>ui.operation=r,setAmount(){},setAccountId(){},setNotes(){},setSaving(){},setReady(){},Alert:{alert(){}}};
  vm.runInNewContext(ts.transpileModule('exports.save='+handler,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,localeGlobals(ui));
  await ui.exports.save();assert.equal(ui.recoveryReady.current,false);assert.equal(f.counts().sends,1);
- f.flags.context=false;await ui.exports.save();assert.equal(ui.operation.state,'confirmed');assert.equal(ui.recoveryReady.current,true);assert.equal(f.counts().sends,1);assert.equal(f.counts().keys,1);
+ f.flags.context=false;await ui.exports.save();assert.equal(ui.completedRef.current,true);assert.equal(ui.dismissed,'/debts/d');assert.equal(f.counts().sends,1);assert.equal(f.counts().keys,1);
+ // Confirmation now dismisses the form; a repeated press cannot send again.
+ await ui.exports.save();assert.equal(f.counts().sends,1);
  console.log('PASS final R6: actual Verify register button retries after temporary error and reconciles; never calls payment creation');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

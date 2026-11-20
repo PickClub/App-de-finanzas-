@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Delete your PickWallet account</title>
+  <link rel="stylesheet" href="/privacy-assets/pages.css">
+  <script defer src="/privacy-assets/delete.js"></script>
+</head>
+<body>
+  <nav><a href="/privacy">Privacy</a> <a href="/delete-account/es" hreflang="es">Español</a></nav>
+  <main>
+    <h1>Delete your PickWallet account</h1>
+    <p class="notice">Enter your account email and current password. Deletion permanently removes your account and its data from the active database. Backup copies expire separately.</p>
+    <noscript><p>Enable JavaScript to use this form.</p></noscript>
+    <form id="deletion" method="post">
+      <label>Email<input id="email" type="email" autocomplete="username" required maxlength="512"></label>
+      <label>Current password<input id="password" type="password" autocomplete="current-password" required maxlength="256"></label>
+      <label><input id="confirmed" type="checkbox" required> I confirm that I want to permanently delete my account.</label>
+      <button id="submit" type="submit" disabled>Delete account</button>
+    </form>
+    <p id="status" role="status" data-pending="Verifying your request…" data-complete="Your account and associated data were deleted from the active database." data-unconfirmed="We could not verify your credentials or confirm deletion. Check your details before trying again."></p>
+    <p>Need help signing in? The support contact is pending confirmation.</p>
+  </main>
+</body>
+</html>

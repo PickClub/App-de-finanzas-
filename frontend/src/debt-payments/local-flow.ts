@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "../api";
-import { pendingDebtPayments } from "./pending";
+import { authEnabled, authGeneration } from "../auth-session";
+import { privateJournal } from "../private-journal";
+import { createPaymentCoordinator, pendingDebtPayments } from "./pending";
 import { createV2PaymentFlow } from "./flow-v2";
 
 // Opt-in development configuration only. No deployment identity is shared in code.
@@ -18,3 +20,25 @@ export const localPaymentFlow = LOCAL_V2_ENABLED ? createV2PaymentFlow({
   send: api.createContextProtectedDebtPayment,
   newKey: () => `debt-${Date.now()}-${Array.from({ length: 4 }, () => Math.random().toString(36).slice(2)).join("-")}`,
 }) : { ...pendingDebtPayments, supportsReconciliation: false };
+
+let cached: { epoch: number; flow: ReturnType<typeof authenticatedPaymentFlow> } | undefined;
+export function paymentFlowForSession() {
+  if (!authEnabled) return localPaymentFlow;
+  const epoch = authGeneration();
+  if (cached?.epoch !== epoch) cached = { epoch, flow: authenticatedPaymentFlow() };
+  return cached.flow;
+}
+
+function authenticatedPaymentFlow() {
+  const { storage, assertCurrent } = privateJournal();
+  return {
+    ...createPaymentCoordinator({
+      storage,
+      backend: () => { assertCurrent(); return "http://127.0.0.1:8013"; },
+      send: (data, key) => { assertCurrent(); return api.createDebtPayment(data, key); },
+      reconcile: (data, key) => { assertCurrent(); return api.reconcileDebtPayment(data, key); },
+      newKey: () => `debt-${Date.now()}-${Array.from({ length: 4 }, () => Math.random().toString(36).slice(2)).join("-")}`,
+    }),
+    supportsReconciliation: true,
+  };
+}

@@ -1,3 +1,4 @@
+import { DebtSettlementSelector, type SettlementSource } from "@/src/components/debt-settlement-selector";
 import { Alert } from "@/src/components/interaction-system";
 import { localizedError } from "@/src/i18n/errors";
 import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
@@ -102,6 +103,7 @@ export default function NewTransaction() {
   const sourceScope = sourceId ? `${params.id ? "edit" : "duplicate"}:${sourceId}` : undefined;
   const resourceLoaded = !sourceId || loadedId === sourceScope;
   const hydratedSource = useRef<string | undefined>(undefined);
+  const draftSource = useRef<{ scope: string; movement: NonNullable<Awaited<ReturnType<typeof api.getTransaction>>> } | undefined>(undefined);
   const sourceQ = useQuery({
     queryKey: ["transactions", "detail", sourceId],
     queryFn: () => api.getTransaction(sourceId!),
@@ -113,6 +115,7 @@ export default function NewTransaction() {
   const [amount, setAmount] = useState("");
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState<string | undefined>();
+  const [settlementSource, setSettlementSource] = useState<SettlementSource>();
   const [accountId, setAccountId] = useState<string | undefined>();
   const [toAccountId, setToAccountId] = useState<string | undefined>();
   // Notes field is no longer shown here, but existing notes are preserved on save.
@@ -141,12 +144,14 @@ export default function NewTransaction() {
     setName(t.name);
     setCategoryId(t.category_id);
     setAccountId(t.account_id);
+    setSettlementSource(t.settlement_source ?? undefined);
     setToAccountId(t.to_account_id);
     setNotes(t.notes || "");
     setAcc(null);
     setOp(null);
     setFresh(false);
     setCalcError(null);
+    draftSource.current = { scope: sourceScope, movement: { ...t } };
     hydratedSource.current = sourceScope;
     setResourceLoaded(sourceScope);
   }, [sourceId, sourceScope, sourceQ.data, sourceQ.isError]);
@@ -276,11 +281,25 @@ export default function NewTransaction() {
       to_account_id: type === "transfer" ? toAccountId : undefined,
       notes,
     };
-    if (params.id && sourceQ.data?.id === sourceId
-        && ["expense", "income", "transfer"].includes(sourceQ.data.type)
-        && !sourceQ.data.debt_id && !sourceQ.data.debt_payment_id
-        && !sourceQ.data.bill_payment_id && !sourceQ.data.goal_contribution_id && !sourceQ.data.recurring_record_id) {
-      const original = sourceQ.data;
+    const original = draftSource.current?.scope === sourceScope ? draftSource.current?.movement : undefined;
+    if (original?.debt_payment_id) {
+      const accountChanged = (accountId ?? null) !== (original.account_id ?? null);
+      if ((settlementSource === "account" && !accounts.some((account: any) => account.id === accountId && account.deleted !== true)) ||
+          (!settlementSource && accountChanged)) {
+        Alert.alert(tr("ui.missing_information"), tr("debts.settlementRequired"));
+        return;
+      }
+      if (settlementSource) payload.settlement_source = settlementSource;
+      payload.account_id = settlementSource === "external" ? null : accountId ?? null;
+    }
+    if (params.id && original && original.id === sourceId
+        && ["expense", "income", "transfer"].includes(original.type)
+        && !original.debt_id && !original.debt_payment_id && !original.bill_id
+        && !original.bill_payment_id && !original.goal_id && !original.goal_contribution_id
+        && !original.recurring_payment_id && !original.recurring_record_id) {
+      if (Number.isSafeInteger(original.revision) && original.revision >= 0) {
+        payload.expected_revision = original.revision;
+      }
       // Optional unchanged fields are omitted: the backend preserves their
       // exact stored values, including legacy nulls, notes and the date.
       if (amount === String(original.amount) && acc === null && !op) payload.amount = original.amount;
@@ -299,7 +318,29 @@ export default function NewTransaction() {
     } catch (e: any) {
       savingRef.current = false;
       setSaving(false);
-      Alert.alert(tr("ui.error"), localizedError(e.message));
+      if (e instanceof ApiError && e.status === 409 && e.detail === "Movement revision conflict") {
+        Alert.alert(tr("ui.error"), tr("transactions.revisionConflict"), [
+          { text: tr("common.cancel"), style: "cancel" },
+          { text: tr("transactions.reviewCurrent"), onPress: async () => {
+            let movement;
+            try {
+              movement = await api.getTransaction(sourceId!);
+            } catch {
+              Alert.alert(tr("ui.error"), tr("ui.could_not_load_the_transaction_please_try_again"));
+              return;
+            }
+            if (movement?.id !== sourceId || draftSource.current?.scope !== sourceScope) return;
+            Alert.alert(tr("transactions.reviewCurrent"), tr("transactions.currentMovement", {
+              name: movement.name, amount: String(movement.amount),
+              account: accounts.find((item: any) => item.id === movement.account_id)?.name ?? movement.account_id ?? "—",
+              category: (catQ.data || []).find((item: any) => item.id === movement.category_id)?.name ?? movement.category_id ?? "—",
+              notes: movement.notes ?? "—",
+            }));
+          } },
+        ]);
+      } else {
+        Alert.alert(tr("ui.error"), localizedError(e.message));
+      }
     }
   };
 
@@ -411,6 +452,11 @@ export default function NewTransaction() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingHorizontal: us(spacing.lg), paddingBottom: us(spacing.lg) }}
       >
+        {sourceQ.data?.debt_payment_id && <>
+          {!sourceQ.data.settlement_source && <Text style={styles.cardLabel}>{tr("debts.historicalSettlement")}</Text>}
+          <DebtSettlementSelector value={settlementSource} incoming={sourceQ.data.type === "income"}
+            onChange={value => { setSettlementSource(value); if (value === "external") setAccountId(undefined); }} />
+        </>}
         {/* type selector */}
         <View style={styles.typeRow}>
           {["expense", "income", "transfer"].map((tp) => {
@@ -432,7 +478,7 @@ export default function NewTransaction() {
 
         {/* account + category (transfer: from + to) */}
         <View style={styles.selectGrid}>
-          {renderSelectCard({
+          {!(sourceQ.data?.debt_payment_id && settlementSource === "external") && renderSelectCard({
             testID: "pick-account",
             placeholder: tr("transactions.selectAccount"),
             label: type === "transfer" ? tr("ui.from_account") : tr("ui.account"),

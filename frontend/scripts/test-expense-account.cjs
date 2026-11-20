@@ -4,13 +4,24 @@ const { createInstance } = require('i18next');
 const engine = createInstance(); engine.init({ lng: 'en-US', fallbackLng: 'en-US', initImmediate: false, resources: { 'en-US': { translation: require('../src/i18n/locales/en.json') }, es: { translation: require('../src/i18n/locales/es.json') } } });
 const source = ts.createSourceFile('form.tsx', fs.readFileSync('frontend/app/transactions/new.tsx', 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 let handler; function visit(node) { if (ts.isVariableDeclaration(node) && node.name.getText(source) === 'save') handler = node.initializer.getText(source); ts.forEachChild(node, visit); } visit(source);
+class ApiError extends Error {}
 function fixture(overrides = {}) {
   const calls = [], alerts = [], routes = [];
   const context = { savingRef: { current: false }, deletion: { locked: { current: false } }, resourceLoaded: true, finalAmount: 56.25, calcError: null,
     type: 'expense', accountId: undefined, accounts: [{ id: 'valid' }, { id: 'deleted', deleted: true }], name: 'Preserve description', notes: 'Preserve notes', categoryId: 'category', toAccountId: undefined, params: {}, sourceQ: {}, sourceId: undefined,
-    round2: value => Math.round(value * 100) / 100, setSaving() {}, tr: engine.t.bind(engine), localizedError: value => value,
+    ApiError, round2: value => Math.round(value * 100) / 100, setSaving() {}, tr: engine.t.bind(engine), localizedError: value => value,
     Alert: { alert: (...args) => alerts.push(args) }, qc: { invalidateQueries() {} }, router: { back: () => routes.push('back') },
     api: { createTransaction: async payload => { calls.push(payload); if (context.reject) throw Error('Server rejected'); if (context.hold) await context.hold; }, updateTransaction: async (id, payload) => { calls.push({ id, ...payload }); } }, ...overrides };
+  const sourceId = context.params.id;
+  const sourceScope = sourceId ? `edit:${sourceId}` : undefined;
+  const movement = sourceScope ? {
+    id: sourceId, type: context.type, amount: context.finalAmount, account_id: context.accountId,
+    category_id: context.categoryId, notes: context.notes, name: context.name, revision: 0,
+  } : undefined;
+  Object.assign(context, {
+    sourceId, sourceScope, draftSource: { current: movement ? { scope: sourceScope, movement: { ...movement } } : undefined },
+    amount: movement ? String(movement.amount) : "", acc: null, op: null,
+  });
   vm.createContext(context); vm.runInContext(ts.transpileModule('globalThis.save = ' + handler, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
   return { context, calls, alerts, routes };
 }
@@ -22,6 +33,17 @@ async function main() {
     }
     let release; const f = fixture({ accountId: 'valid', hold: new Promise(resolve => { release = resolve; }) });
     const saving = f.context.save(); await f.context.save(); assert.equal(f.calls.length, 1); release(); await saving; assert.equal(f.routes.length, 1); assert.equal(f.calls[0].account_id, 'valid');
+    assert.equal(f.calls[0].amount, 56.25);
+    assert.equal(f.calls[0].type, 'expense');
+    const edited = fixture({ accountId: 'valid', params: { id: 'existing' } });
+    edited.context.accounts.push({ id: 'new-account' });
+    edited.context.accountId = 'new-account';
+    await edited.context.save();
+    assert.equal(edited.calls.length, 1);
+    assert.equal(edited.calls[0].id, 'existing');
+    assert.equal(edited.calls[0].account_id, 'new-account');
+    assert.equal(edited.calls[0].amount, 56.25);
+    assert.equal(edited.calls[0].expected_revision, 0);
     const rejected = fixture({ accountId: 'valid', reject: true }); await rejected.context.save(); assert.equal(rejected.routes.length, 0); assert.equal(rejected.context.name, 'Preserve description'); assert(rejected.alerts.length);
     const income = fixture({ type: 'income' }); await income.context.save(); assert.equal(income.calls.length, 1);
   }

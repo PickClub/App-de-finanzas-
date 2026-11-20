@@ -3,6 +3,7 @@ import { api, ApiError, debtPaymentBackend } from "../api";
 import { assertNoUnresolvedV2 } from "./journal-v2";
 
 export type PaymentPayload = {
+  settlement_source?: "account" | "external";
   debt_id: string;
   amount: number;
   account_id: string | null;
@@ -34,10 +35,13 @@ function payload(input: PaymentPayload): PaymentPayload {
       !(input.account_id === null || (typeof input.account_id === "string" && input.account_id.length > 0)) ||
       !(input.notes === null || typeof input.notes === "string") ||
       !(input.date === null || typeof input.date === "string") ||
-      Object.keys(input).sort().join() !== "account_id,amount,date,debt_id,notes") {
+      (input.settlement_source !== undefined && (
+        !["account", "external"].includes(input.settlement_source) ||
+        (input.settlement_source === "external" ? input.account_id !== null : !input.account_id))) ||
+      Object.keys(input).filter(key => key !== "settlement_source").sort().join() !== "account_id,amount,date,debt_id,notes") {
     throw new Error("Los datos del pago pendiente no son válidos. No se enviará ningún pago.");
   }
-  return { debt_id: input.debt_id, amount: input.amount, account_id: input.account_id, notes: input.notes, date: input.date };
+  return { ...(input.settlement_source === undefined ? {} : { settlement_source: input.settlement_source }), debt_id: input.debt_id, amount: input.amount, account_id: input.account_id, notes: input.notes, date: input.date };
 }
 function same(a: PaymentPayload, b: PaymentPayload) {
   return JSON.stringify(payload(a)) === JSON.stringify(payload(b));
@@ -126,6 +130,8 @@ export function createPaymentCoordinator(deps: Dependencies) {
         typeof result.transaction_id !== "string" || !result.transaction_id ||
         result.debt_id !== record.payload.debt_id || result.amount !== record.payload.amount ||
         (result.account_id ?? null) !== record.payload.account_id ||
+        (result.settlement_source ?? undefined) !== record.payload.settlement_source ||
+        (result.settlement_source ?? undefined) !== record.payload.settlement_source ||
         (result.notes ?? null) !== record.payload.notes ||
         (record.payload.date !== null && result.date !== record.payload.date)) {
       throw new Error("La respuesta del pago requiere revisión; se conserva la operación pendiente.");

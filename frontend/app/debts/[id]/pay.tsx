@@ -1,10 +1,11 @@
+import { DebtSettlementSelector, type SettlementSource } from "@/src/components/debt-settlement-selector";
 import { Alert } from "@/src/components/interaction-system";
 import { localizedError } from "@/src/i18n/errors";
 import { tr, useTranslation as useInterfaceLanguage } from "@/src/i18n";
 import { ElasticScrollView } from "@/src/components/elastic-scroll-view";
 import { NATIVE_VERTICAL_SCROLL } from "@/src/native-scroll";
 import { MoneyFlowHeaderActions } from "@/src/components/header-actions";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { Text, TextInput } from "@/src/components/typography";
@@ -15,7 +16,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/src/api";
 import { PaymentPayload } from "@/src/debt-payments/pending";
 import type { PaymentDisplay } from "@/src/debt-payments/flow-v2";
-import { localPaymentFlow as pendingDebtPayments } from "@/src/debt-payments/local-flow";
+import { paymentFlowForSession } from "@/src/debt-payments/local-flow";
 import { useTheme, makeStyles, radius, spacing } from "@/src/theme";
 import { formatCurrency, formatCurrencyInt } from "@/src/format";
 import { IconTile } from "@/src/components/ui";
@@ -52,6 +53,7 @@ export default function PayDebt() {
 // A route change mounts a fresh form; drafts and async recovery never cross debts.
 function PayDebtForm({ debtId }: { debtId: string | undefined }) {
   useInterfaceLanguage();
+  const pendingDebtPayments = useMemo(paymentFlowForSession, []);
   const { colors, scheme } = useTheme();
   const pal = payPalette(colors, scheme);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -67,6 +69,7 @@ function PayDebtForm({ debtId }: { debtId: string | undefined }) {
   const accQ = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
 
   const [amount, setAmount] = useState("");
+  const [settlementSource, setSettlementSource] = useState<SettlementSource>();
   const [accountId, setAccountId] = useState<string | undefined>();
   const [notes, setNotes] = useState("");
 
@@ -95,6 +98,7 @@ function PayDebtForm({ debtId }: { debtId: string | undefined }) {
       if (record && record.debtId === params.id) {
         setAmount(String(record.payload.amount));
         setAccountId(record.payload.account_id ?? undefined);
+        setSettlementSource(record.payload.settlement_source);
         setNotes(record.payload.notes ?? "");
       }
       recoveryReady.current = true;
@@ -131,6 +135,10 @@ function PayDebtForm({ debtId }: { debtId: string | undefined }) {
   const view = paymentView(operation, d.id, ready);
   const amt = Number(amount.trim());
   const newBalance = Math.max(0, d.remaining_amount - amt);
+  const validNewPayment = Number.isFinite(amt) && amt > 0 && amt <= d.remaining_amount &&
+    (settlementSource === "external" || (settlementSource === "account" &&
+      (accQ.data || []).some((account: any) => account.id === accountId && account.deleted !== true)));
+  const saveDisabled = saving || (!operation && !validNewPayment);
 
   const save = async () => {
     if (savingRef.current || completedRef.current) return;
@@ -162,6 +170,7 @@ function PayDebtForm({ debtId }: { debtId: string | undefined }) {
         if (record && record.debtId === d.id) {
           setAmount(String(record.payload.amount));
           setAccountId(record.payload.account_id ?? undefined);
+        setSettlementSource(record.payload.settlement_source);
           setNotes(record.payload.notes ?? "");
         }
         recoveryError.current = null;
@@ -196,12 +205,17 @@ function PayDebtForm({ debtId }: { debtId: string | undefined }) {
         throw new Error("La discrepancia requiere conciliación. Se conserva la clave y no se enviará ningún pago.");
       }
       if (!pending) {
+        if (!settlementSource || (settlementSource === "account" &&
+            !(accQ.data || []).some((account: any) => account.id === accountId && account.deleted !== true))) {
+          throw new Error(tr("debts.settlementRequired"));
+        }
         if (!Number.isFinite(amt) || amt <= 0) throw new Error(tr("debts.invalidPaymentAmount"));
         if (amt > d.remaining_amount) throw new Error(tr("debts.paymentExceedsBalance"));
       }
       // Never rebuild a recovered intention from editable form values.
       const data: PaymentPayload = pending ? { ...pending.payload } : {
-        debt_id: d.id, amount: amt, account_id: accountId ?? null, notes, date: null,
+        debt_id: d.id, amount: amt, settlement_source: settlementSource,
+        account_id: settlementSource === "account" ? accountId ?? null : null, notes, date: null,
       };
       const confirmed = await pendingDebtPayments.submit(data);
       finishPayment(confirmed);
@@ -214,6 +228,7 @@ function PayDebtForm({ debtId }: { debtId: string | undefined }) {
         if (record && record.debtId === d.id) {
           setAmount(String(record.payload.amount));
           setAccountId(record.payload.account_id ?? undefined);
+        setSettlementSource(record.payload.settlement_source);
           setNotes(record.payload.notes ?? "");
         } else if (!record && operation) {
           setAmount("");
@@ -292,9 +307,12 @@ function PayDebtForm({ debtId }: { debtId: string | undefined }) {
           )}
         </View>
 
-        {/* Cuenta de origen */}
-        <View style={cardStyle}>
-          <Text style={[styles.label, { color: pal.muted }]}>{tr("ui.source_account")}</Text>
+        <DebtSettlementSelector value={settlementSource} incoming={d.direction === "they_owe"}
+          disabled={!view.editable || saving}
+          onChange={value => { setSettlementSource(value); if (value === "external") setAccountId(undefined); }} />
+        {/* Account selection only applies to a registered account. */}
+        {settlementSource === "account" && <View style={cardStyle}>
+          <Text style={[styles.label, { color: pal.muted }]}>{tr(d.direction === "they_owe" ? "debts.receiptDestination" : "ui.source_account")}</Text>
           <Pressable
             testID="pay-account-select"
             onPress={() => { if (view.editable && !saving) setPickerOpen(true); }}
@@ -315,7 +333,7 @@ function PayDebtForm({ debtId }: { debtId: string | undefined }) {
             </View>
             <Ionicons name="chevron-down" size={us(20)} color={pal.muted} />
           </Pressable>
-        </View>
+        </View>}
 
         {/* Notas */}
         <View style={cardStyle}>
@@ -337,8 +355,8 @@ function PayDebtForm({ debtId }: { debtId: string | undefined }) {
         <Pressable
           testID="confirm-pay"
           onPress={save}
-          disabled={saving}
-          style={[styles.saveBtn, { backgroundColor: scheme === "dark" ? pal.forest : colors.primaryAction, opacity: saving ? 0.7 : 1 }, shadow]}
+          disabled={saveDisabled}
+          style={[styles.saveBtn, { backgroundColor: scheme === "dark" ? pal.forest : colors.primaryAction, opacity: saveDisabled ? 0.5 : 1 }, shadow]}
         >
           <Text style={[styles.saveText, { color: pal.dark ? colors.onSuccess : "#fff" }]}>{view.action}</Text>
         </Pressable>

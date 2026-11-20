@@ -17,6 +17,8 @@ import { ThemeProvider, useTheme } from "@/src/theme";
 import { LockProvider } from "@/src/lock";
 import { InteractionProvider } from "@/src/components/interaction-system";
 import { LanguageProvider } from "@/src/i18n";
+import { AuthGate } from "@/src/components/auth-gate";
+import { authEnabled } from "@/src/auth-session";
 import { FONT_FILES } from "@/src/components/typography";
 
 // Prewarm the icon fonts so bundled routes have icons on first render.
@@ -28,6 +30,8 @@ export default function RootLayout() {
   const [loaded] = Font.useFonts({
     SpaceGrotesk: require("../assets/fonts/SpaceGrotesk-Variable.ttf"),
     ...FONT_FILES,
+    AuthMontserrat: require("../assets/fonts/Montserrat-Regular.ttf"),
+    AuthMontserratBold: require("../assets/fonts/Montserrat-Bold.ttf"),
   });
 
   useEffect(() => {
@@ -49,9 +53,11 @@ export default function RootLayout() {
 
 function ThemedApp() {
   const { scheme, colors } = useTheme();
+  const Gate = authEnabled ? AuthGate : ViewlessGate;
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.pageBackground }}>
       <SafeAreaProvider>
+        <Gate>
         <QueryClientProvider client={queryClient}>
           <BottomSheetModalProvider>
             <LockProvider>
@@ -74,7 +80,10 @@ function ThemedApp() {
             </LockProvider>
           </BottomSheetModalProvider>
         </QueryClientProvider>
+        </Gate>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
+
+function ViewlessGate({ children }: { children: React.ReactNode }) { return children; }

@@ -1,4 +1,4 @@
-const {localeGlobals,localeMocks,normalizeHomeColors,normalizeUI}=require('./i18n-test-support.cjs');
+const {localeGlobals,localeMocks,normalizeHomeColors,normalizeUI,headerActionNodes}=require('./i18n-test-support.cjs');
 // C7: render the actual screens against synthetic React Query/API responses.
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const vm = require('node:vm'), cp = require('node:child_process'), ts = require('typescript');
@@ -23,9 +23,15 @@ function fixture(kind, initial, pending = true, id = 'resource') {
   };
   const forbidden = () => {writes++;throw Error('C7 performed a financial/journal mutation');};
   const styles = new Proxy({}, {get:()=>({})});
+  let memo;
   const react = {
+    useMemo(factory, dependencies) {
+      assert.equal(dependencies.length, 0);
+      memo ??= { value: factory() };
+      return memo.value;
+    },
     createElement:(type,props,...children)=>({type,props:props||{},children}),
-    useState:value=>{const index=stateIndex++;return [kind==='debt'&&index===5&&pending?journal:value,()=>{}];},
+    useState:value=>{const index=stateIndex++;return [kind==='debt'&&index===6&&pending?journal:value,()=>{}];},
     useRef:value=>({current:value}),useEffect:()=>{},useCallback:f=>f,
   };
   react.default=react;
@@ -40,7 +46,7 @@ function fixture(kind, initial, pending = true, id = 'resource') {
     'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:0,bottom:0})},
     '@tanstack/react-query':{useQuery:c=>{if(c.queryKey[0]===(kind==='debt'?'debt':'bill')) {queryFn=c.queryFn;enabled=c.enabled;return q;}return {data:[]};},useQueryClient:()=>({invalidateQueries:forbidden})},
     '@/src/api':{api,ApiError},'@/src/debt-payments/pending':{},'@/src/debt-payments/flow-v2':{},
-    '@/src/debt-payments/local-flow':{localPaymentFlow:{recover:forbidden,verify:forbidden}},
+    '@/src/debt-payments/local-flow':{paymentFlowForSession:()=>({recover:forbidden,verify:forbidden,startNew:forbidden,submit:forbidden})},
     '@/src/theme':theme,'@/src/format':{formatCurrency:()=>'',formatCurrencyInt:()=>''},
     '@/src/components/ui':{IconTile:'IconTile'},'@/src/components/sheets':{AppSheet:'AppSheet',ConfirmSheet:'ConfirmSheet'},
     '@/src/components/elastic-scroll-view':{ElasticScrollView:'ScrollView'},'@/src/native-scroll':{NATIVE_VERTICAL_SCROLL:{overScrollMode:'always',bounces:true,alwaysBounceVertical:true}},'@/src/ui-scale':{us:x=>x},'@/src/debt-payments/view':{paymentView:()=>({title:'Pago',editable:false,preview:false,action:'Verificar registro'})},
@@ -60,7 +66,7 @@ function find(tree,id) {
   if (Array.isArray(tree)) {for(const n of tree){const found=find(n,id);if(found)return found;}return null;}
   if (typeof tree!=='object') return null;
   if (tree.props?.testID===id)return tree;
-  return find(tree.children,id);
+  return find([tree.children, ...headerActionNodes(tree)],id);
 }
 async function run() {
   for(const kind of ['debt','bill']) {

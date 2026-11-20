@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Modal, Animated, Easing, StyleSheet, Dimensions } from "react-native";
+import { View, Modal, Animated, Easing, StyleSheet, Dimensions, KeyboardAvoidingView } from "react-native";
 import { Pressable } from "@/src/components/pressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, radius, spacing } from "@/src/theme";
@@ -16,6 +16,7 @@ type AppSheetProps = {
   children: React.ReactNode;
   testID?: string;
   origin?: SheetOrigin;
+  avoidKeyboard?: boolean;
 };
 
 export function AppSheet(props: AppSheetProps) {
@@ -23,7 +24,7 @@ export function AppSheet(props: AppSheetProps) {
 }
 
 /** Opt-in Profile transition; all other sheets retain their existing animation. */
-function AnchoredAppSheet({ visible, onClose, children, testID, origin }: AppSheetProps) {
+function AnchoredAppSheet({ visible, onClose, children, testID, origin, avoidKeyboard }: AppSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [mounted, setMounted] = useState(visible);
@@ -87,6 +88,7 @@ function AnchoredAppSheet({ visible, onClose, children, testID, origin }: AppShe
     onShow={() => { shown.current = true; measureRoot(); reveal(); }}>
     <View ref={root} collapsable={false} style={s.root} onLayout={measureRoot}>
       <Reanimated.View style={[s.backdrop, backdrop]}><Pressable style={StyleSheet.absoluteFill} onPress={onClose} testID="sheet-backdrop" /></Reanimated.View>
+      <SheetKeyboardBoundary enabled={avoidKeyboard}>
       <Reanimated.View testID={testID} onStartShouldSetResponderCapture={() => !visibleRef.current}
         onLayout={({ nativeEvent: { layout } }) => {
           if (![layout.x, layout.y, layout.width, layout.height].every(Number.isFinite) || layout.width <= 0 || layout.height <= 0) return;
@@ -96,6 +98,7 @@ function AnchoredAppSheet({ visible, onClose, children, testID, origin }: AppShe
         <View style={[s.grip, { backgroundColor: colors.borderStrong }]} />
         {children}
       </Reanimated.View>
+      </SheetKeyboardBoundary>
     </View>
   </Modal>;
 }
@@ -111,11 +114,13 @@ function SlidingAppSheet({
   onClose,
   children,
   testID,
+  avoidKeyboard,
 }: {
   visible: boolean;
   onClose: () => void;
   children: React.ReactNode;
   testID?: string;
+  avoidKeyboard?: boolean;
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -149,6 +154,7 @@ function SlidingAppSheet({
         <Animated.View style={[s.backdrop, { opacity: op }]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={onClose} testID="sheet-backdrop" />
         </Animated.View>
+        <SheetKeyboardBoundary enabled={avoidKeyboard}>
         <Animated.View
           testID={testID}
           style={[
@@ -164,9 +170,15 @@ function SlidingAppSheet({
           <View style={[s.grip, { backgroundColor: colors.borderStrong }]} />
           {children}
         </Animated.View>
+        </SheetKeyboardBoundary>
       </View>
     </Modal>
   );
+}
+
+/** Keyboard avoidance is enabled only by the Profile Name editor. */
+function SheetKeyboardBoundary({ enabled, children }: { enabled?: boolean; children: React.ReactNode }) {
+  return enabled ? <KeyboardAvoidingView behavior="padding" style={s.root}>{children}</KeyboardAvoidingView> : <>{children}</>;
 }
 
 /** Compatibility name: existing handlers now use the unified centered dialog. */

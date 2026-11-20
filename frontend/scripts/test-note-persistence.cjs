@@ -33,6 +33,7 @@ function fixture(initial = [], editing = null) {
   let stored = JSON.stringify(initial), writes = 0, sequence = 0;
   const alerts = [];
   const ctx = {
+    privateScope: undefined,
     notes: clone(initial), confirmedNotes: { current: clone(initial) }, notesReady: { current: true }, saveComplete: { current: false }, editorSnapshot: {current:{signature:'',revision:0,active:true}}, discardPrompt: {current:false},
     noteDeleting: { current: false }, deletedNotes: { current: new Set() },
     ...limitModule.exports, ...checklistModule.exports,

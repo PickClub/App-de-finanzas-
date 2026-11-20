@@ -75,6 +75,17 @@ class Cursor:
         except StopIteration:
             raise StopAsyncIteration
 
+    def max_time_ms(self, value):
+        assert value > 0
+        return self
+
+    def batch_size(self, value):
+        assert value > 0
+        return self
+
+    async def close(self):
+        self.closed = True
+
     def sort(self, key, direction):
         self.docs.sort(key=lambda doc: doc[key], reverse=direction < 0)
         return self
@@ -97,7 +108,27 @@ class Collection:
         return doc
 
     def find(self, query, projection=None, *, session=None):
-        return Cursor([d for d in self.docs(session) if matches(d, query)])
+        rows = [copy.deepcopy(d) for d in self.docs(session) if matches(d, query)]
+        if projection:
+            include = any(projection.values())
+            rows = [{k: v for k, v in row.items() if (projection.get(k) if include else k not in projection)} for row in rows]
+        return Cursor(rows)
+
+    def aggregate(self, pipeline, *, session, allowDiskUse, maxTimeMS, batchSize, collation):
+        # Only the production summary's duplicate-ID probe is modeled here.
+        assert allowDiskUse is False and maxTimeMS > 0 and batchSize == 1
+        assert collation == {"locale": "simple"}
+        assert pipeline[1:] == [
+            {"$group": {"_id": "$id", "n": {"$sum": 1}}},
+            {"$match": {"n": {"$gt": 1}}}, {"$limit": 1},
+            {"$project": {"_id": 0, "duplicate": {"$literal": True}}},
+        ]
+        counts = {}
+        for row in self.docs(session):
+            if matches(row, pipeline[0]["$match"]):
+                key = row.get("id")
+                counts[key] = counts.get(key, 0) + 1
+        return Cursor([{"duplicate": True}] if any(n > 1 for n in counts.values()) else [])
 
     def before_write(self, session):
         if session is None:
@@ -165,6 +196,10 @@ class Session:
 
     async def __aexit__(self, *args):
         pass
+
+    async def end_session(self):
+        assert not self.in_transaction
+        self.ended = True
 
     def start_transaction(self, **options):
         return TransactionContext(self)

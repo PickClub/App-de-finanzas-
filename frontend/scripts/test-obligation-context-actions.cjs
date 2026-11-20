@@ -86,7 +86,11 @@ function fixture(kind, options = {}) {
     '@/src/bills/shared': { FOREST: '#126046', useMontserrat: () => () => ({}), safeHex: value => value,
       deepen: value => value, longDate: value => value, statusColor: () => '#126046', invalidateBills: invalidate },
     '@/src/recurring/shared': { FOREST: '#126046', useMontserrat: () => () => ({}), safeHex: value => value,
-      deepen: value => value, longDate: value => value, pastel: value => [value, value], statusTint: () => '#126046' },
+      deepen: value => value, longDate: value => value, pastel: value => [value, value], statusTint: () => '#126046',
+      toYmd(ms) {
+        const date = new Date(ms);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      } },
     '@/src/obligation-payments/journal': { invalidateObligationPayments: invalidate,
       verifiedDeletionContext(value, _kind, pinned) {
         if (!state.contextValid || pinned && value.environment_id !== pinned.environment_id) throw Error('Context mismatch');

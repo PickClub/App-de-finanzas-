@@ -1,4 +1,4 @@
-const {localeGlobals,localeMocks,normalizeUI}=require('./i18n-test-support.cjs');
+const {localeGlobals,localeMocks,normalizeUI,approvedHomeBalanceBaseline}=require('./i18n-test-support.cjs');
 // Actual Home component + React Query; synthetic reads, no device/server/database.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const cp=require('node:child_process'),ts=require('typescript');
@@ -46,7 +46,7 @@ function fixture(handler,debtList=[],accounts=[]){
     '@/src/i18n':{__esModule:true,default:{language:'es'},useTranslation:()=>({t:x=>x})},'@/src/components/ui':{IconTile:'IconTile'},
     '@/src/lock':{useLock:()=>({guard:f=>f})},'@/src/components/animated-section-icons':{WalletIcon:'Icon',ChartIcon:'Icon',HandCoinIcon:'Icon'},
     '@/src/components/home-amount':{HomeAmount:'HomeAmount',HomeAmountScope:'HomeScope'},'@/src/components/date-range-sheet':{DateRangeSheet:'DateRangeSheet'},'@/src/components/elastic-scroll-view':{ElasticScrollView:'ScrollView'},'@/src/native-scroll':{NATIVE_VERTICAL_SCROLL:{overScrollMode:'always',bounces:true,alwaysBounceVertical:true}},'@/src/ui-scale':{us:x=>x,ufs:x=>x}});
-  const exports={};vm.runInNewContext(compile(source,file),localeGlobals({exports,require:name=>{assert(name in mocks,name);return mocks[name];}}));
+  const exports={};vm.runInNewContext(compile(source,file),localeGlobals({exports,require:name=>{assert(Object.hasOwn(mocks,name),name);return mocks[name];}}));
   const render=()=>{index=0;return exports.default();};
   return {render,setHandler:f=>{fn=f;},settle:async()=>{await observer.refetch({cancelRefetch:false});return render();},
     query:()=>query,calls:()=>calls,close:()=>{stop?.();observer?.destroy();client.unmount();client.clear();}};
@@ -100,15 +100,14 @@ async function main(){
   });
   await check('styles, sizes, colors, fonts and navigation attributes are unchanged',async()=>{
     const base=cp.execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),marker='const useStyles =';
-    assert.equal(source.slice(source.indexOf(marker)),base.slice(base.indexOf(marker)));
+    const current=approvedHomeBalanceBaseline(source,true),reference=approvedHomeBalanceBaseline(base);
+    assert.equal(current.slice(current.indexOf(marker)),reference.slice(reference.indexOf(marker)));
     function attributes(s){const tree=ts.createSourceFile(file,s,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),out=[];
       function visit(n){if(ts.isJsxOpeningElement(n)||ts.isJsxSelfClosingElement(n))for(const a of n.attributes.properties){
         if(a.name && ['style','size','color','numberOfLines','adjustsFontSizeToFit','minimumFontScale'].includes(a.name.getText(tree)))out.push(a.getText(tree));
         if(a.name?.getText(tree)==='onPress'&&a.getText(tree).includes('router.'))out.push(a.getText(tree));
       }ts.forEachChild(n,visit);}visit(tree);return out;}
-    const withoutReservedRows=source.slice(0,source.indexOf('              {/* Invisible rows'))+source.slice(source.indexOf('              {distAccounts.length === 0'));
-    const approved=withoutReservedRows.replace('backgroundColor: "#EDE9FE"','backgroundColor: scheme === "dark" ? colors.brandPrimary + "26" : "#DCE9DD"').replaceAll('color={"#A78BFA"}','color={scheme === "dark" ? colors.brandPrimary : "#126046"}').replace('color: "#7C3AED"','color: colors.onSurface');
-    assert.deepEqual(attributes(approved).sort(),attributes(base).sort());
+    assert.deepEqual(attributes(current).sort(),attributes(reference).sort());
   });
   console.log(`RESULT: ${cases} summary/Home scenario groups passed.`);
 }

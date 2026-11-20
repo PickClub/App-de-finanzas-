@@ -105,7 +105,7 @@ export default function AllTransactions() {
     if (period === "all") return null;
     const now = new Date();
     if (period === "today") return { start: startOfDay(now), end: endOfDay(now) };
-    if (period === "7d") return { start: startOfDay(new Date(now.getTime() - 6 * DAY)), end: endOfDay(now) };
+    if (period === "7d") return { start: startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)), end: endOfDay(now) };
     if (period === "30d") return { start: startOfDay(new Date(now.getTime() - 29 * DAY)), end: endOfDay(now) };
     if (period === "custom" && custom) return custom;
     const s = new Date(cursor.getFullYear(), cursor.getMonth(), 1);

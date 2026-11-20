@@ -34,6 +34,8 @@ const find = (tree,id) => !tree || typeof tree !== 'object' ? null : tree.props?
 const text = tree => typeof tree === 'string' ? tree : (tree?.children || []).flat(Infinity).map(text).join(' ');
 function fixture(kind, initialParams) {
   let params = initialParams, hook = 0, effects = [], calls = [], backs = 0, writes = [], invalidations = [];
+  const alerts = [];
+  let updateError;
   const slots = [], queries = new Map(), next = new Map();
   const deletion = {locked:{current:false},deleted:{current:false},busy:false,
     unavailable:()=>{deletion.locked.current=true;deletion.deleted.current=true;backs++;},
@@ -47,12 +49,13 @@ function fixture(kind, initialParams) {
   const styles = new Proxy({}, {get:()=>({})});
   const api = { getTransaction:async id=>{calls.push(id);return next.get(id)();},
     listTransactions:()=>{throw Error('Individual lookup downloaded global history');},
-    updateTransaction:async (id,payload)=>{writes.push({method:'PUT',id,payload});},
+    updateTransaction:async (id,payload)=>{writes.push({method:'PUT',id,payload});if(updateError)throw updateError;},
     createTransaction:async payload=>{writes.push({method:'POST',payload});},
     deleteTransaction:async id=>{writes.push({method:'DELETE',id});} };
   const mocks = localeMocks({react,
+    '@/src/components/debt-settlement-selector': { DebtSettlementSelector: 'SettlementSelector' },
     'react-native':{View:'View',ScrollView:'ScrollView',KeyboardAvoidingView:'KeyboardAvoidingView',
-      Platform:{OS:'android'},Keyboard:{dismiss:()=>{}},Alert:{alert:()=>{}}},
+      Platform:{OS:'android'},Keyboard:{dismiss:()=>{}},Alert:{alert:(...args)=>alerts.push(args)}},
     '@/src/components/pressable':{Pressable:'Pressable'},
     '@/src/components/elastic-scroll-view':{ElasticScrollView:'ScrollView'},
     '@/src/components/typography':{Text:'Text',TextInput:'TextInput'},
@@ -76,7 +79,7 @@ function fixture(kind, initialParams) {
   const exports={};vm.runInNewContext(compile(files[kind]),localeGlobals({exports,require:name=>{assert(name in mocks,name);return mocks[name];},setTimeout}));
   const render=()=>{hook=0;effects=[];const tree=exports.default();const pending=effects;effects=[];pending.forEach(f=>f());return tree;};
   const q=id=>queries.get(JSON.stringify(['transactions','detail',id]));
-  return {render,q,next:(id,f)=>next.set(id,f),navigate:p=>{params=p;},calls,writes,invalidations,
+  return {render,q,alerts,rejectUpdate:error=>{updateError=error;},next:(id,f)=>next.set(id,f),navigate:p=>{params=p;},calls,writes,invalidations,
     backs:()=>backs,deletion,settle:async id=>{await q(id).refetch();render();return render();}};
 }
 function initializer(source,name) {
@@ -84,6 +87,35 @@ function initializer(source,name) {
   function visit(n){if(ts.isVariableDeclaration(n)&&n.name.getText(tree)===name)result=n.initializer.getText(tree);ts.forEachChild(n,visit);}visit(tree);return result;
 }
 async function main() {
+  const revisionFixture = fixture('form', {id:'revision'});
+  const original = {...row('revision','expense'), revision:0, account_id:'A', category_id:'category', notes:'Draft notes'};
+  revisionFixture.render();
+  revisionFixture.next('revision', async()=>original);
+  let draft = await revisionFixture.settle('revision');
+  find(draft,'name-input').props.onChangeText('My draft');
+  revisionFixture.next('revision', async()=>({...original, revision:1, account_id:'B', amount:20}));
+  const refreshed = await revisionFixture.settle('revision');
+  const before = find(refreshed,'amount-display').children;
+  revisionFixture.rejectUpdate(new ApiError(409, '{"detail":"Movement revision conflict"}'));
+  await find(refreshed,'save-tx').props.onPress();
+  assert.equal(revisionFixture.writes.length,1);
+  const sent = revisionFixture.writes[0].payload;
+  assert.equal(sent.expected_revision,0);
+  assert.equal(sent.name,'My draft');
+  assert.equal(sent.amount,original.amount);
+  for(const field of ['account_id','category_id','notes']) assert(!Object.hasOwn(sent,field),field);
+  assert.equal(revisionFixture.backs(),0);
+  assert.equal(revisionFixture.invalidations.length,0);
+  draft = revisionFixture.render();
+  assert.equal(find(draft,'name-input').props.value,'My draft');
+  assert.deepEqual(find(draft,'amount-display').children,before);
+  const conflictActions = revisionFixture.alerts.at(-1)[2];
+  await conflictActions.find(action=>typeof action.onPress==='function').onPress();
+  assert.equal(revisionFixture.alerts.length,2);
+  assert.equal(revisionFixture.writes.length,1);
+  assert.equal(find(revisionFixture.render(),'name-input').props.value,'My draft');
+  console.log('PASS: cache refresh, revision conflict and explicit review preserve the original draft without retry.');
+
   // Fails against the previous revision: it has no direct API method.
   assert.equal(typeof apiExports.api.getTransaction,'function');
   fetchResult=()=>({ok:true,json:async()=>row('old/900')});
@@ -172,7 +204,7 @@ async function main() {
       function visit(node){
         if(ts.isVariableDeclaration(node)&&node.name.getText(tree)==='api')
           methods=Object.fromEntries(node.initializer.properties
-            .filter(p=>!['getTransaction','getTransactionPage'].includes(p.name.getText(tree)))
+            .filter(p=>!['getTransaction','getTransactionPage','listNotes','createNote','updateNote','deleteNote'].includes(p.name.getText(tree)))
             .map(p=>[p.name.getText(tree),p.initializer.getText(tree)]));
         ts.forEachChild(node,visit);
       }
@@ -187,14 +219,21 @@ async function main() {
       for(const name of file===files.form?['remove']:['doEdit','doDuplicate','doDelete','saveCategory','saveRecurring'])
         assert.equal(normalizeUI(initializer(current,name)),normalizeUI(initializer(old,name)));
       if(file===files.form){
-        const approvedBlock=current.slice(current.indexOf('    if (params.id && sourceQ.data?.id === sourceId\n'),current.indexOf('    savingRef.current = true;'));
-        assert(approvedBlock.includes('delete payload[field]'));
         const withoutExpenseGuard = code => {
           const ast=ts.createSourceFile('handler.tsx',code,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let guard;
           function visit(n){if(ts.isIfStatement(n)&&n.expression.getText(ast).startsWith('type === "expense"'))guard=n.getText(ast);ts.forEachChild(n,visit);}visit(ast);
           return normalizeUI(guard?code.replace(guard,''):code).replace(/\s+/g,' ').trim();
         };
-        assert.equal(withoutExpenseGuard(initializer(current,'save')),withoutExpenseGuard(initializer(old,'save')));
+        const protectedSave = (code, start, end) => {
+          const preparation = code.indexOf(start), saving = code.indexOf('    savingRef.current = true;', preparation);
+          const feedback = code.indexOf(end, saving);
+          assert(preparation >= 0 && saving > preparation && feedback > saving);
+          return withoutExpenseGuard(code.slice(0, preparation) + code.slice(saving, feedback));
+        };
+        assert.equal(
+          protectedSave(initializer(current,'save'), '    const original = draftSource', '      if (e instanceof ApiError'),
+          protectedSave(initializer(old,'save'), '    if (params.id && sourceQ.data', '      Alert.alert'),
+        );
       }
     }
   }

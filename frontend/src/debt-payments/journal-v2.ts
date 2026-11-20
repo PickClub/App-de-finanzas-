@@ -46,7 +46,10 @@ function decode(raw: string): PaymentRecordV2 {
       !p || typeof p.debt_id !== "string" || !p.debt_id || !Number.isFinite(p.amount) || p.amount <= 0 ||
       !(p.account_id === null || (typeof p.account_id === "string" && p.account_id.length > 0)) ||
       !(p.notes === null || typeof p.notes === "string") || !(p.date === null || typeof p.date === "string") ||
-      Object.keys(p).sort().join() !== "account_id,amount,date,debt_id,notes") {
+      (p.settlement_source !== undefined && (
+        !["account", "external"].includes(p.settlement_source) ||
+        (p.settlement_source === "external" ? p.account_id !== null : !p.account_id))) ||
+      Object.keys(p).filter(key => key !== "settlement_source").sort().join() !== "account_id,amount,date,debt_id,notes") {
     throw new Error("El registro v2 requiere revisión; no se reasignará ni eliminará.");
   }
   if (record.state === "confirmed") {
@@ -56,7 +59,7 @@ function decode(raw: string): PaymentRecordV2 {
   return record;
 }
 function samePayload(a: PaymentPayload, b: PaymentPayload) {
-  return ["debt_id", "amount", "account_id", "notes", "date"].every(k => a[k as keyof PaymentPayload] === b[k as keyof PaymentPayload]);
+  return ["debt_id", "amount", "account_id", "notes", "date", "settlement_source"].every(k => a[k as keyof PaymentPayload] === b[k as keyof PaymentPayload]);
 }
 
 export async function assertNoUnresolvedV2(storage: Pick<Store, "getAllKeys" | "getItem">) {

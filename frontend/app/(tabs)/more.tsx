@@ -35,6 +35,7 @@ type Tile = {
   subtitle: string;
   color: string;
   route?: string;
+  destructive?: boolean;
 };
 
 // Screen-local pastel surfaces; global theme and navigation stay unchanged.
@@ -69,21 +70,31 @@ export default function More() {
     : { fontWeight: "700" as const };
   const isDark = scheme === "dark";
   const MONEY: MoneyTile[] = [
-    { icon: "wallet", label: t("more.accounts"), subtitle: t("more.subAccounts"), ...PALETTE.mint, route: "/accounts" },
+    { icon: "wallet", label: t("more.accounts"), subtitle: t("more.subAccounts"), ...PALETTE.blue, route: "/accounts" },
     { icon: "pricetag-outline", label: t("more.categories"), subtitle: t("more.subCategories"), ...PALETTE.orange, route: "/categories" },
     { icon: "pie-chart", label: t("more.budgets"), subtitle: t("more.subBudgets"), ...PALETTE.coral, route: "/budgets" },
     { icon: "radio-button-on", label: t("more.savingsGoals"), subtitle: t("more.subGoals"), ...PALETTE.green, route: "/goals" },
     { icon: "server", label: t("more.debtsAndLoans"), subtitle: t("more.subDebts"), ...PALETTE.gold, route: "/debts" },
     { icon: "sync", label: t("more.recurringPayments"), subtitle: t("more.subRecurring"), ...PALETTE.violet, route: "/recurring" },
     { icon: "document-text", label: t("more.invoices"), subtitle: t("more.subInvoices"), ...PALETTE.blue, route: "/bills" },
-    { icon: "calendar", label: t("more.financialCalendar"), subtitle: t("more.subCalendar"), ...PALETTE.mint, route: "/calendar" },
-    { icon: "document-text", label: t("tabs.notes"), subtitle: t("more.subNotes"), ...PALETTE.mint, route: "/tools-notes" },
+    { icon: "calendar", label: t("more.financialCalendar"), subtitle: t("more.subCalendar"), ...PALETTE.blue, route: "/calendar" },
+    { icon: "document-text", label: t("tabs.notes"), subtitle: t("more.subNotes"), ...PALETTE.gold, route: "/tools-notes" },
+  ];
+
+  const SETTINGS: MoneyTile[] = [
+    { icon: "person-outline", label: t("more.previewProfile"), subtitle: t("more.previewProfileDescription"), ...PALETTE.orange },
+    { icon: "globe-outline", label: t("more.previewLanguage"), subtitle: t("more.previewLanguageDescription"), ...PALETTE.blue },
+    { icon: "server", label: t("more.previewCurrency"), subtitle: t("more.previewCurrencyDescription"), ...PALETTE.gold },
+    { icon: "notifications-outline", label: t("more.previewNotifications"), subtitle: t("more.previewNotificationsDescription"), ...PALETTE.coral },
+    { icon: "shield-checkmark-outline", label: t("more.previewSecurity"), subtitle: t("more.previewSecurityDescription"), ...PALETTE.green },
+    { icon: "log-out-outline", label: t("more.previewLogout"), subtitle: "", ...PALETTE.coral, destructive: true },
   ];
 
   const groups = [
-    { id: "money", title: t("more.moneyManagement"), icon: "wallet", palette: PALETTE.mint, background: "#DFF3EB", items: MONEY.slice(0, 4) },
-    { id: "obligations", title: t("more.paymentsObligations"), icon: "server", palette: PALETTE.gold, background: "#FFF4D9", items: MONEY.slice(4, 7) },
-    { id: "planning", title: t("more.planning"), icon: "calendar", palette: PALETTE.mint, background: "#DFF3EB", items: MONEY.slice(7) },
+    { id: "settings", title: t("more.previewSettingsAccount"), icon: "options-outline", palette: PALETTE.mint, background: "#DFF3EB", items: SETTINGS },
+    { id: "money", title: t("more.moneyManagement"), icon: "business-outline", palette: PALETTE.mint, background: "#DFF3EB", items: MONEY.slice(0, 4) },
+    { id: "obligations", title: t("more.paymentsObligations"), icon: "receipt-outline", palette: PALETTE.mint, background: "#DFF3EB", items: MONEY.slice(4, 7) },
+    { id: "planning", title: t("more.planning"), icon: "calendar-outline", palette: PALETTE.mint, background: "#DFF3EB", items: MONEY.slice(7) },
   ];
 
   return (
@@ -99,7 +110,7 @@ export default function More() {
         {/* Header */}
         <View style={styles.header}>
           <View style={{ flex: 1, paddingRight: toolsSize(12) }}>
-            <Text style={[styles.title, boldTitle]}>{t("more.title")}</Text>
+            <Text style={[styles.title, boldTitle, { color: colors.identityAccent }]}>{t("more.title")}</Text>
           </View>
           <Pressable
             testID="more-settings-btn"
@@ -117,18 +128,19 @@ export default function More() {
               <View style={[styles.groupIcon, { backgroundColor: group.palette.tile }]}>
                 <Ionicons name={group.icon as any} size={toolsSize(24)} color={group.palette.color} />
               </View>
-              <Text style={[styles.sectionTitle, boldTitle]}>{group.title}</Text>
+              <Text style={[styles.sectionTitle, boldTitle, { color: colors.identityAccent }]}>{group.title}</Text>
             </View>
             <View style={styles.groupBody}>
               {group.items.map((it, index) => (
-                <Pressable key={it.route} testID={`more-${it.label}`} accessibilityLabel={it.label} onPress={() => go(it.route)} style={({ pressed }) => [styles.toolRow, pressed && styles.pressed]}>
+                <Pressable key={it.route || it.label} disabled={!it.route} accessibilityState={!it.route ? { disabled: true } : undefined} testID={`more-${it.label}`} accessibilityLabel={it.label} onPress={() => go(it.route)} style={({ pressed }) => [styles.toolRow, pressed && styles.pressed]}>
                   <View style={[styles.toolIcon, { backgroundColor: it.tile }]}>
                     <Ionicons name={it.icon as any} size={toolsSize(29)} color={isDark && it.color === FOREST ? colors.incomeGreen : it.color} />
                   </View>
                   <View style={styles.toolCopy}>
-                    <Text style={[styles.toolTitle, boldTitle]}>{it.label}</Text>
-                    <Text style={styles.toolDescription}>{it.subtitle}</Text>
+                    <Text style={[styles.toolTitle, boldTitle, { color: it.destructive ? PALETTE.coral.color : colors.identityAccent }]}>{it.label}</Text>
+                    {it.subtitle ? <Text style={styles.toolDescription}>{it.subtitle}</Text> : null}
                   </View>
+                  <Ionicons name="chevron-forward" size={toolsSize(20)} color={colors.muted} />
                   {index < group.items.length - 1 && <View pointerEvents="none" style={styles.separator} />}
                 </Pressable>
               ))}
